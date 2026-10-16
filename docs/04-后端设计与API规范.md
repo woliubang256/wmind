@@ -5,7 +5,7 @@
 | 文档版本 | v1.3 |
 | 编写日期 | 2026-10-16 |
 | 状态 | 已确认（分享链接已纳入一期；邮件服务（SMTP）调整为二期；**数据库为 PostgreSQL + SQLite 双方言**，见 [09](./09-技术决策记录.md) ADR-015） |
-| 技术栈 | Go 1.23 · Gin v1.10 · PostgreSQL 16（pgx v5）或 SQLite（modernc.org/sqlite）· sqlc · golang-migrate |
+| 技术栈 | Go 1.25 · Gin v1.12 · PostgreSQL 16（pgx v5）或 SQLite（modernc.org/sqlite）· sqlc · golang-migrate |
 | 关联文档 | [02-系统架构设计](./02-系统架构设计.md) · [03-数据模型与文件格式](./03-数据模型与文件格式.md) |
 
 ---
