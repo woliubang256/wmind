@@ -33,6 +33,8 @@ Store 层（Zustand+immer）→ doc · selection · viewport · history · saveS
 
 **布局输出与渲染解耦**：`layout` 是纯函数，输入 `sheet + theme + measure`，输出 `LayoutResult`（`boxes: Map<id, NodeBox>` + `edges` + `bounds`）。节点数 > 1000 时布局搬进 Web Worker。
 
+**渲染层必须支持只读模式**：抽出 `MindMapViewer`，只负责「几何 + 样式 → SVG」，交互能力（平移缩放 / 折叠 / 编辑 / 拖拽）作为插件集合注入。编辑器传全套插件，公开分享页只传前两个。这项抽象由 [分享链接](2026-10-16-wmind-share-link.md) 的需求驱动，**必须与渲染层同期实现**，不能等到需要只读页时再回头拆——那会把渲染层重写一遍。
+
 ## Alternatives considered
 
 ### 为什么不用 MindElixir / jsMind？

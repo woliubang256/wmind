@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档版本 | v1.0 |
+| 文档版本 | v1.1 |
 | 编写日期 | 2026-10-16 |
-| 状态 | 待评审 |
+| 状态 | 已确认（已纳入分享链接与 SMTP 邮件服务） |
 | 技术栈 | Go 1.23 · Gin v1.10 · PostgreSQL 16 · pgx v5 · sqlc · golang-migrate |
 | 关联文档 | [02-系统架构设计](./02-系统架构设计.md) · [03-数据模型与文件格式](./03-数据模型与文件格式.md) |
 
@@ -140,6 +140,13 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | `POST /auth/login` | IP + 用户名 | 5 次 / 分钟，连续失败 5 次锁定 15 分钟 |
 | `POST /auth/register` | IP | 3 次 / 小时 |
 | `POST /auth/refresh` | IP | 30 次 / 分钟 |
+| `POST /auth/forgot-password` | IP + 邮箱 | 3 次 / 小时（**无论邮箱是否存在都返回相同响应**，防枚举） |
+| `POST /auth/reset-password` | IP | 10 次 / 小时 |
+| `POST /auth/resend-verification` | 用户 | 3 次 / 小时 |
+| `POST /maps/{uid}/shares` | 用户 | 30 次 / 分钟 |
+| `GET /public/shares/{token}` | IP + token | 60 次 / 分钟 |
+| `POST /public/shares/{token}/verify` | IP + token | 10 次 / 分钟（防密码暴力破解） |
+| `POST /admin/mail/test` | 管理员 | 5 次 / 分钟 |
 | `POST /export` | 用户 | 10 次 / 分钟 |
 | `POST /files` | 用户 | 20 次 / 分钟 |
 | 其他已登录接口 | 用户 | 300 次 / 分钟 |
@@ -293,6 +300,20 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 同时下发 refresh token Cookie。注册关闭时返回 `REGISTRATION_CLOSED`（403）。
 
+**当 `auth.email_verification_required = true` 时**：用户以 `status = pending` 创建，**不**下发令牌，响应体改为：
+
+```json
+{
+  "data": {
+    "requiresEmailVerification": true,
+    "email": "alice@example.com",
+    "message": "验证邮件已发送，请查收后完成注册"
+  }
+}
+```
+
+此时直接调用登录接口返回 `AUTH_ACCOUNT_PENDING`（403）。邮件发送失败时**不**回滚注册（用户已创建），响应中追加 `emailSent: false` 并提示可重新发送。
+
 #### `POST /api/v1/auth/login`
 
 ```json
@@ -300,7 +321,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 { "identifier": "alice@example.com", "password": "********" }
 ```
 
-`identifier` 同时接受邮箱与用户名。失败统一返回 `AUTH_INVALID_CREDENTIALS`（401），不区分「用户不存在」与「密码错误」。
+`identifier` 同时接受邮箱与用户名。失败统一返回 `AUTH_INVALID_CREDENTIALS`（401），不区分「用户不存在」与「密码错误」。账号未验证邮箱返回 `AUTH_ACCOUNT_PENDING`（403，`details.resendAllowed = true`），账号被禁用返回 `AUTH_ACCOUNT_DISABLED`（403）。
 
 #### `POST /api/v1/auth/refresh`
 
@@ -333,6 +354,45 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 #### `POST /api/v1/users/me/avatar`
 
 `multipart/form-data`，字段 `file`。限制 2MB，仅接受 `image/png`、`image/jpeg`、`image/webp`。服务端裁剪为 256×256 并转 WebP。
+
+#### `POST /api/v1/auth/forgot-password`
+
+```json
+// 请求
+{ "email": "alice@example.com" }
+```
+
+```json
+// 200（无论邮箱是否存在，响应完全一致，防用户枚举）
+{ "data": { "message": "如果该邮箱已注册，我们已发送重置链接" } }
+```
+
+- 生成 `password_reset` 令牌（30 分钟有效），先作废该用户同用途旧令牌。
+- 邮件中的链接指向 `{site.base_url}/reset-password?token=xxx`。
+- 限流 3 次/小时（IP + 邮箱维度）。`mail.enabled = false` 时返回 `MAIL_NOT_CONFIGURED`（503）。
+
+#### `POST /api/v1/auth/reset-password`
+
+```json
+{ "token": "xxx", "newPassword": "********" }
+```
+
+- 校验令牌存在、未使用、未过期，且新密码满足 `auth.password_min_length`。
+- 成功后：写入 `used_at`、更新密码哈希、**撤销该用户全部 refresh token**（强制重新登录）。
+- 令牌无效/过期/已使用统一返回 `AUTH_TOKEN_INVALID`（401），不区分原因。
+
+#### `POST /api/v1/auth/verify-email`
+
+```json
+{ "token": "xxx" }
+```
+
+- 校验 `email_verify` 令牌，写入 `users.email_verified_at`，`status` 由 `pending` 改为 `active`。
+- 成功后返回 `{ "data": { "verified": true } }`；失败返回 `AUTH_TOKEN_INVALID`。
+
+#### `POST /api/v1/auth/resend-verification`
+
+需登录（`status = pending` 时也允许访问该接口，需放宽 `RequireAuth` 对 pending 的拦截）。重新签发验证邮件，作废旧令牌。限流 3 次/小时。
 
 ### 5.3 导图接口
 
@@ -466,7 +526,125 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | `GET` | `/api/v1/files/{uid}` | 读取文件。公开可读（URL 含随机 uid，不可枚举）；若 `site` 要求鉴权则校验属主 |
 | `DELETE` | `/api/v1/files/{uid}` | 删除（仅属主） |
 
-### 5.7 服务端导出接口（大图兜底）
+### 5.7 分享接口
+
+#### `POST /api/v1/maps/{uid}/shares`
+
+创建分享链接。需登录且为导图属主。
+
+```json
+// 请求
+{
+  "password": "optional-pass",   // 省略或空串 = 无密码
+  "expiresInDays": 7,            // 0 或省略 = 永久
+  "allowDownload": true,
+  "showNotes": true
+}
+```
+
+```json
+// 201
+{
+  "data": {
+    "uid": "01JFB2M4K6P8R1T3V5W7X9Y0Z2",
+    "token": "kJ8xQ2mNp4Vt7Zs1Rw9YbC",
+    "url": "https://wmind.example.com/s/kJ8xQ2mNp4Vt7Zs1Rw9YbC",
+    "hasPassword": true,
+    "allowDownload": true,
+    "showNotes": true,
+    "expiresAt": "2026-10-23T02:30:00Z",
+    "viewCount": 0,
+    "createdAt": "2026-10-16T02:30:00Z"
+  }
+}
+```
+
+- `token` 明文返回（属主可随时复制），`url` 由 `site.base_url` 拼接。
+- `share.public_link_enabled = false` → 403 `SHARE_DISABLED`。
+- `share.require_password = true` 且未提供密码 → 422 `VALIDATION_FAILED`。
+- 超过 `share.max_links_per_map` → 403 `SHARE_LIMIT_REACHED`。
+- 创建与撤销均写入 `audit_logs`。
+
+#### `GET /api/v1/maps/{uid}/shares`
+
+某张导图的分享链接列表（仅属主）。返回数组，字段同创建响应的 `data`。
+
+#### `GET /api/v1/shares`
+
+「我的分享」列表：当前用户创建的全部分享链接，支持 `map_uid` 过滤与分页。
+
+#### `PATCH /api/v1/shares/{uid}`
+
+```json
+{
+  "password": "new-pass",        // 传 null 表示清除密码
+  "expiresInDays": 30,
+  "allowDownload": false,
+  "showNotes": true
+}
+```
+
+仅修改显式传入的字段。改密码不影响已发放的访问凭证（需撤销并重建才能立即失效）。
+
+#### `DELETE /api/v1/shares/{uid}`
+
+撤销分享（写入 `revoked_at`），返回 `204`。撤销后该链接立即失效，**不物理删除**记录以便保留访问统计。
+
+#### `GET /api/v1/public/shares/{token}`
+
+**公开接口，无需登录。** 返回渲染所需的完整数据。
+
+```json
+// 200（无密码，或已通过 verify 并携带 X-Share-Access 头）
+{
+  "data": {
+    "title": "产品规划",
+    "document": { "...": "完整的 .wmind 文档" },
+    "allowDownload": true,
+    "showNotes": true,
+    "siteName": "wmind",
+    "logoUrl": "",
+    "ownerNickname": "Alice",
+    "createdAt": "2026-10-16T02:30:00Z",
+    "expiresAt": null
+  }
+}
+```
+
+```json
+// 401 —— 需要密码且未验证
+{ "error": { "code": "SHARE_PASSWORD_REQUIRED", "message": "该分享需要访问密码" } }
+```
+
+**服务端必须做的处理**：
+
+| 处理 | 说明 |
+| --- | --- |
+| 剥离备注 | `showNotes = false` 时，服务端**在返回前**删除文档中所有 `notes` 字段，而不是靠前端隐藏 |
+| 剥离内部字段 | 删除 `extensions`、`meta.app` 等与渲染无关的字段 |
+| 不含属主信息 | 不返回 `owner.uid` / 邮箱，只返回昵称 |
+| 失效统一处理 | 令牌不存在、已撤销、已过期、导图已删除，全部返回 404 `SHARE_NOT_FOUND`，**不区分原因** |
+| 访问计数 | 去重窗口 30 分钟（键 = token + IP 哈希），命中窗口外才 `view_count + 1`。单实例内存实现，多实例换 Redis |
+
+> **`allowDownload = false` 的能力边界**：分享页需要支持折叠、缩放等交互，因此必须把文档结构下发给浏览器。这意味着**有技术能力的访问者仍可通过开发者工具获取数据**。`allowDownload = false` 只能做到「隐藏导出入口 + 拒绝服务端导出接口」，属于**降低门槛而非访问控制**。若需要真正的访问控制，应使用密码保护，或二期引入「只下发预渲染 SVG、不支持交互」的严格模式。
+
+#### `POST /api/v1/public/shares/{token}/verify`
+
+```json
+// 请求
+{ "password": "xxx" }
+```
+
+```json
+// 200
+{ "data": { "accessToken": "eyJhbGci...", "expiresIn": 1800 } }
+```
+
+- 返回的 `accessToken` 为 `typ: share` 的短期 JWT（30 分钟），前端存 `sessionStorage`，后续请求带 `X-Share-Access: <token>` 头。
+- 密码错误返回 401 `SHARE_PASSWORD_INVALID`；限流 10 次/分钟防暴力破解。
+- 未设密码的分享调用本接口返回 422 `VALIDATION_FAILED`。
+
+### 5.8 服务端导出接口（大图兜底）
 
 #### `POST /api/v1/export`
 
@@ -491,7 +669,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 > **一期策略**：常规导出走前端（零延迟、零服务端负载）；本接口作为超大导图与「服务端批量导出」的兜底，可延后到 M6 实现。
 
-### 5.8 管理接口
+### 5.9 管理接口
 
 全部要求 `role = admin`。
 
@@ -594,19 +772,58 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 参数：`page`、`page_size`、`action`、`actor_uid`、`from`、`to`。
 
-### 5.9 接口汇总
+#### `POST /api/v1/admin/mail/test`
+
+发送测试邮件，验证 SMTP 配置是否正确。
+
+```json
+// 请求
+{
+  "to": "admin@example.com",
+  "config": {                    // 可选：用未保存的配置做测试，便于「先测再存」
+    "host": "smtp.example.com",
+    "port": 587,
+    "encryption": "starttls",
+    "username": "noreply@example.com",
+    "password": "********",
+    "fromAddress": "noreply@example.com",
+    "fromName": "wmind"
+  }
+}
+```
+
+```json
+// 200
+{ "data": { "sent": true, "latencyMs": 320 } }
+
+// 502 —— 连接失败 / 认证失败 / 超时
+{
+  "error": {
+    "code": "MAIL_SEND_FAILED",
+    "message": "SMTP 认证失败，请检查用户名与密码",
+    "details": { "stage": "auth" }
+  }
+}
+```
+
+`details.stage` 取值：`connect`（无法连接）| `tls`（TLS 握手失败）| `auth`（认证失败）| `send`（发送被拒）。前端据此给出针对性提示，而不是笼统的「配置错误」。
+
+> **设计要点**：允许传入未保存的 `config` 做测试，避免「必须先保存错误的配置才能测试」的窘境。传入 `config` 时密码字段若为 `"********"` 占位串，则回退使用已存储的密码。
+
+### 5.10 接口汇总
 
 | 分组 | 数量 | 说明 |
 | --- | --- | --- |
 | 公开 | 3 | health ×2、site config |
-| 认证与个人 | 7 | register / login / refresh / logout / me / password / avatar |
+| 认证与个人 | 11 | register / login / refresh / logout / me / password / avatar / forgot-password / reset-password / verify-email / resend-verification |
 | 导图 | 12 | 列表、创建、读取、保存、重命名、删除、复制、缩略图、回收站 ×4 |
 | 模板 | 4 | 列表、创建、改名、删除 |
 | 主题 | 4 | 列表、创建、更新、删除 |
 | 文件 | 3 | 上传、读取、删除 |
+| **分享** | **6** | 创建、导图维度列表、我的分享、修改、撤销、公开读取、密码校验（含公开接口共 6 个） |
 | 导出 | 1 | 服务端兜底导出 |
-| 管理 | 10 | 用户 ×5、设置 ×2、统计、日志、… |
-| **合计** | **44** | |
+| 管理 | 11 | 用户 ×5、设置 ×2、统计、日志、邮件测试 |
+| **合计** | **55** | |
 
 ---
 
@@ -619,16 +836,21 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 401 | `AUTH_TOKEN_EXPIRED` | Access Token 过期（前端应触发刷新） |
 | 401 | `AUTH_TOKEN_INVALID` | 令牌无效或签名错误 |
 | 401 | `AUTH_REFRESH_INVALID` | Refresh Token 无效或已撤销 |
+| 401 | `SHARE_PASSWORD_REQUIRED` | 该分享需要访问密码 |
+| 401 | `SHARE_PASSWORD_INVALID` | 分享访问密码错误 |
 | 403 | `AUTH_ACCOUNT_DISABLED` | 账号已被禁用 |
-| 403 | `AUTH_ACCOUNT_PENDING` | 账号待激活 |
+| 403 | `AUTH_ACCOUNT_PENDING` | 账号待激活（邮箱未验证） |
 | 403 | `AUTH_FORBIDDEN` | 无权限访问该接口 |
 | 403 | `REGISTRATION_CLOSED` | 站点已关闭注册 |
 | 403 | `MAP_LIMIT_REACHED` | 已达单用户导图数量上限 |
+| 403 | `SHARE_DISABLED` | 站点已关闭分享功能 |
+| 403 | `SHARE_LIMIT_REACHED` | 单张导图的分享链接数量已达上限 |
 | 403 | `TEMPLATE_BUILTIN_READONLY` | 内置模板不可修改 |
 | 403 | `THEME_BUILTIN_READONLY` | 内置主题不可修改 |
 | 403 | `EXPORT_DISABLED` | 站点已关闭导出 |
 | 404 | `RESOURCE_NOT_FOUND` | 资源不存在 |
 | 404 | `MAP_NOT_FOUND` | 导图不存在或无权访问 |
+| 404 | `SHARE_NOT_FOUND` | 分享不存在、已撤销、已过期或导图已删除（**不区分原因**） |
 | 404 | `TEMPLATE_NOT_FOUND` | 模板不存在 |
 | 404 | `THEME_NOT_FOUND` | 主题不存在 |
 | 404 | `FILE_NOT_FOUND` | 文件不存在 |
@@ -649,6 +871,9 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 429 | `RATE_LIMITED` | 请求过于频繁 |
 | 500 | `INTERNAL_ERROR` | 服务器内部错误 |
 | 500 | `EXPORT_RENDER_FAILED` | 导出渲染失败 |
+| 502 | `MAIL_SEND_FAILED` | 邮件发送失败（`details.stage` 指明失败阶段） |
+| 503 | `MAIL_NOT_CONFIGURED` | 邮件服务未启用或未配置 |
+| 503 | `ENCRYPTION_KEY_MISSING` | 未配置加密密钥，无法保存敏感配置 |
 | 503 | `SERVICE_UNAVAILABLE` | 依赖服务不可用 |
 
 ---
@@ -721,7 +946,81 @@ type Storage interface {
 - `LocalStorage`：写入 `WMIND_STORAGE_DIR`，`URL` 返回 `/api/v1/files/{uid}`。
 - `S3Storage`：兼容 MinIO / 阿里云 OSS / AWS S3，`URL` 返回预签名 URL 或 CDN 地址。二期实现，接口已就位。
 
-### 7.6 优雅退出
+### 7.6 邮件服务
+
+选型：`github.com/wneessen/go-mail`（活跃维护、API 清晰、原生支持 STARTTLS / 隐式 TLS / 连接池）。
+
+```go
+type MailService interface {
+    Enabled() bool
+    Send(ctx context.Context, msg MailMessage) error
+    TestConfig(ctx context.Context, cfg MailConfig, to string) error
+}
+
+type MailMessage struct {
+    To      string
+    Subject string
+    HTML    string
+    Text    string   // 纯文本降级
+}
+```
+
+**关键实现约束**：
+
+| 约束 | 说明 |
+| --- | --- |
+| 异步发送 | 注册、忘记密码等接口**不阻塞**在 SMTP 往返上。邮件发送走一个容量 256 的带缓冲 channel + 2 个 worker goroutine；队列满时降级为同步发送并记录 `WARN` |
+| 发送失败不阻断主流程 | 注册成功但邮件发送失败时，用户仍然创建成功，接口返回 `emailSent: false` 并提示可重发 |
+| 超时 | 单封邮件 10 秒超时（含连接、TLS、认证、发送） |
+| 重试 | 仅对「连接失败」重试 1 次（间隔 2 秒）；认证失败不重试（配置错误，重试无意义） |
+| 密码解密 | 从 `settings` 读取 `mail.password` 时先解密；解密失败则视为未配置并记录 `ERROR` |
+| 并发安全 | 配置变更时重建客户端，用 `atomic.Pointer` 持有，避免发送中配置被改 |
+| 不记录正文 | 日志中只记收件人、模板名、结果，不记邮件正文与令牌 |
+
+**邮件模板**：内置 3 个模板（`verify_email`、`reset_password`、`test`），使用 Go `html/template`，嵌入二进制。模板变量：`SiteName`、`SiteLogo`、`SiteICP`、`Nickname`、`ActionURL`、`ExpireMinutes`。所有变量在渲染时自动转义。
+
+### 7.7 分享链接服务
+
+```go
+func (s *ShareService) Resolve(ctx context.Context, token string, accessToken string) (*ShareView, error)
+```
+
+解析顺序与判定：
+
+```
+1. 查 share_links WHERE token = ?  → 未命中 ⇒ SHARE_NOT_FOUND (404)
+2. revoked_at 非空                    ⇒ SHARE_NOT_FOUND (404)
+3. expires_at 非空且已过期            ⇒ SHARE_NOT_FOUND (404)
+4. 关联的 maps.deleted_at 非空        ⇒ SHARE_NOT_FOUND (404)
+5. 站点 share.public_link_enabled=false ⇒ SHARE_DISABLED (403)
+6. password_hash 非空：
+     ├─ 无 X-Share-Access 头              ⇒ SHARE_PASSWORD_REQUIRED (401)
+     └─ 校验 accessToken（typ=share，
+        且 sub = share.uid）失败         ⇒ SHARE_PASSWORD_REQUIRED (401)
+7. 通过 ⇒ 构造响应
+```
+
+**令牌生成**：
+
+```go
+func newShareToken() string {
+    b := make([]byte, 16)                 // 128 bit
+    rand.Read(b)
+    return base64.RawURLEncoding.EncodeToString(b)   // 22 字符，URL 安全
+}
+```
+
+**响应构造时按 `show_notes` 剥离备注**：
+
+```go
+if !share.ShowNotes {
+    docmodel.WalkAll(doc, func(t *docmodel.Topic) { t.Notes = docmodel.Notes{} })
+}
+```
+
+**`X-Share-Access` 令牌**：`typ: share`、`sub: share.uid`、`exp: 30min`、HS256。用 `sub` 绑定到具体分享记录，防止把一个分享的访问令牌用到另一个分享上。
+
+### 7.8 优雅退出
 
 ```go
 srv := &http.Server{Addr: cfg.Addr, Handler: router}
@@ -751,6 +1050,8 @@ pool.Close()
 | 文档格式 | `.wmind` 为语言无关 JSON，客户端可直接复用同一 schema |
 | 服务端导出 | 客户端算力有限时可直接调用 `/export` 取图 |
 | 推送 | `user_devices.push_token` 字段预留 |
+| 分享页只读接口 | `/public/shares/{token}` 为纯 token 鉴权，客户端可直接复用；密码验证返回的 `X-Share-Access` 令牌与平台无关 |
+| 邮件深链 | 邮件中的 `ActionURL` 由 `site.base_url` 拼接，可通过站点设置指向客户端的自定义协议（如 `wmind://`）或 Universal Link |
 
 **二期需要新增**：`POST /auth/device`（设备注册）、`GET /sync/changes`（批量增量拉取）、`POST /sync/push`（批量上行变更）、WebSocket 通道（实时协作）。
 
@@ -774,3 +1075,11 @@ pool.Close()
 5. 删除最后一个管理员 → 409 `ADMIN_LAST_ADMIN`。
 6. XMind 2020+ / XMind 8 / OPML / Markdown 四种导入样本的节点数与层级断言。
 7. 含循环引用的非法文档 → 422 `DOCUMENT_INVALID`。
+8. **分享令牌枚举防护**：随机生成 1000 个不存在的 token 请求公开接口，全部返回 404 且响应时间无显著差异。
+9. **分享失效路径**：撤销 / 过期 / 导图被删 / 站点关闭分享，四种情况均返回 404 `SHARE_NOT_FOUND`（站点关闭时返回 403 `SHARE_DISABLED`）。
+10. **`showNotes = false` 时服务端剥离**：断言响应 JSON 中不含任何 `notes` 字段（用递归遍历检查，而非只看根节点）。
+11. **密码暴力破解防护**：连续 11 次错误密码后第 11 次返回 429。
+12. **忘记密码防枚举**：对存在与不存在的邮箱调用 `forgot-password`，响应体与状态码完全一致。
+13. **令牌一次性**：重置密码成功后用同一 token 再请求 → 401；签发新 token 后旧 token 失效。
+14. **SMTP 失败不阻断**：mock 邮件服务返回错误，注册接口仍返回成功且 `emailSent: false`。
+15. **SMTP 密码加解密往返**：写入 → 读取 → 解密一致；`WMIND_ENCRYPTION_KEY` 缺失时写入返回 503 `ENCRYPTION_KEY_MISSING`；密钥变更后读取不 panic 而是降级为空。
