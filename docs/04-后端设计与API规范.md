@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档版本 | v1.1 |
+| 文档版本 | v1.3 |
 | 编写日期 | 2026-10-16 |
-| 状态 | 已确认（已纳入分享链接与 SMTP 邮件服务） |
-| 技术栈 | Go 1.23 · Gin v1.10 · PostgreSQL 16 · pgx v5 · sqlc · golang-migrate |
+| 状态 | 已确认（分享链接已纳入一期；邮件服务（SMTP）调整为二期；**数据库为 PostgreSQL + SQLite 双方言**，见 [09](./09-技术决策记录.md) ADR-015） |
+| 技术栈 | Go 1.23 · Gin v1.10 · PostgreSQL 16（pgx v5）或 SQLite（modernc.org/sqlite）· sqlc · golang-migrate |
 | 关联文档 | [02-系统架构设计](./02-系统架构设计.md) · [03-数据模型与文件格式](./03-数据模型与文件格式.md) |
 
 ---
@@ -26,9 +26,9 @@ HTTP 请求
    │            ✗ 不感知 gin.Context   ✗ 不拼 SQL
    ▼
 [ repository ]  执行 SQL、映射领域对象
-   │            ✗ 不含业务判断
+   │            ✗ 不含业务判断   ✗ 不感知具体方言（接口在 domain 层）
    ▼
-[ PostgreSQL ]
+[ PostgreSQL ] 或 [ SQLite ]     ← 由 WMIND_DB_DRIVER 选择，见 §7.9
 ```
 
 ### 1.1 硬性约束
@@ -40,25 +40,50 @@ HTTP 请求
 | repository 禁止 import service | 防止循环依赖 |
 | 所有导图相关查询必须带 `owner_id` 条件 | 从类型层面强制数据隔离 |
 | 所有写操作在 service 层开启事务 | 事务边界唯一且清晰 |
+| **service 层禁止 import 任何 `repository/postgres` 或 `repository/sqlite`** | 只依赖 `domain` 中的仓储接口，保证方言可替换 |
+| **新写 SQL 必须在双方言下等价**（或显式放入方言目录） | 防止只测一种方言导致的线上事故，见 §7.9.3 |
 
 ### 1.2 依赖注入
 
-不使用 DI 框架。`cmd/server/main.go` 中手工装配：
+不使用 DI 框架。`cmd/server/main.go` 中手工装配。**数据库的装配按驱动分叉，其余代码零差异**：
 
 ```go
-cfg      := config.Load()
-pool     := db.Connect(cfg.Database)
-queries  := sqlc.New(pool)
-store    := storage.NewLocal(cfg.Storage)
+cfg := config.Load()
 
-userRepo := repository.NewUserRepo(queries)
-mapRepo  := repository.NewMapRepo(queries)
-// ...
-authSvc  := service.NewAuthService(userRepo, tokenRepo, cfg.Auth)
-mapSvc   := service.NewMapService(mapRepo, settingSvc, store)
-// ...
+// ── 按驱动选择连接与仓储实现（唯一分叉点）──
+var (
+    userRepo domain.UserRepo
+    mapRepo  domain.MapRepo
+    tx       domain.TxManager
+    closers  []func()
+)
+switch cfg.DB.Driver {
+case "sqlite":
+    db := sqlitedb.Open(cfg.DB.SQLitePath)      // 内含 PRAGMA 与 MaxOpenConns(1)
+    migrate.Run(db, migrations.SQLiteFS)        // 跑 sqlite 迁移集
+    q := sqliterepo.New(db)
+    userRepo, mapRepo = sqliterepo.NewUserRepo(q), sqliterepo.NewMapRepo(q)
+    tx = sqliterepo.NewTxManager(db)
+    closers = append(closers, db.Close)
+case "postgres":
+    pool := pgdb.Connect(cfg.DB.URL)            // pgxpool
+    migrate.Run(pool, migrations.PostgresFS)    // 跑 postgres 迁移集
+    q := pgrepo.New(pool)
+    userRepo, mapRepo = pgrepo.NewUserRepo(q), pgrepo.NewMapRepo(q)
+    tx = pgrepo.NewTxManager(pool)
+    closers = append(closers, pool.Close)
+default:
+    log.Error("unknown WMIND_DB_DRIVER", "driver", cfg.DB.Driver); os.Exit(1)
+}
+
+// ── 以下与方言无关，两种驱动完全相同 ──
+store    := storage.NewLocal(cfg.Storage)
+authSvc  := service.NewAuthService(userRepo, tokenRepo, tx, cfg.Auth)
+mapSvc   := service.NewMapService(mapRepo, settingSvc, store, tx)
 router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 ```
+
+**这个 `switch` 是全局唯一需要感知数据库方言的地方**。service 与 handler 层完全不知道底层是哪种数据库——这是「双方言不泄漏」的验收标准。
 
 手工装配在模块数量 < 20 时最清晰、可读性最好，且没有运行时反射。
 
@@ -140,17 +165,16 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | `POST /auth/login` | IP + 用户名 | 5 次 / 分钟，连续失败 5 次锁定 15 分钟 |
 | `POST /auth/register` | IP | 3 次 / 小时 |
 | `POST /auth/refresh` | IP | 30 次 / 分钟 |
-| `POST /auth/forgot-password` | IP + 邮箱 | 3 次 / 小时（**无论邮箱是否存在都返回相同响应**，防枚举） |
-| `POST /auth/reset-password` | IP | 10 次 / 小时 |
-| `POST /auth/resend-verification` | 用户 | 3 次 / 小时 |
 | `POST /maps/{uid}/shares` | 用户 | 30 次 / 分钟 |
 | `GET /public/shares/{token}` | IP + token | 60 次 / 分钟 |
 | `POST /public/shares/{token}/verify` | IP + token | 10 次 / 分钟（防密码暴力破解） |
-| `POST /admin/mail/test` | 管理员 | 5 次 / 分钟 |
+| `POST /admin/users/{uid}/reset-password` | 管理员 | 20 次 / 小时 |
 | `POST /export` | 用户 | 10 次 / 分钟 |
 | `POST /files` | 用户 | 20 次 / 分钟 |
 | 其他已登录接口 | 用户 | 300 次 / 分钟 |
 | 公开只读接口 | IP | 120 次 / 分钟 |
+
+> **二期补入的限流行**（一期不注册这些路由，故不生效）：`POST /auth/forgot-password`（IP + 邮箱，3 次/小时，防枚举）、`POST /auth/reset-password`（IP，10 次/小时）、`POST /auth/resend-verification`（用户，3 次/小时）、`POST /admin/mail/test`（管理员，5 次/分钟）。
 
 实现：`golang.org/x/time/rate` + 内存 LRU 桶。接口已抽象为 `Limiter`，多实例部署时替换为 Redis 实现即可，调用方无感知。
 
@@ -254,7 +278,6 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
     "description": "",
     "icp": "",
     "registrationEnabled": true,
-    "emailVerificationRequired": false,
     "passwordMinLength": 8,
     "importEnabled": true,
     "exportEnabled": true,
@@ -300,19 +323,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 同时下发 refresh token Cookie。注册关闭时返回 `REGISTRATION_CLOSED`（403）。
 
-**当 `auth.email_verification_required = true` 时**：用户以 `status = pending` 创建，**不**下发令牌，响应体改为：
-
-```json
-{
-  "data": {
-    "requiresEmailVerification": true,
-    "email": "alice@example.com",
-    "message": "验证邮件已发送，请查收后完成注册"
-  }
-}
-```
-
-此时直接调用登录接口返回 `AUTH_ACCOUNT_PENDING`（403）。邮件发送失败时**不**回滚注册（用户已创建），响应中追加 `emailSent: false` 并提示可重新发送。
+> **一期注册即生效**：不接入 SMTP，因此注册成功后用户 `status` 直接为 `active`，无需任何邮件确认。二期若启用邮箱验证（`auth.email_verification_required = true`），用户将以 `status = pending` 创建、不下发令牌，响应体追加 `requiresEmailVerification: true` 与 `emailSent` 字段，登录时返回 `AUTH_ACCOUNT_PENDING`。归档设计见 [09-技术决策记录](./09-技术决策记录.md) ADR-012。
 
 #### `POST /api/v1/auth/login`
 
@@ -321,7 +332,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 { "identifier": "alice@example.com", "password": "********" }
 ```
 
-`identifier` 同时接受邮箱与用户名。失败统一返回 `AUTH_INVALID_CREDENTIALS`（401），不区分「用户不存在」与「密码错误」。账号未验证邮箱返回 `AUTH_ACCOUNT_PENDING`（403，`details.resendAllowed = true`），账号被禁用返回 `AUTH_ACCOUNT_DISABLED`（403）。
+`identifier` 同时接受邮箱与用户名。失败统一返回 `AUTH_INVALID_CREDENTIALS`（401），不区分「用户不存在」与「密码错误」。账号被禁用返回 `AUTH_ACCOUNT_DISABLED`（403）。
 
 #### `POST /api/v1/auth/refresh`
 
@@ -355,44 +366,18 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 `multipart/form-data`，字段 `file`。限制 2MB，仅接受 `image/png`、`image/jpeg`、`image/webp`。服务端裁剪为 256×256 并转 WebP。
 
-#### `POST /api/v1/auth/forgot-password`
+#### 一期不提供的接口（二期归档）
 
-```json
-// 请求
-{ "email": "alice@example.com" }
-```
+以下四个接口一期**不注册路由**（调用返回 404），设计保留在 [09-技术决策记录](./09-技术决策记录.md) ADR-012，二期直接落地：
 
-```json
-// 200（无论邮箱是否存在，响应完全一致，防用户枚举）
-{ "data": { "message": "如果该邮箱已注册，我们已发送重置链接" } }
-```
+| 接口 | 说明 | 关键约束（二期） |
+| --- | --- | --- |
+| `POST /auth/forgot-password` | 请求密码重置邮件 | 无论邮箱是否存在响应完全一致（防枚举）；限流 3 次/小时（IP + 邮箱）；`mail.enabled = false` 时返回 `MAIL_NOT_CONFIGURED`（503） |
+| `POST /auth/reset-password` | 用令牌设置新密码 | 校验令牌存在/未使用/未过期；成功后写 `used_at`、更新密码哈希、**撤销该用户全部 refresh token**；失败统一返回 `AUTH_TOKEN_INVALID`（401） |
+| `POST /auth/verify-email` | 邮箱验证 | 校验 `email_verify` 令牌，写 `users.email_verified_at`，`status` 由 `pending` 改为 `active` |
+| `POST /auth/resend-verification` | 重发验证邮件 | 重新签发令牌并作废旧令牌；限流 3 次/小时 |
 
-- 生成 `password_reset` 令牌（30 分钟有效），先作废该用户同用途旧令牌。
-- 邮件中的链接指向 `{site.base_url}/reset-password?token=xxx`。
-- 限流 3 次/小时（IP + 邮箱维度）。`mail.enabled = false` 时返回 `MAIL_NOT_CONFIGURED`（503）。
-
-#### `POST /api/v1/auth/reset-password`
-
-```json
-{ "token": "xxx", "newPassword": "********" }
-```
-
-- 校验令牌存在、未使用、未过期，且新密码满足 `auth.password_min_length`。
-- 成功后：写入 `used_at`、更新密码哈希、**撤销该用户全部 refresh token**（强制重新登录）。
-- 令牌无效/过期/已使用统一返回 `AUTH_TOKEN_INVALID`（401），不区分原因。
-
-#### `POST /api/v1/auth/verify-email`
-
-```json
-{ "token": "xxx" }
-```
-
-- 校验 `email_verify` 令牌，写入 `users.email_verified_at`，`status` 由 `pending` 改为 `active`。
-- 成功后返回 `{ "data": { "verified": true } }`；失败返回 `AUTH_TOKEN_INVALID`。
-
-#### `POST /api/v1/auth/resend-verification`
-
-需登录（`status = pending` 时也允许访问该接口，需放宽 `RequireAuth` 对 pending 的拦截）。重新签发验证邮件，作废旧令牌。限流 3 次/小时。
+> **一期账号找回的替代闭环**：管理员在后台执行 `POST /admin/users/{uid}/reset-password`（见 §5.9），一次性展示新密码，用户用新密码登录。登录页需给出「忘记密码请联系管理员」的引导文案。
 
 ### 5.3 导图接口
 
@@ -680,7 +665,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | `page` / `page_size` | 分页 |
 | `q` | 匹配用户名 / 邮箱 / 昵称 |
 | `role` | `user` \| `admin` |
-| `status` | `active` \| `disabled` \| `pending` |
+| `status` | `active` \| `disabled` |
 | `sort` | `-created_at`（默认）\| `-last_login_at` \| `username` |
 
 ```json
@@ -729,11 +714,22 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 #### `POST /api/v1/admin/users/{uid}/reset-password`
 
+**一期账号找回的唯一入口**（不接入 SMTP）。
+
 ```json
-{ "password": "********" }   // 省略则服务端随机生成
+// 请求
+{ "password": "********" }   // 省略或为空则服务端随机生成强密码
 ```
 
-响应返回新密码（仅此一次），并撤销该用户全部会话。
+```json
+// 200 —— 新密码仅在此响应中出现一次
+{ "data": { "password": "Xk7#mQ2pLw9z", "generated": true } }
+```
+
+- 响应中的新密码**仅此一次**返回，服务端不保存明文、不写日志、不可再次查询。
+- 成功后**撤销该用户全部 refresh token**（含当前在线设备），并失效其状态缓存。
+- 不可重置自己的密码（改自己密码走 `POST /users/me/password`），返回 `ADMIN_CANNOT_RESET_SELF`（409），避免误操作锁死自身。
+- 写入审计日志：`action = admin.user.reset_password`，记录操作人、目标用户、时间、IP，**不记录密码**。
 
 #### `GET /api/v1/admin/settings`
 
@@ -772,58 +768,24 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 参数：`page`、`page_size`、`action`、`actor_uid`、`from`、`to`。
 
-#### `POST /api/v1/admin/mail/test`
-
-发送测试邮件，验证 SMTP 配置是否正确。
-
-```json
-// 请求
-{
-  "to": "admin@example.com",
-  "config": {                    // 可选：用未保存的配置做测试，便于「先测再存」
-    "host": "smtp.example.com",
-    "port": 587,
-    "encryption": "starttls",
-    "username": "noreply@example.com",
-    "password": "********",
-    "fromAddress": "noreply@example.com",
-    "fromName": "wmind"
-  }
-}
-```
-
-```json
-// 200
-{ "data": { "sent": true, "latencyMs": 320 } }
-
-// 502 —— 连接失败 / 认证失败 / 超时
-{
-  "error": {
-    "code": "MAIL_SEND_FAILED",
-    "message": "SMTP 认证失败，请检查用户名与密码",
-    "details": { "stage": "auth" }
-  }
-}
-```
-
-`details.stage` 取值：`connect`（无法连接）| `tls`（TLS 握手失败）| `auth`（认证失败）| `send`（发送被拒）。前端据此给出针对性提示，而不是笼统的「配置错误」。
-
-> **设计要点**：允许传入未保存的 `config` 做测试，避免「必须先保存错误的配置才能测试」的窘境。传入 `config` 时密码字段若为 `"********"` 占位串，则回退使用已存储的密码。
+> **二期归档接口**：`POST /admin/mail/test`（发送测试邮件，支持传入未保存的 `config` 以便「先测再存」，失败返回 `MAIL_SEND_FAILED` 并带 `details.stage = connect | tls | auth | send`）一期不注册，设计见 [09-技术决策记录](./09-技术决策记录.md) ADR-012。
 
 ### 5.10 接口汇总
 
 | 分组 | 数量 | 说明 |
 | --- | --- | --- |
 | 公开 | 3 | health ×2、site config |
-| 认证与个人 | 11 | register / login / refresh / logout / me / password / avatar / forgot-password / reset-password / verify-email / resend-verification |
+| 认证与个人 | 7 | register / login / refresh / logout / me / password / avatar |
 | 导图 | 12 | 列表、创建、读取、保存、重命名、删除、复制、缩略图、回收站 ×4 |
 | 模板 | 4 | 列表、创建、改名、删除 |
 | 主题 | 4 | 列表、创建、更新、删除 |
 | 文件 | 3 | 上传、读取、删除 |
 | **分享** | **6** | 创建、导图维度列表、我的分享、修改、撤销、公开读取、密码校验（含公开接口共 6 个） |
 | 导出 | 1 | 服务端兜底导出 |
-| 管理 | 11 | 用户 ×5、设置 ×2、统计、日志、邮件测试 |
-| **合计** | **55** | |
+| 管理 | 10 | 用户 ×5、设置 ×2、统计、日志、重置密码 |
+| **合计** | **50** | 相比 v1.1 的 55 减少 5 个（`forgot-password` / `reset-password` / `verify-email` / `resend-verification` / `admin/mail/test`） |
+
+> 二期接入邮件后恢复为 55 个。`POST /admin/users/{uid}/reset-password` 一期即为正式接口（非占位），二期也不会移除——它与邮件重置是并存的两条找回路径。
 
 ---
 
@@ -839,7 +801,6 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 401 | `SHARE_PASSWORD_REQUIRED` | 该分享需要访问密码 |
 | 401 | `SHARE_PASSWORD_INVALID` | 分享访问密码错误 |
 | 403 | `AUTH_ACCOUNT_DISABLED` | 账号已被禁用 |
-| 403 | `AUTH_ACCOUNT_PENDING` | 账号待激活（邮箱未验证） |
 | 403 | `AUTH_FORBIDDEN` | 无权限访问该接口 |
 | 403 | `REGISTRATION_CLOSED` | 站点已关闭注册 |
 | 403 | `MAP_LIMIT_REACHED` | 已达单用户导图数量上限 |
@@ -859,6 +820,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 409 | `MAP_VERSION_CONFLICT` | 导图版本冲突（并发保存） |
 | 409 | `ADMIN_LAST_ADMIN` | 不能降级或删除最后一个管理员 |
 | 409 | `ADMIN_CANNOT_DELETE_SELF` | 不能删除自己 |
+| 409 | `ADMIN_CANNOT_RESET_SELF` | 管理员不能通过后台重置自己的密码 |
 | 413 | `DOCUMENT_TOO_LARGE` | 导图文档超过大小上限 |
 | 413 | `FILE_TOO_LARGE` | 上传文件超过大小上限 |
 | 415 | `FILE_TYPE_NOT_ALLOWED` | 文件类型不允许 |
@@ -871,10 +833,9 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 429 | `RATE_LIMITED` | 请求过于频繁 |
 | 500 | `INTERNAL_ERROR` | 服务器内部错误 |
 | 500 | `EXPORT_RENDER_FAILED` | 导出渲染失败 |
-| 502 | `MAIL_SEND_FAILED` | 邮件发送失败（`details.stage` 指明失败阶段） |
-| 503 | `MAIL_NOT_CONFIGURED` | 邮件服务未启用或未配置 |
-| 503 | `ENCRYPTION_KEY_MISSING` | 未配置加密密钥，无法保存敏感配置 |
 | 503 | `SERVICE_UNAVAILABLE` | 依赖服务不可用 |
+
+> **二期邮件相关错误码**（一期不返回，编码已预留以避免二期重编号）：`403 AUTH_ACCOUNT_PENDING`（账号待激活，邮箱未验证）、`502 MAIL_SEND_FAILED`（`details.stage` 指明 `connect`/`tls`/`auth`/`send`）、`503 MAIL_NOT_CONFIGURED`（邮件服务未启用或未配置）、`503 ENCRYPTION_KEY_MISSING`（未配置加密密钥，无法保存敏感配置）。
 
 ---
 
@@ -904,6 +865,8 @@ func (s *MapService) Save(ctx context.Context, userID int64, uid string, in Save
 ```
 
 使用 `SELECT ... FOR UPDATE` 行锁 + `version` 乐观锁双保险：前者防止同一事务内的竞态，后者给出友好冲突提示。
+
+> **SQLite 侧无 `FOR UPDATE`**：该方言不支持行级锁。SQLite 版的保存事务改为 `BEGIN IMMEDIATE`（事务开始即获取写锁）+ `MaxOpenConns(1)`（全局单写者），此时「同事务内竞态」在物理上不可能发生，`version` 乐观锁依然保留用于跨请求冲突检测。语义等价，写法不同——这是 §7.9.3 差异清单中的一项。
 
 ### 7.2 文档校验
 
@@ -946,7 +909,11 @@ type Storage interface {
 - `LocalStorage`：写入 `WMIND_STORAGE_DIR`，`URL` 返回 `/api/v1/files/{uid}`。
 - `S3Storage`：兼容 MinIO / 阿里云 OSS / AWS S3，`URL` 返回预签名 URL 或 CDN 地址。二期实现，接口已就位。
 
-### 7.6 邮件服务
+### 7.6 邮件服务（二期归档）
+
+**一期不实现**：不引入 `mail` 模块、不注册相关路由、不读取任何 `mail.*` 设置。因此一期也**没有**「邮件发送失败不阻断主流程」这类问题——不存在邮件调用。
+
+二期落地时按下述已定方案实现（完整理由与被否方案见 [09-技术决策记录](./09-技术决策记录.md) ADR-012）：
 
 选型：`github.com/wneessen/go-mail`（活跃维护、API 清晰、原生支持 STARTTLS / 隐式 TLS / 连接池）。
 
@@ -965,7 +932,7 @@ type MailMessage struct {
 }
 ```
 
-**关键实现约束**：
+**关键实现约束**（二期）：
 
 | 约束 | 说明 |
 | --- | --- |
@@ -977,7 +944,7 @@ type MailMessage struct {
 | 并发安全 | 配置变更时重建客户端，用 `atomic.Pointer` 持有，避免发送中配置被改 |
 | 不记录正文 | 日志中只记收件人、模板名、结果，不记邮件正文与令牌 |
 
-**邮件模板**：内置 3 个模板（`verify_email`、`reset_password`、`test`），使用 Go `html/template`，嵌入二进制。模板变量：`SiteName`、`SiteLogo`、`SiteICP`、`Nickname`、`ActionURL`、`ExpireMinutes`。所有变量在渲染时自动转义。
+**邮件模板**（二期）：内置 3 个模板（`verify_email`、`reset_password`、`test`），使用 Go `html/template`，嵌入二进制。模板变量：`SiteName`、`SiteLogo`、`SiteICP`、`Nickname`、`ActionURL`、`ExpireMinutes`。所有变量在渲染时自动转义。
 
 ### 7.7 分享链接服务
 
@@ -1035,6 +1002,129 @@ pool.Close()
 
 容器 `stop_grace_period: 20s`，确保滚动更新时不丢请求。
 
+### 7.9 双方言仓储层
+
+一期同时支持 PostgreSQL 与 SQLite（见 [09](./09-技术决策记录.md) ADR-015）。这一节是双方言在**后端代码层面**的全部落点——除此之外的任何地方都不应该出现方言判断。
+
+#### 7.9.1 sqlc 双 target
+
+`backend/db/sqlc.yaml` 配两个 target，生成两个互不相干的包：
+
+```yaml
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema:  "migrations/postgres"
+    queries: ["queries/shared", "queries/postgres"]
+    gen:
+      go:
+        package: "pgdb"
+        out:     "../internal/repository/postgres/pgdb"
+        sql_package: "pgx/v5"
+        emit_pointers_for_null_types: true
+  - engine: "sqlite"
+    schema:  "migrations/sqlite"
+    queries: ["queries/shared", "queries/sqlite"]
+    gen:
+      go:
+        package: "sqlitedb"
+        out:     "../internal/repository/sqlite/sqlitedb"
+        sql_package: "database/sql"
+        emit_pointers_for_null_types: true
+```
+
+关键点：
+
+- **`queries/shared` 被两个 target 同时读取**。同一份 `.sql` 生成两套 Go 代码，占位符由 sqlc 按 engine 自动转换（PG 生成 `$1`，SQLite 生成 `?`）。
+- 两个 target 的**包名与输出目录必须不同**，否则生成的 `Queries` 类型会冲突。
+- 驱动包名不同（`pgx/v5` vs `database/sql`），因此生成的方法签名略有差异——这正是需要用 `domain` 接口兜住的原因。
+- 若某个查询无法在 `shared` 下同时通过两个 engine 的解析，就把它移到方言目录，**不要为了共享而牺牲可读性**。
+
+#### 7.9.2 事务抽象：`TxManager` + ctx 传递
+
+service 层需要开启事务，但事务句柄的类型是方言相关的（`pgx.Tx` vs `sql.Tx`）。解法是把事务句柄挂在 `ctx` 上，service 只面向一个方言无关的接口：
+
+```go
+// domain/tx.go —— 方言无关
+type TxManager interface {
+    WithTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+```
+
+两个实现各自把事务句柄放进 `ctx`：
+
+```go
+// repository/postgres/tx.go
+type txKey struct{}
+
+func (m *pgTxManager) WithTx(ctx context.Context, fn func(context.Context) error) error {
+    tx, err := m.pool.Begin(ctx)
+    if err != nil { return err }
+    defer func() { _ = tx.Rollback(ctx) }()          // 已提交时 Rollback 是 no-op
+    if err := fn(context.WithValue(ctx, txKey{}, tx)); err != nil { return err }
+    return tx.Commit(ctx)
+}
+```
+
+仓储内部从 `ctx` 取事务句柄，取不到就用连接池（sqlc 为两种 engine 都生成 `DBTX` 接口，两者可直接互换）：
+
+```go
+func (r *mapRepo) dbtx(ctx context.Context) pgdb.DBTX {
+    if tx, ok := ctx.Value(txKey{}).(pgx.Tx); ok { return tx }
+    return r.pool
+}
+```
+
+service 层因此**完全不知道方言**：
+
+```go
+func (s *MapService) Save(ctx context.Context, in SaveInput) (*Map, error) {
+    var out *Map
+    err := s.tx.WithTx(ctx, func(ctx context.Context) error {   // 两种驱动写法完全相同
+        m, err := s.maps.GetForUpdate(ctx, in.UID, in.OwnerID)
+        // ...
+        out = m
+        return nil
+    })
+    return out, err
+}
+```
+
+**取舍**：ctx 携带事务是隐式依赖，需要纪律——仓储方法**必须**通过 `dbtx(ctx)` 取句柄，不能直接用 `r.pool`。作为补偿，这个模式让 service 层的事务代码在两种驱动下逐字相同，是双方言方案里性价比最高的一处抽象。
+
+#### 7.9.3 方言差异落点清单
+
+**只有以下几处允许出现方言分支**，其他任何地方出现 `if driver == ...` 都属于设计违规：
+
+| # | 落点 | PostgreSQL | SQLite |
+| --- | --- | --- | --- |
+| 1 | 连接与迁移装配 | `pgdb.Connect` + `migrations/postgres` | `sqlitedb.Open` + `migrations/sqlite` |
+| 2 | 事务管理器 | `pgTxManager`（`pool.Begin`） | `sqlTxManager`（`BEGIN IMMEDIATE`） |
+| 3 | 标题搜索 | `ILIKE` + `pg_trgm` 索引 | `LIKE` |
+| 4 | 保存事务的行锁 | `GetForUpdate`（`FOR UPDATE`） | `Get`（无锁，靠 `BEGIN IMMEDIATE`） |
+| 5 | 数据概览的按日聚合 | `date_trunc('day', ...)` | `strftime('%Y-%m-%d', ...)` |
+| 6 | 启动自检 | `SELECT 1` | `PRAGMA quick_check` + `SELECT 1` |
+| 7 | 备份命令（CLI，非请求路径） | `pg_dump` | `VACUUM INTO` |
+
+除第 1~2 项外，其余各项都只影响**单个查询文件**，不影响调用方。
+
+#### 7.9.4 迁移与一致性校验
+
+- 迁移用 golang-migrate，两个驱动分别注册：`database/postgres` 与 `database/sqlite`（modernc 版）。迁移文件编译期内嵌（`embed.FS`），二进制自带，不需要外部文件。
+- `WMIND_AUTO_MIGRATE=true` 时启动即迁移，两种驱动行为一致。
+- **`verify-migration-parity` 是必跑的门禁**：起两个临时数据库、各跑一遍迁移、introspect 出「表 → 列（名+类型类别）→ 索引（名+唯一性）」集合，规范化后比对，不一致即 CI 失败。它拦住的是最容易发生也最难发现的错误——只改了一边的迁移。
+
+#### 7.9.5 测试策略（双方言）
+
+| 层级 | PostgreSQL | SQLite |
+| --- | --- | --- |
+| 单元测试 | 不涉及 | 不涉及 |
+| 仓储集成测试 | `testcontainers-go` 起真实 PG，CI 中跑 | `t.TempDir()` 建临时库 + 真实迁移，**本地即可跑，无需 Docker** |
+| 仓储契约测试 | **同一组契约测试跑两遍** | 同上 |
+| 接口测试 | `httptest`，驱动无关 | 同上 |
+
+**仓储契约测试**是双方言正确性的核心保障：把「同一组输入 → 期望的仓储输出」写成一份表驱动测试，用两个驱动各跑一次。任何方言行为偏差（时间精度、布尔映射、`LIKE` 大小写、`RETURNING` 语义）都会在这里暴露。
+
 ---
 
 ## 8. 为客户端 App 预留的扩展点
@@ -1051,9 +1141,8 @@ pool.Close()
 | 服务端导出 | 客户端算力有限时可直接调用 `/export` 取图 |
 | 推送 | `user_devices.push_token` 字段预留 |
 | 分享页只读接口 | `/public/shares/{token}` 为纯 token 鉴权，客户端可直接复用；密码验证返回的 `X-Share-Access` 令牌与平台无关 |
-| 邮件深链 | 邮件中的 `ActionURL` 由 `site.base_url` 拼接，可通过站点设置指向客户端的自定义协议（如 `wmind://`）或 Universal Link |
 
-**二期需要新增**：`POST /auth/device`（设备注册）、`GET /sync/changes`（批量增量拉取）、`POST /sync/push`（批量上行变更）、WebSocket 通道（实时协作）。
+**二期需要新增**：`POST /auth/device`（设备注册）、`GET /sync/changes`（批量增量拉取）、`POST /sync/push`（批量上行变更）、WebSocket 通道（实时协作）、邮件深链（`ActionURL` 由 `site.base_url` 拼接，可指向客户端自定义协议如 `wmind://` 或 Universal Link）。
 
 ---
 
@@ -1062,7 +1151,10 @@ pool.Close()
 | 层级 | 范围 | 工具 |
 | --- | --- | --- |
 | 单元测试 | `docmodel` 校验与遍历、`convert/*` 各格式双向转换、`auth` 令牌与密码 | `testing` + `testify` |
-| 集成测试 | repository 的 SQL、service 的事务与权限 | `testcontainers-go` 起真实 PostgreSQL |
+| 集成测试（PostgreSQL） | repository 的 SQL、service 的事务与权限 | `testcontainers-go` 起真实 PostgreSQL（CI） |
+| 集成测试（SQLite） | 同上，**同一组测试** | 临时文件库 + 真实迁移，本地无需 Docker |
+| 仓储契约测试 | 同一份表驱动用例在两种驱动下各跑一遍 | `testing` + 双驱动参数化 |
+| 迁移一致性 | 两套迁移集的表/列/索引集合比对 | `verify-migration-parity`（CI 门禁） |
 | 接口测试 | handler 的请求解析、状态码、错误码 | `httptest` + 表驱动 |
 | 契约测试 | 响应结构与 `api/openapi.yaml` 一致性 | `kin-openapi` 校验响应 |
 
@@ -1079,7 +1171,11 @@ pool.Close()
 9. **分享失效路径**：撤销 / 过期 / 导图被删 / 站点关闭分享，四种情况均返回 404 `SHARE_NOT_FOUND`（站点关闭时返回 403 `SHARE_DISABLED`）。
 10. **`showNotes = false` 时服务端剥离**：断言响应 JSON 中不含任何 `notes` 字段（用递归遍历检查，而非只看根节点）。
 11. **密码暴力破解防护**：连续 11 次错误密码后第 11 次返回 429。
-12. **忘记密码防枚举**：对存在与不存在的邮箱调用 `forgot-password`，响应体与状态码完全一致。
-13. **令牌一次性**：重置密码成功后用同一 token 再请求 → 401；签发新 token 后旧 token 失效。
-14. **SMTP 失败不阻断**：mock 邮件服务返回错误，注册接口仍返回成功且 `emailSent: false`。
-15. **SMTP 密码加解密往返**：写入 → 读取 → 解密一致；`WMIND_ENCRYPTION_KEY` 缺失时写入返回 503 `ENCRYPTION_KEY_MISSING`；密钥变更后读取不 panic 而是降级为空。
+12. **管理员重置密码**：重置后新密码可登录、旧密码不可登录、该用户其他设备 refresh token 全部失效、响应中的密码不可再次查询；重置自己返回 409 `ADMIN_CANNOT_RESET_SELF`。
+13. **一期无邮件依赖**：断言路由表中不存在 `forgot-password` / `reset-password` / `verify-email` / `resend-verification` / `admin/mail/test`，且 `settings` 中不存在任何 `mail.*` 键（防止残留代码路径）。
+14. **注册即生效**：一期注册成功后 `status` 直接为 `active`，可立即登录，响应中不含 `requiresEmailVerification` 字段。
+15. **二期归档用例**（待二期启用时启用）：忘记密码防枚举、令牌一次性、SMTP 失败不阻断、SMTP 密码加解密往返。
+16. **双方言契约一致性**：同一组仓储契约用例（含时间读写往返、布尔映射、JSON 文档读写、`RETURNING` 取值、软删除过滤、唯一约束冲突）在 PostgreSQL 与 SQLite 下结果完全相同。重点覆盖时间列——断言写入再读出的 `time.Time` 与原值相等且时区为 UTC。
+17. **迁移一致性**：`verify-migration-parity` 在两边迁移集上通过；人为删掉 SQLite 的一个索引后该检查失败（验证门禁本身有效）。
+18. **SQLite 并发安全**：并发 50 个写请求（保存导图）不出现 `SQLITE_BUSY` / `database is locked`；`journal_mode` 确认为 `wal`、`foreign_keys` 确认为 `1`。
+19. **方言不泄漏**：静态检查（`go list` + 正则）断言 `internal/service/**` 与 `internal/handler/**` 中不出现 `repository/postgres`、`repository/sqlite` 的 import。

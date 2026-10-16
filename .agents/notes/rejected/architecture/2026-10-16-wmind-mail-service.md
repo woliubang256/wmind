@@ -1,6 +1,6 @@
 # Agent Note: SMTP 走后台配置，凭据用 AES-256-GCM 加密存储
 
-Status: proposed
+Status: rejected — 需求方二次修订，一期不接入 SMTP；本文作为二期接入时的完整设计归档保留，届时由 [一期不接入邮件服务，账号找回由管理员重置承担](../../proposed/architecture/2026-10-16-wmind-no-mail-in-phase-1.md) 接管一期范围。
 
 ## Problem
 
