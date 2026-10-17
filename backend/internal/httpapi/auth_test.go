@@ -102,6 +102,15 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewUserService: %v", err)
 	}
 
+	adminSvc, err := service.NewAdminService(service.AdminServiceConfig{
+		Users: userRepo, Tokens: sqlite.NewRefreshTokenRepository(db),
+		Audit: sqlite.NewAuditRepository(db), Site: settingsSvc,
+		Invalidator: svc, Tx: txManager, Logger: logger,
+	})
+	if err != nil {
+		t.Fatalf("NewAdminService: %v", err)
+	}
+
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
@@ -116,7 +125,8 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Sessions:      svc,
 		Users:         handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
 		Site:          handler.NewSiteHandler(settingsSvc, "test-version"),
-		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc),
+		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
+		Admin:         handler.NewAdminHandler(adminSvc),
 	})
 
 	server := httptest.NewServer(router)
@@ -132,13 +142,54 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	}
 }
 
+// apiResponse 是响应的解析结果。
+//
+// data 是「对象或数组」两种形态：单条资源是对象，列表是数组。所以不能直接
+// 把 data 声明成 map——那样列表响应会解析失败。用自定义 UnmarshalJSON
+// 把两种形态分别落到 Data / Items，调用点按需取。
 type apiResponse struct {
-	Data  map[string]any `json:"data"`
+	Data       map[string]any
+	Items      []map[string]any
+	Pagination *struct {
+		Page       int   `json:"page"`
+		PageSize   int   `json:"pageSize"`
+		Total      int64 `json:"total"`
+		TotalPages int   `json:"totalPages"`
+	}
 	Error *struct {
 		Code    string         `json:"code"`
 		Message string         `json:"message"`
 		Details map[string]any `json:"details"`
-	} `json:"error"`
+	}
+}
+
+func (r *apiResponse) UnmarshalJSON(raw []byte) error {
+	var envelope struct {
+		Data       json.RawMessage `json:"data"`
+		Pagination *struct {
+			Page       int   `json:"page"`
+			PageSize   int   `json:"pageSize"`
+			Total      int64 `json:"total"`
+			TotalPages int   `json:"totalPages"`
+		} `json:"pagination"`
+		Error *struct {
+			Code    string         `json:"code"`
+			Message string         `json:"message"`
+			Details map[string]any `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return err
+	}
+	r.Pagination = envelope.Pagination
+	r.Error = envelope.Error
+	if len(envelope.Data) == 0 || string(envelope.Data) == "null" {
+		return nil
+	}
+	if envelope.Data[0] == '[' {
+		return json.Unmarshal(envelope.Data, &r.Items)
+	}
+	return json.Unmarshal(envelope.Data, &r.Data)
 }
 
 func (s *authTestServer) do(method, path, token string, body any) (int, apiResponse) {

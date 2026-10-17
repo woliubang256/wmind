@@ -128,10 +128,19 @@ func (r *AuditRepository) Create(ctx context.Context, in domain.CreateAuditLogIn
 	}))
 }
 
-func (r *AuditRepository) List(ctx context.Context, page domain.Page) ([]*domain.AuditLog, error) {
-	rows, err := queries(ctx, r.pool).ListAuditLogs(ctx, pgdb.ListAuditLogsParams{
+func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter, page domain.Page) ([]*domain.AuditLog, error) {
+	params := pgdb.ListAuditLogsParams{
 		RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
-	})
+	}
+	if filter.Action != "" {
+		action := filter.Action
+		params.Action = &action
+	}
+	params.ActorID = filter.ActorID
+	params.FromTime = pgTimePtr(filter.From)
+	params.ToTime = pgTimePtr(filter.To)
+
+	rows, err := queries(ctx, r.pool).ListAuditLogs(ctx, params)
 	if err != nil {
 		return nil, mapPGError(err)
 	}
@@ -150,8 +159,15 @@ func (r *AuditRepository) List(ctx context.Context, page domain.Page) ([]*domain
 	return out, nil
 }
 
-func (r *AuditRepository) Count(ctx context.Context) (int64, error) {
-	v, err := queries(ctx, r.pool).CountAuditLogs(ctx)
+func (r *AuditRepository) Count(ctx context.Context, filter domain.AuditFilter) (int64, error) {
+	params := pgdb.CountAuditLogsParams{ActorID: filter.ActorID}
+	if filter.Action != "" {
+		action := filter.Action
+		params.Action = &action
+	}
+	params.FromTime = pgTimePtr(filter.From)
+	params.ToTime = pgTimePtr(filter.To)
+	v, err := queries(ctx, r.pool).CountAuditLogs(ctx, params)
 	return v, mapPGError(err)
 }
 

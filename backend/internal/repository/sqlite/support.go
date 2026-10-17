@@ -137,10 +137,25 @@ func (r *AuditRepository) Create(ctx context.Context, in domain.CreateAuditLogIn
 	}))
 }
 
-func (r *AuditRepository) List(ctx context.Context, page domain.Page) ([]*domain.AuditLog, error) {
-	rows, err := queries(ctx, r.db).ListAuditLogs(ctx, sqlitedb.ListAuditLogsParams{
+func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter, page domain.Page) ([]*domain.AuditLog, error) {
+	params := sqlitedb.ListAuditLogsParams{
 		RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
-	})
+	}
+	if filter.Action != "" {
+		action := filter.Action
+		params.Action = &action
+	}
+	params.ActorID = filter.ActorID
+	if filter.From != nil {
+		from := sqliteTime(*filter.From)
+		params.FromTime = &from
+	}
+	if filter.To != nil {
+		to := sqliteTime(*filter.To)
+		params.ToTime = &to
+	}
+
+	rows, err := queries(ctx, r.db).ListAuditLogs(ctx, params)
 	if err != nil {
 		return nil, mapSQLiteError(err)
 	}
@@ -163,8 +178,21 @@ func (r *AuditRepository) List(ctx context.Context, page domain.Page) ([]*domain
 	return out, nil
 }
 
-func (r *AuditRepository) Count(ctx context.Context) (int64, error) {
-	v, err := queries(ctx, r.db).CountAuditLogs(ctx)
+func (r *AuditRepository) Count(ctx context.Context, filter domain.AuditFilter) (int64, error) {
+	params := sqlitedb.CountAuditLogsParams{ActorID: filter.ActorID}
+	if filter.Action != "" {
+		action := filter.Action
+		params.Action = &action
+	}
+	if filter.From != nil {
+		from := sqliteTime(*filter.From)
+		params.FromTime = &from
+	}
+	if filter.To != nil {
+		to := sqliteTime(*filter.To)
+		params.ToTime = &to
+	}
+	v, err := queries(ctx, r.db).CountAuditLogs(ctx, params)
 	return v, mapSQLiteError(err)
 }
 

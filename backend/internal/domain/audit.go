@@ -66,9 +66,20 @@ type CreateAuditLogInput struct {
 	Now        time.Time
 }
 
+// AuditFilter 是审计日志的查询条件。零值表示不筛选。
+type AuditFilter struct {
+	// Action 精确匹配动作名（如 user.disable）。
+	Action string
+	// ActorID 只保留某个操作人的记录。
+	ActorID *int64
+	// From / To 是时间闭区间，nil 表示该端不限。
+	From *time.Time
+	To   *time.Time
+}
+
 // AuditRepo 是审计日志仓储接口（只增不改）。
 type AuditRepo interface {
 	Create(ctx context.Context, in CreateAuditLogInput) error
-	List(ctx context.Context, page Page) ([]*AuditLog, error)
-	Count(ctx context.Context) (int64, error)
+	List(ctx context.Context, filter AuditFilter, page Page) ([]*AuditLog, error)
+	Count(ctx context.Context, filter AuditFilter) (int64, error)
 }

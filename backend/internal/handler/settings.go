@@ -4,23 +4,32 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"sort"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/woliubang256/wmind/backend/internal/domain"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/middleware"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/response"
 	"github.com/woliubang256/wmind/backend/internal/pkg/apperr"
+	"github.com/woliubang256/wmind/backend/internal/service"
 	"github.com/woliubang256/wmind/backend/internal/settings"
 )
 
 // AdminSettingsHandler 处理管理员的站点设置接口。
 type AdminSettingsHandler struct {
 	settings *settings.Service
+	// auditor 记录设置变更。为 nil 时不审计（单测里常见）。
+	auditor service.Auditor
 }
 
 // NewAdminSettingsHandler 构建设置 handler。
-func NewAdminSettingsHandler(svc *settings.Service) *AdminSettingsHandler {
-	return &AdminSettingsHandler{settings: svc}
+//
+// auditor 单独传而不是让 settings 包依赖审计：settings 是「值 + 校验」的
+// 纯逻辑，审计是「谁在什么时候改了它」的横切关注点，混在一起会让
+// settings 的单元测试也要准备一个假审计仓储。
+func NewAdminSettingsHandler(svc *settings.Service, auditor service.Auditor) *AdminSettingsHandler {
+	return &AdminSettingsHandler{settings: svc, auditor: auditor}
 }
 
 // maxSettingsBody 限制请求体大小。
@@ -61,6 +70,27 @@ func (h *AdminSettingsHandler) Update(c *gin.Context) {
 	if err != nil {
 		response.Fail(c, err)
 		return
+	}
+
+	// 只记改了哪些键，不记值：site.* 之外还有可能被误填敏感内容的键，
+	// 而「谁在什么时候改了哪些设置」已经足够回答审计问题。
+	if h.auditor != nil {
+		keys := make([]string, 0, len(patch))
+		for key := range patch {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		_ = h.auditor.Record(c.Request.Context(), service.AuditEntry{
+			Actor: service.Actor{
+				ID:  middleware.UserDBID(c),
+				UID: middleware.UserID(c),
+				IP:  c.ClientIP(),
+			},
+			Action:     domain.AuditSettingsUpdate,
+			TargetType: "settings",
+			TargetID:   "site",
+			Detail:     map[string]any{"keys": keys},
+		})
 	}
 	response.OK(c, snapshot.All())
 }

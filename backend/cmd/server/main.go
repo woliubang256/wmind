@@ -61,6 +61,7 @@ func run() error {
 		userRepo     domain.UserRepo
 		tokenRepo    domain.RefreshTokenRepo
 		settingsRepo domain.SettingsRepo
+		auditRepo    domain.AuditRepo
 		txManager    domain.TxManager
 	)
 
@@ -82,6 +83,7 @@ func run() error {
 		userRepo = sqliterepo.NewUserRepository(db)
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
 		settingsRepo = sqliterepo.NewSettingsRepository(db)
+		auditRepo = sqliterepo.NewAuditRepository(db)
 		txManager = sqliterepo.NewTxManager(db)
 
 	case config.DriverPostgres:
@@ -110,6 +112,7 @@ func run() error {
 		userRepo = postgresrepo.NewUserRepository(pool)
 		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
 		settingsRepo = postgresrepo.NewSettingsRepository(pool)
+		auditRepo = postgresrepo.NewAuditRepository(pool)
 		txManager = postgresrepo.NewTxManager(pool)
 
 	default:
@@ -165,6 +168,14 @@ func run() error {
 		return err
 	}
 
+	adminSvc, err := service.NewAdminService(service.AdminServiceConfig{
+		Users: userRepo, Tokens: tokenRepo, Audit: auditRepo,
+		Site: settingsSvc, Invalidator: authSvc, Tx: txManager, Logger: log,
+	})
+	if err != nil {
+		return err
+	}
+
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(
 		authSvc,
@@ -177,7 +188,8 @@ func run() error {
 		Auth: authHandler, Sessions: authSvc,
 		Users:         handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
 		Site:          handler.NewSiteHandler(settingsSvc, config.Version),
-		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc),
+		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
+		Admin:         handler.NewAdminHandler(adminSvc),
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

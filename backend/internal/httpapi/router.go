@@ -44,6 +44,8 @@ type Deps struct {
 	// Site 处理公开的站点配置；AdminSettings 处理管理员的设置读写。
 	Site          *handler.SiteHandler
 	AdminSettings *handler.AdminSettingsHandler
+	// Admin 处理管理后台的用户、统计与审计接口。
+	Admin *handler.AdminHandler
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -134,6 +136,15 @@ func registerAdmin(v1 *gin.RouterGroup, deps Deps) {
 	if deps.AdminSettings != nil {
 		g.GET("/settings", deps.AdminSettings.Get)
 		g.PUT("/settings", deps.AdminSettings.Update)
+	}
+	if deps.Admin != nil {
+		g.GET("/users", deps.Admin.ListUsers)
+		g.POST("/users", deps.Admin.CreateUser)
+		g.PATCH("/users/:uid", deps.Admin.UpdateUser)
+		g.DELETE("/users/:uid", deps.Admin.DeleteUser)
+		g.POST("/users/:uid/reset-password", deps.Admin.ResetPassword)
+		g.GET("/stats", deps.Admin.Stats)
+		g.GET("/audit-logs", deps.Admin.ListAuditLogs)
 	}
 }
 

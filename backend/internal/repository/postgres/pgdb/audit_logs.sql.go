@@ -14,10 +14,27 @@ import (
 
 const countAuditLogs = `-- name: CountAuditLogs :one
 SELECT COUNT(*) FROM audit_logs
+WHERE action = COALESCE($1, action)
+  AND actor_id = COALESCE($2, actor_id)
+  AND created_at >= COALESCE($3, created_at)
+  AND created_at <= COALESCE($4, created_at)
 `
 
-func (q *Queries) CountAuditLogs(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countAuditLogs)
+type CountAuditLogsParams struct {
+	Action   *string
+	ActorID  *int64
+	FromTime pgtype.Timestamptz
+	ToTime   pgtype.Timestamptz
+}
+
+// Same filter set as ListAuditLogs; keep the two in sync or pagination lies.
+func (q *Queries) CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAuditLogs,
+		arg.Action,
+		arg.ActorID,
+		arg.FromTime,
+		arg.ToTime,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -71,17 +88,38 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT id, actor_id, action, target_type, target_id, detail, ip, created_at FROM audit_logs
+WHERE action = COALESCE($1, action)
+  AND actor_id = COALESCE($2, actor_id)
+  AND created_at >= COALESCE($3, created_at)
+  AND created_at <= COALESCE($4, created_at)
 ORDER BY created_at DESC, id DESC
-LIMIT $2 OFFSET $1
+LIMIT $6 OFFSET $5
 `
 
 type ListAuditLogsParams struct {
+	Action    *string
+	ActorID   *int64
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
 	RowOffset int32
 	PageSize  int32
 }
 
+// Filters are all optional: a NULL argument disables that condition.
+//
+// The "col = COALESCE(arg, col)" shape is used instead of the more obvious
+// "arg IS NULL OR col = arg" because the latter makes sqlc infer the parameter
+// type as interface{} (the IS NULL test tells it nothing). COALESCE keeps the
+// comparison against the column, so the parameter gets the column's type.
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error) {
-	rows, err := q.db.Query(ctx, listAuditLogs, arg.RowOffset, arg.PageSize)
+	rows, err := q.db.Query(ctx, listAuditLogs,
+		arg.Action,
+		arg.ActorID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.RowOffset,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}

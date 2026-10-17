@@ -418,7 +418,7 @@ func Run(t *testing.T, r Repos) {
 
 	t.Run("audit log append and read", func(t *testing.T) {
 		actor := mustCreateUser(t, ctx, users, now)
-		before, err := r.Audit.Count(ctx)
+		before, err := r.Audit.Count(ctx, domain.AuditFilter{})
 		if err != nil {
 			t.Fatalf("count audit logs: %v", err)
 		}
@@ -441,12 +441,12 @@ func Run(t *testing.T, r Repos) {
 			t.Fatalf("create audit log with malformed IP: %v", err)
 		}
 
-		after, err := r.Audit.Count(ctx)
+		after, err := r.Audit.Count(ctx, domain.AuditFilter{})
 		if err != nil || after != before+2 {
 			t.Fatalf("audit count = %d, %v; want %d", after, err, before+2)
 		}
 
-		logs, err := r.Audit.List(ctx, domain.Page{Limit: 50})
+		logs, err := r.Audit.List(ctx, domain.AuditFilter{}, domain.Page{Limit: 50})
 		if err != nil {
 			t.Fatalf("list audit logs: %v", err)
 		}
@@ -467,8 +467,43 @@ func Run(t *testing.T, r Repos) {
 		if dropped := seen[badIPTarget]; dropped == nil || dropped.IP != "" {
 			t.Fatalf("audit entry with malformed IP = %#v; want empty IP", dropped)
 		}
+
+		// Filters: the two dialect implementations must agree on what "no
+		// filter" and each individual filter mean, otherwise the admin audit
+		// page shows different rows depending on the database.
+		if n, err := r.Audit.Count(ctx, domain.AuditFilter{Action: domain.AuditUserDisable}); err != nil || n < 2 {
+			t.Fatalf("count by action = %d, %v; want >= 2", n, err)
+		}
+		if n, err := r.Audit.Count(ctx, domain.AuditFilter{Action: "user.no_such_action"}); err != nil || n != 0 {
+			t.Fatalf("count by unknown action = %d, %v; want 0", n, err)
+		}
+		if n, err := r.Audit.Count(ctx, domain.AuditFilter{ActorID: &actor.ID}); err != nil || n != 2 {
+			t.Fatalf("count by actor = %d, %v; want 2", n, err)
+		}
+
+		window, err := r.Audit.List(ctx, domain.AuditFilter{
+			ActorID: &actor.ID,
+			From:    timePtr(now.Add(-time.Minute)),
+			To:      timePtr(now.Add(time.Minute)),
+		}, domain.Page{Limit: 50})
+		if err != nil {
+			t.Fatalf("list audit logs by window: %v", err)
+		}
+		if len(window) != 2 {
+			t.Fatalf("window list returned %d entries; want 2", len(window))
+		}
+		// A window that ends before the records must return nothing — this is
+		// the case that breaks if timestamps are stored in mismatched formats.
+		if n, err := r.Audit.Count(ctx, domain.AuditFilter{
+			ActorID: &actor.ID,
+			To:      timePtr(now.Add(-time.Hour)),
+		}); err != nil || n != 0 {
+			t.Fatalf("count with past upper bound = %d, %v; want 0", n, err)
+		}
 	})
 }
+
+func timePtr(t time.Time) *time.Time { return &t }
 
 // mustCreateUser 造一个独立用户，避免新子测试依赖前一个子测试的副作用。
 func mustCreateUser(t *testing.T, ctx context.Context, users domain.UserRepo, now time.Time) *domain.User {
