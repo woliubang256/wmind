@@ -221,6 +221,17 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, in domain.UpdateProf
 	})
 }
 
+func (r *UserRepository) UpdateEmail(ctx context.Context, uid, email string, now time.Time) (*domain.User, error) {
+	v, err := queries(ctx, r.pool).UpdateUserEmail(ctx, pgdb.UpdateUserEmailParams{
+		Email: email, UpdatedAt: pgTime(now), Uid: uid,
+	})
+	if err != nil {
+		return nil, mapPGError(err)
+	}
+	user := mapPGUser(v)
+	return user, nil
+}
+
 func (r *UserRepository) UpdatePassword(ctx context.Context, id int64, passwordHash string, now time.Time) error {
 	affected, err := r.queries(ctx).UpdateUserPassword(ctx, pgdb.UpdateUserPasswordParams{
 		PasswordHash: passwordHash, UpdatedAt: pgTime(now), ID: id,

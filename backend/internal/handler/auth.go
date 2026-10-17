@@ -32,10 +32,16 @@ type CookieConfig struct {
 	MaxAge   time.Duration
 }
 
+// RefreshCookieName 是刷新令牌 Cookie 的默认名字。
+//
+// 读取方（UserHandler 改密要拿到「当前设备」的令牌）和写入方（AuthHandler）
+// 必须用同一个名字，所以这个名字只能有一个来源。
+const RefreshCookieName = "wmind_refresh"
+
 // DefaultCookieConfig 返回 Web 端的默认 Cookie 配置。
 func DefaultCookieConfig(secure bool, maxAge time.Duration) CookieConfig {
 	return CookieConfig{
-		Name: "wmind_refresh", Path: "/api/v1/auth", Secure: secure,
+		Name: RefreshCookieName, Path: "/api/v1/auth", Secure: secure,
 		SameSite: http.SameSiteLaxMode, MaxAge: maxAge,
 	}
 }

@@ -101,6 +101,17 @@ SET nickname = sqlc.arg(nickname),
 WHERE uid = sqlc.arg(uid) AND deleted_at IS NULL
 RETURNING *;
 
+-- Changing the email is separate from UpdateUserProfile: the email column has
+-- a case-insensitive unique index, so this statement can fail with a constraint
+-- error while a nickname change cannot. Keeping them apart lets the service map
+-- "email taken" to AUTH_EMAIL_TAKEN instead of a generic conflict.
+-- name: UpdateUserEmail :one
+UPDATE users
+SET email = sqlc.arg(email),
+    updated_at = sqlc.arg(updated_at)
+WHERE uid = sqlc.arg(uid) AND deleted_at IS NULL
+RETURNING *;
+
 -- name: UpdateUserPassword :execrows
 UPDATE users
 SET password_hash = sqlc.arg(password_hash),

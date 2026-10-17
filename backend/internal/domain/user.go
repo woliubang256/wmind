@@ -161,6 +161,7 @@ type UserRepo interface {
 	CountFiltered(ctx context.Context, in ListUsersInput) (int64, error)
 
 	UpdateProfile(ctx context.Context, in UpdateProfileInput) (*User, error)
+	UpdateEmail(ctx context.Context, uid string, email string, now time.Time) (*User, error)
 	UpdatePassword(ctx context.Context, id int64, passwordHash string, now time.Time) error
 	UpdateStatus(ctx context.Context, uid string, status UserStatus, now time.Time) (*User, error)
 	UpdateRole(ctx context.Context, uid string, role Role, now time.Time) (*User, error)

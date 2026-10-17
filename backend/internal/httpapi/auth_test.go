@@ -19,6 +19,7 @@ import (
 	"github.com/woliubang256/wmind/backend/internal/migrate"
 	"github.com/woliubang256/wmind/backend/internal/repository/sqlite"
 	"github.com/woliubang256/wmind/backend/internal/service"
+	"github.com/woliubang256/wmind/backend/internal/storage"
 )
 
 // 这个测试是认证链路的端到端验收：真实 SQLite、真实 bcrypt、真实 Cookie。
@@ -28,6 +29,8 @@ type authTestServer struct {
 	t      *testing.T
 	server *httptest.Server
 	client *http.Client
+	// uploads 是头像落盘的目录，测试用来断言「文件真的写出来了」。
+	uploads string
 }
 
 func newAuthTestServer(t *testing.T) *authTestServer {
@@ -48,10 +51,12 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	if err != nil {
 		t.Fatalf("NewTokenIssuer: %v", err)
 	}
+	userRepo := sqlite.NewUserRepository(db)
+	txManager := sqlite.NewTxManager(db)
 	svc, err := service.NewAuthService(
-		sqlite.NewUserRepository(db),
+		userRepo,
 		sqlite.NewRefreshTokenRepository(db),
-		sqlite.NewTxManager(db),
+		txManager,
 		service.AuthServiceConfig{
 			Issuer: issuer, RefreshTTL: 7 * 24 * time.Hour,
 			Site: service.OpenSiteConfig(), UserCacheTTL: 60 * time.Second,
@@ -61,14 +66,31 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewAuthService: %v", err)
 	}
 
+	uploads := filepath.Join(t.TempDir(), "uploads")
+	avatarStore, err := storage.NewLocalStore(uploads, "/uploads")
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	userSvc, err := service.NewUserService(userRepo, service.UserServiceConfig{
+		Avatars: avatarStore, Tx: txManager,
+	})
+	if err != nil {
+		t.Fatalf("NewUserService: %v", err)
+	}
+
+	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
 			Env:  config.EnvDevelopment,
 			Auth: config.Auth{JWTSecret: "http-test-secret-that-is-long-enough", AccessTTL: 15 * time.Minute, RefreshTTL: 7 * 24 * time.Hour},
+			// 与 main 一样：静态路由从 Storage.Dir 取目录，必须与 store 的
+			// 目录是同一个，否则上传成功但取不到文件。
+			Storage: config.Storage{Dir: uploads},
 		},
 		Logger:   logger,
-		Auth:     handler.NewAuthHandler(svc, handler.DefaultCookieConfig(false, 7*24*time.Hour), nil),
+		Auth:     handler.NewAuthHandler(svc, cookie, nil),
 		Sessions: svc,
+		Users:    handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
 	})
 
 	server := httptest.NewServer(router)
@@ -78,7 +100,10 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	if err != nil {
 		t.Fatalf("创建 Cookie jar: %v", err)
 	}
-	return &authTestServer{t: t, server: server, client: &http.Client{Jar: jar, Timeout: 10 * time.Second}}
+	return &authTestServer{
+		t: t, server: server, uploads: uploads,
+		client: &http.Client{Jar: jar, Timeout: 10 * time.Second},
+	}
 }
 
 type apiResponse struct {

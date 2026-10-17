@@ -26,6 +26,7 @@ import (
 	postgresrepo "github.com/woliubang256/wmind/backend/internal/repository/postgres"
 	sqliterepo "github.com/woliubang256/wmind/backend/internal/repository/sqlite"
 	"github.com/woliubang256/wmind/backend/internal/service"
+	"github.com/woliubang256/wmind/backend/internal/storage"
 )
 
 // shutdownTimeout is bounded by the container stop_grace_period with 5s spare.
@@ -136,15 +137,28 @@ func run() error {
 		log.Info("seed admin created", "email", cfg.Admin.Email)
 	}
 
+	avatarStore, err := storage.NewLocalStore(cfg.Storage.Dir, "/uploads")
+	if err != nil {
+		return err
+	}
+	userSvc, err := service.NewUserService(userRepo, service.UserServiceConfig{
+		Avatars: avatarStore, Tx: txManager,
+	})
+	if err != nil {
+		return err
+	}
+
+	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(
 		authSvc,
-		handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL),
+		cookie,
 		middleware.NewRateLimiter(5, time.Minute, 5),
 	)
 
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: cfg, Logger: log, Ready: ready,
 		Auth: authHandler, Sessions: authSvc,
+		Users: handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

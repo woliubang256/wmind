@@ -256,6 +256,14 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, in domain.UpdateProf
 	})
 }
 
+func (r *UserRepository) UpdateEmail(ctx context.Context, uid, email string, now time.Time) (*domain.User, error) {
+	return r.user(ctx, func(q *sqlitedb.Queries) (sqlitedb.User, error) {
+		return q.UpdateUserEmail(ctx, sqlitedb.UpdateUserEmailParams{
+			Email: email, UpdatedAt: sqliteTime(now), Uid: uid,
+		})
+	})
+}
+
 func (r *UserRepository) UpdatePassword(ctx context.Context, id int64, passwordHash string, now time.Time) error {
 	affected, err := queries(ctx, r.db).UpdateUserPassword(ctx, sqlitedb.UpdateUserPasswordParams{
 		PasswordHash: passwordHash, UpdatedAt: sqliteTime(now), ID: id,

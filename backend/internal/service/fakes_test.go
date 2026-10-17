@@ -241,3 +241,66 @@ type fakeTxManager struct{}
 func (fakeTxManager) WithTx(ctx context.Context, fn func(context.Context) error) error {
 	return fn(ctx)
 }
+
+func (r *fakeUserRepo) UpdateProfile(_ context.Context, in domain.UpdateProfileInput) (*domain.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, user := range r.byID {
+		if user.UID == in.UID && user.DeletedAt == nil {
+			user.Nickname = in.Nickname
+			user.AvatarURL = in.AvatarURL
+			user.UpdatedAt = in.Now
+			return r.clone(user), nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (r *fakeUserRepo) UpdateEmail(_ context.Context, uid, email string, now time.Time) (*domain.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var target *domain.User
+	for _, user := range r.byID {
+		if user.DeletedAt != nil {
+			continue
+		}
+		if strings.EqualFold(user.Email, email) && user.UID != uid {
+			return nil, domain.ErrDuplicate
+		}
+		if user.UID == uid {
+			target = user
+		}
+	}
+	if target == nil {
+		return nil, domain.ErrNotFound
+	}
+	target.Email = email
+	target.UpdatedAt = now
+	return r.clone(target), nil
+}
+
+// fakeStore 是内存版文件存储。
+type fakeStore struct {
+	mu      sync.Mutex
+	files   map[string][]byte
+	deleted []string
+}
+
+func newFakeStore() *fakeStore { return &fakeStore{files: make(map[string][]byte)} }
+
+func (s *fakeStore) Save(_ context.Context, key string, data []byte) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.files[key] = append([]byte(nil), data...)
+	return s.URL(key), nil
+}
+
+func (s *fakeStore) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.files, key)
+	s.deleted = append(s.deleted, key)
+	return nil
+}
+
+func (s *fakeStore) URL(key string) string { return "/uploads/" + key }

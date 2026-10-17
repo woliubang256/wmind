@@ -38,6 +38,8 @@ type Deps struct {
 	// Auth 处理认证接口；Sessions 提供 RequireAuth 需要的令牌校验。
 	Auth     *handler.AuthHandler
 	Sessions *service.AuthService
+	// Users 处理「我的」相关接口（资料、密码、头像）。
+	Users *handler.UserHandler
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -78,8 +80,27 @@ func NewRouter(deps Deps) http.Handler {
 		register: middleware.NewRateLimiter(3, time.Hour, 3),
 		refresh:  middleware.NewRateLimiter(30, time.Minute, 30),
 	})
+	registerUsers(v1, deps)
+
+	// 头像等上传文件由 API 直接提供。生产部署里 Nginx 把 /uploads/ 也代理到
+	// 本进程（见 deploy/nginx.conf），所以这里不需要额外的鉴权：头像本来就是
+	// 公开资源，URL 里带随机 uid，猜不到别人的。
+	if dir := deps.Config.Storage.Dir; dir != "" {
+		r.Static("/uploads", dir)
+	}
 
 	return r
+}
+
+// registerUsers 注册「我的」相关接口，全部要求登录态。
+func registerUsers(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Users == nil || deps.Sessions == nil {
+		return
+	}
+	g := v1.Group("/users", middleware.RequireAuth(deps.Sessions))
+	g.PATCH("/me", deps.Users.UpdateMe)
+	g.POST("/me/password", deps.Users.ChangePassword)
+	g.POST("/me/avatar", deps.Users.UploadAvatar)
 }
 
 // authLimiters 是认证入口的限流器。

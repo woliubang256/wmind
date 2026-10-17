@@ -286,6 +286,27 @@ func Run(t *testing.T, r Repos) {
 		}
 	})
 
+	t.Run("email update and case-insensitive uniqueness", func(t *testing.T) {
+		user := mustCreateUser(t, ctx, users, now)
+
+		updated, err := users.UpdateEmail(ctx, user.UID, "renamed-"+user.UID+"@example.test", now.Add(time.Minute))
+		if err != nil || updated.Email != "renamed-"+user.UID+"@example.test" {
+			t.Fatalf("UpdateEmail = %#v, %v", updated, err)
+		}
+		if !updated.UpdatedAt.Equal(now.Add(time.Minute)) {
+			t.Fatalf("updatedAt = %v; want %v", updated.UpdatedAt, now.Add(time.Minute))
+		}
+
+		// The lower(email) unique index must reject a case-only duplicate.
+		other := mustCreateUser(t, ctx, users, now)
+		if _, err := users.UpdateEmail(ctx, other.UID, "RENAMED-"+user.UID+"@EXAMPLE.TEST", now); !errors.Is(err, domain.ErrDuplicate) {
+			t.Fatalf("大小写重复邮箱 error = %v; want ErrDuplicate", err)
+		}
+		if _, err := users.UpdateEmail(ctx, ulid.Make().String(), "nobody@example.test", now); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("改不存在用户的邮箱 error = %v; want ErrNotFound", err)
+		}
+	})
+
 	t.Run("refresh token lifecycle", func(t *testing.T) {
 		owner := mustCreateUser(t, ctx, users, now)
 

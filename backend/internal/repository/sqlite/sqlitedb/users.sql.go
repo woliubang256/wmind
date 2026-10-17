@@ -417,6 +417,46 @@ func (q *Queries) TouchUserLastLogin(ctx context.Context, arg TouchUserLastLogin
 	return result.RowsAffected()
 }
 
+const updateUserEmail = `-- name: UpdateUserEmail :one
+UPDATE users
+SET email = ?1,
+    updated_at = ?2
+WHERE uid = ?3 AND deleted_at IS NULL
+RETURNING id, uid, username, email, password_hash, nickname, avatar_url, role, status, map_count, last_login_at, created_at, updated_at, deleted_at
+`
+
+type UpdateUserEmailParams struct {
+	Email     string
+	UpdatedAt string
+	Uid       string
+}
+
+// Changing the email is separate from UpdateUserProfile: the email column has
+// a case-insensitive unique index, so this statement can fail with a constraint
+// error while a nickname change cannot. Keeping them apart lets the service map
+// "email taken" to AUTH_EMAIL_TAKEN instead of a generic conflict.
+func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserEmail, arg.Email, arg.UpdatedAt, arg.Uid)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Uid,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Nickname,
+		&i.AvatarUrl,
+		&i.Role,
+		&i.Status,
+		&i.MapCount,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const updateUserPassword = `-- name: UpdateUserPassword :execrows
 UPDATE users
 SET password_hash = ?1,
