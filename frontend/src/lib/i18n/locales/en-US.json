@@ -1,0 +1,32 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "login": "Sign in",
+    "logout": "Sign out",
+    "username": "Username or email",
+    "password": "Password",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "theme": "Toggle appearance"
+  },
+  "nav": {
+    "recent": "Recent",
+    "templates": "Templates",
+    "trash": "Trash",
+    "account": "Account",
+    "adminUsers": "Users",
+    "adminSettings": "Site settings"
+  },
+  "auth": {
+    "loginTitle": "Sign in to wmind",
+    "loginDescription": "Sign in to continue working with your mind maps.",
+    "forgotPassword": "Forgot your password? Contact the site administrator for a reset.",
+    "registerClosed": "Registration is closed. Contact the site administrator."
+  },
+  "home": {
+    "welcome": "Hello, {{name}}",
+    "subtitle": "Turn ideas into clear mind maps.",
+    "create": "New mind map",
+    "empty": "Your mind maps will appear here."
+  }
+}

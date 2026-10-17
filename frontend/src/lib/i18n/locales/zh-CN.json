@@ -1,0 +1,32 @@
+{
+  "common": {
+    "loading": "正在加载…",
+    "login": "登录",
+    "logout": "退出登录",
+    "username": "用户名或邮箱",
+    "password": "密码",
+    "submit": "提交",
+    "cancel": "取消",
+    "theme": "切换外观"
+  },
+  "nav": {
+    "recent": "最近",
+    "templates": "模板",
+    "trash": "回收站",
+    "account": "个人设置",
+    "adminUsers": "用户管理",
+    "adminSettings": "网站设置"
+  },
+  "auth": {
+    "loginTitle": "登录 wmind",
+    "loginDescription": "登录以继续使用你的思维导图。",
+    "forgotPassword": "忘记密码？请联系网站管理员重置。",
+    "registerClosed": "本站暂未开放注册，请联系管理员。"
+  },
+  "home": {
+    "welcome": "你好，{{name}}",
+    "subtitle": "把想法整理成清晰的思维导图。",
+    "create": "新建导图",
+    "empty": "你的导图将显示在这里。"
+  }
+}
