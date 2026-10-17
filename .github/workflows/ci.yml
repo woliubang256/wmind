@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify backend, dialects, and notes
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: wmind_test
+          POSTGRES_USER: wmind
+          POSTGRES_PASSWORD: wmind_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wmind -d wmind_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      WMIND_TEST_DATABASE_URL: postgres://wmind:wmind_ci_password@localhost:5432/wmind_test?sslmode=disable
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install sqlc
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify generated database code
+        working-directory: backend/db
+        run: |
+          sqlc generate
+          git diff --exit-code -- ../internal/repository/postgres/pgdb ../internal/repository/sqlite/sqlitedb
+
+      - name: Verify architecture notes
+        run: npm run verify-notes
+
+      - name: Verify dialect boundaries
+        working-directory: backend
+        run: go run ./cmd/dialectcheck .
+
+      - name: Verify migrations against SQLite and PostgreSQL
+        working-directory: backend
+        run: go run ./cmd/verifyparity
+
+      - name: Run tests
+        working-directory: backend
+        run: go test ./...
+
+      - name: Run static analysis
+        working-directory: backend
+        run: go vet ./...
+
+      - name: Type-check and test frontend
+        working-directory: frontend
+        run: pnpm typecheck && pnpm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Check deployment configuration
+        env:
+          WMIND_JWT_SECRET: ci-only-test-secret-that-is-not-used-in-production
+          POSTGRES_PASSWORD: wmind_ci_password
+        run: |
+          docker compose -f deploy/docker-compose.yml config --quiet
+          docker compose -f deploy/docker-compose.postgres.yml config --quiet
+
+      - name: Build container images
+        run: |
+          docker build --file deploy/Dockerfile.backend --tag wmind/api:ci .
+          docker build --file deploy/Dockerfile.frontend --tag wmind/web:ci .
+
+      - name: Build static server
+        working-directory: backend
+        run: CGO_ENABLED=0 go build -trimpath -o /tmp/wmind-server ./cmd/server

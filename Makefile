@@ -10,8 +10,9 @@ FRONTEND := frontend
 
 .PHONY: help
 help: ## 显示本帮助
-	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
-		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) \
+		| sed -E 's/^([a-zA-Z0-9_-]+):.*## /\1\t/' \
+		| awk -F'\t' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 # ── 开发 ─────────────────────────────────────────────
 
@@ -22,6 +23,10 @@ dev-backend: ## 本地启动后端（SQLite，:8080）
 .PHONY: dev-frontend
 dev-frontend: ## 本地启动前端（Vite，:5173）
 	cd $(FRONTEND) && pnpm dev
+
+.PHONY: test-frontend
+test-frontend: ## 运行前端类型检查、单元测试与生产构建
+	cd $(FRONTEND) && pnpm typecheck && pnpm test && pnpm build
 
 # ── 构建与检查 ───────────────────────────────────────
 
@@ -35,7 +40,9 @@ test: ## 跑后端全部测试（SQLite 集成测试不需要 Docker）
 
 .PHONY: lint
 lint: ## 后端 go vet + gofmt 检查
-	cd $(BACKEND) && go vet ./... && test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
+	cd $(BACKEND) && go vet ./...
+	@cd $(BACKEND) && unformatted=$$(gofmt -l .); \
+		if [ -n "$$unformatted" ]; then echo "以下文件需要 gofmt："; echo "$$unformatted"; exit 1; fi
 
 # ── 数据库 ───────────────────────────────────────────
 
@@ -46,6 +53,13 @@ sqlc: ## 重新生成双 target 的 sqlc 代码（pgdb / sqlitedb）
 .PHONY: verify-parity
 verify-parity: ## 校验两套迁移集结构一致（CI 必过闸门）
 	cd $(BACKEND) && go run ./cmd/verifyparity
+
+.PHONY: verify-dialectcheck
+verify-dialectcheck: ## 检查 service/handler 是否泄漏数据库方言
+	cd $(BACKEND) && go run ./cmd/dialectcheck .
+
+.PHONY: verify-dialect
+verify-dialect: verify-parity verify-dialectcheck ## 运行双方言迁移与分层门禁
 
 # ── 笔记 ─────────────────────────────────────────────
 

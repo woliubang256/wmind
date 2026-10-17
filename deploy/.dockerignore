@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+.workbuddy-ai
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/coverage
+**/*.db
+**/*.db-wal
+**/*.db-shm
+backups

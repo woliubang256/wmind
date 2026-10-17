@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1.7
+FROM golang:1.25-alpine AS builder
+WORKDIR /src
+RUN apk add --no-cache ca-certificates git
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/wmind ./cmd/server
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata wget \
+    && addgroup -S -g 10001 wmind \
+    && adduser -S -D -H -u 10001 -G wmind wmind \
+    && mkdir -p /data \
+    && chown -R 10001:10001 /data
+WORKDIR /app
+COPY --from=builder /out/wmind /app/wmind
+ENV WMIND_ENV=production \
+    WMIND_ADDR=:8080 \
+    WMIND_SQLITE_PATH=/data/wmind.db \
+    WMIND_STORAGE_DIR=/data/uploads \
+    WMIND_AUTO_MIGRATE=true
+USER 10001:10001
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/api/v1/health/live || exit 1
+ENTRYPOINT ["/app/wmind"]
