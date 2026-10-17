@@ -10,6 +10,7 @@ import (
 const (
 	ctxKeyRequestID = "wmind.requestID"
 	ctxKeyUserID    = "wmind.userID"   // M1 的 RequireAuth 写入
+	ctxKeyUserDBID  = "wmind.userDBID" // M1 的 RequireAuth 写入
 	ctxKeyUserRole  = "wmind.userRole" // M1 的 RequireAuth 写入
 )
 
@@ -32,6 +33,22 @@ func UserID(c *gin.Context) string {
 // UserRole 返回已认证用户的角色；未认证时返回空串。
 func UserRole(c *gin.Context) string {
 	return stringFromContext(c, ctxKeyUserRole)
+}
+
+// UserDBID 返回已认证用户的自增主键；未认证时返回 nil。
+//
+// 业务接口一律用 uid（对外的稳定标识），但审计日志与 settings.updated_by
+// 存的是主键——它们是内部表，用 int64 外键比字符串省空间也省索引。
+func UserDBID(c *gin.Context) *int64 {
+	v, ok := c.Get(ctxKeyUserDBID)
+	if !ok {
+		return nil
+	}
+	id, ok := v.(int64)
+	if !ok {
+		return nil
+	}
+	return &id
 }
 
 func stringFromContext(c *gin.Context, key string) string {

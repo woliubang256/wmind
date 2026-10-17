@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -19,7 +20,14 @@ import (
 	"github.com/woliubang256/wmind/backend/internal/migrate"
 	"github.com/woliubang256/wmind/backend/internal/repository/sqlite"
 	"github.com/woliubang256/wmind/backend/internal/service"
+	"github.com/woliubang256/wmind/backend/internal/settings"
 	"github.com/woliubang256/wmind/backend/internal/storage"
+)
+
+// 测试用种子管理员的凭据。
+const (
+	testAdminEmail    = "admin@example.com"
+	testAdminPassword = "admin-correct-horse"
 )
 
 // 这个测试是认证链路的端到端验收：真实 SQLite、真实 bcrypt、真实 Cookie。
@@ -53,17 +61,33 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	}
 	userRepo := sqlite.NewUserRepository(db)
 	txManager := sqlite.NewTxManager(db)
+
+	settingsSvc, err := settings.New(sqlite.NewSettingsRepository(db), settings.Config{
+		Logger: logger, Tx: txManager,
+	})
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	if err := settingsSvc.Load(context.Background()); err != nil {
+		t.Fatalf("加载设置: %v", err)
+	}
+
 	svc, err := service.NewAuthService(
 		userRepo,
 		sqlite.NewRefreshTokenRepository(db),
 		txManager,
 		service.AuthServiceConfig{
 			Issuer: issuer, RefreshTTL: 7 * 24 * time.Hour,
-			Site: service.OpenSiteConfig(), UserCacheTTL: 60 * time.Second,
+			Site: settingsSvc, UserCacheTTL: 60 * time.Second,
 		},
 	)
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
+	}
+	// 固定一个种子管理员，管理接口的测试用它登录。
+	// 密码要能过策略（默认最小 8 位）。
+	if _, err := svc.SeedAdmin(context.Background(), testAdminEmail, testAdminPassword); err != nil {
+		t.Fatalf("SeedAdmin: %v", err)
 	}
 
 	uploads := filepath.Join(t.TempDir(), "uploads")
@@ -87,10 +111,12 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 			// 目录是同一个，否则上传成功但取不到文件。
 			Storage: config.Storage{Dir: uploads},
 		},
-		Logger:   logger,
-		Auth:     handler.NewAuthHandler(svc, cookie, nil),
-		Sessions: svc,
-		Users:    handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Logger:        logger,
+		Auth:          handler.NewAuthHandler(svc, cookie, nil),
+		Sessions:      svc,
+		Users:         handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Site:          handler.NewSiteHandler(settingsSvc, "test-version"),
+		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc),
 	})
 
 	server := httptest.NewServer(router)

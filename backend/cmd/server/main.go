@@ -26,6 +26,7 @@ import (
 	postgresrepo "github.com/woliubang256/wmind/backend/internal/repository/postgres"
 	sqliterepo "github.com/woliubang256/wmind/backend/internal/repository/sqlite"
 	"github.com/woliubang256/wmind/backend/internal/service"
+	"github.com/woliubang256/wmind/backend/internal/settings"
 	"github.com/woliubang256/wmind/backend/internal/storage"
 )
 
@@ -54,12 +55,13 @@ func run() error {
 	ready := make([]httpapi.ReadyCheck, 0, 1)
 	var closeDatabase func()
 
-	// These three are the dialect-agnostic handles the service layer works with.
+	// These are the dialect-agnostic handles the service layer works with.
 	// Only this switch is allowed to name a concrete dialect.
 	var (
-		userRepo  domain.UserRepo
-		tokenRepo domain.RefreshTokenRepo
-		txManager domain.TxManager
+		userRepo     domain.UserRepo
+		tokenRepo    domain.RefreshTokenRepo
+		settingsRepo domain.SettingsRepo
+		txManager    domain.TxManager
 	)
 
 	// This is the only server-assembly switch allowed to select a dialect.
@@ -79,6 +81,7 @@ func run() error {
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: sqliterepo.Check(db)})
 		userRepo = sqliterepo.NewUserRepository(db)
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
+		settingsRepo = sqliterepo.NewSettingsRepository(db)
 		txManager = sqliterepo.NewTxManager(db)
 
 	case config.DriverPostgres:
@@ -106,6 +109,7 @@ func run() error {
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: postgresrepo.Check(pool)})
 		userRepo = postgresrepo.NewUserRepository(pool)
 		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
+		settingsRepo = postgresrepo.NewSettingsRepository(pool)
 		txManager = postgresrepo.NewTxManager(pool)
 
 	default:
@@ -117,11 +121,24 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
+	settingsSvc, err := settings.New(settingsRepo, settings.Config{Logger: log, Tx: txManager})
+	if err != nil {
+		return err
+	}
+	// 读不到设置不阻断启动：站点用默认值起来，管理员登录后台就能发现并修。
+	// Load 内部已经打了 ERROR 日志。
+	_ = settingsSvc.Load(startupCtx)
+	// TTL 兜底刷新：多实例部署时用来在 60 秒内看到别的实例改过的设置。
+	settingsCtx, stopSettings := context.WithCancel(context.Background())
+	defer stopSettings()
+	go settingsSvc.Run(settingsCtx)
+	warnRiskySettings(settingsSvc, log)
+
 	authSvc, err := service.NewAuthService(userRepo, tokenRepo, txManager, service.AuthServiceConfig{
-		Issuer:     issuer,
-		RefreshTTL: cfg.Auth.RefreshTTL,
-		// M1-4 replaces this with the settings-backed snapshot.
-		Site:         service.OpenSiteConfig(),
+		Issuer:       issuer,
+		RefreshTTL:   cfg.Auth.RefreshTTL,
+		Site:         settingsSvc,
 		UserCacheTTL: 60 * time.Second,
 	})
 	if err != nil {
@@ -158,7 +175,9 @@ func run() error {
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: cfg, Logger: log, Ready: ready,
 		Auth: authHandler, Sessions: authSvc,
-		Users: handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Users:         handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Site:          handler.NewSiteHandler(settingsSvc, config.Version),
+		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc),
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -190,4 +209,20 @@ func run() error {
 	}
 	log.Info("server stopped")
 	return nil
+}
+
+// warnRiskySettings 在启动时提示「配置组合本身有安全风险」。
+//
+// 这两项都是管理员合法可设的，服务端不该拒绝；但组合起来意味着「互联网上
+// 任何人都能注册成管理员」，属于必须让人看见的配置。启动日志是唯一保证
+// 会被看到的通道——管理员可能永远不会翻到设置页去看。
+func warnRiskySettings(svc *settings.Service, log *slog.Logger) {
+	snapshot := svc.Snapshot()
+	if snapshot.RegistrationEnabled() && snapshot.DefaultRole() == string(domain.RoleAdmin) {
+		log.Warn("注册开放且新用户默认角色为 admin：任何人都可以注册成管理员",
+			"auth.registration_enabled", true, "auth.default_role", "admin")
+	}
+	if !snapshot.RegistrationEnabled() {
+		log.Info("站点已关闭注册")
+	}
 }

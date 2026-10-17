@@ -8,6 +8,11 @@ SHELL := /bin/bash
 BACKEND  := backend
 FRONTEND := frontend
 
+# 版本号注入到 config.Version，由 GET /site/config 返回。
+# 优先用 git 描述（v1.2.3-4-gabc123），没有 tag 时退化成短哈希，再不行用 dev。
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X github.com/woliubang256/wmind/backend/internal/config.Version=$(VERSION)
+
 .PHONY: help
 help: ## 显示本帮助
 	@grep -hE '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) \
@@ -32,7 +37,7 @@ test-frontend: ## 运行前端类型检查、单元测试与生产构建
 
 .PHONY: build
 build: ## 构建后端静态二进制到 backend/bin/
-	cd $(BACKEND) && CGO_ENABLED=0 go build -trimpath -o bin/wmind-server ./cmd/server
+	cd $(BACKEND) && CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/wmind-server ./cmd/server
 
 .PHONY: test
 test: ## 跑后端全部测试（SQLite 集成测试不需要 Docker）

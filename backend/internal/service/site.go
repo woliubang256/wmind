@@ -2,16 +2,21 @@
 // 数据库方言（由 cmd/dialectcheck 静态检查兜底）。
 package service
 
-import "time"
+import (
+	"time"
 
-// SiteConfigProvider 暴露站点级配置。认证流程需要其中两项：
-// 是否开放注册、密码最小长度。
+	"github.com/woliubang256/wmind/backend/internal/domain"
+)
+
+// SiteConfigProvider 暴露站点级配置。认证流程需要其中三项：
+// 是否开放注册、密码最小长度、新用户默认角色。
 //
-// 定义成接口而不是直接读 settings 仓储，是因为这两个值在认证路径上是热数据
+// 定义成接口而不是直接读 settings 仓储，是因为这几个值在认证路径上是热数据
 // （每次注册都要读），实现方可以换成内存快照而不影响调用方。
 type SiteConfigProvider interface {
 	RegistrationEnabled() bool
 	PasswordMinLength() int
+	DefaultRole() string
 }
 
 // StaticSiteConfig 是一份固定配置，用于测试与「设置服务尚未接入」的场合。
@@ -21,6 +26,8 @@ type SiteConfigProvider interface {
 type StaticSiteConfig struct {
 	RegistrationOn    bool
 	MinPasswordLength int
+	// Role 是新用户默认角色，空值视为 user。
+	Role string
 }
 
 // RegistrationEnabled 报告是否开放注册。
@@ -32,6 +39,14 @@ func (c StaticSiteConfig) PasswordMinLength() int {
 		return 8
 	}
 	return c.MinPasswordLength
+}
+
+// DefaultRole 返回新用户默认角色。
+func (c StaticSiteConfig) DefaultRole() string {
+	if c.Role == "" {
+		return string(domain.RoleUser)
+	}
+	return c.Role
 }
 
 // OpenSiteConfig 是「默认站点」：开放注册、密码至少 8 位。

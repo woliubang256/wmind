@@ -30,6 +30,7 @@ func RequireAuth(auth *service.AuthService) gin.HandlerFunc {
 		}
 
 		c.Set(ctxKeyUserID, user.UID)
+		c.Set(ctxKeyUserDBID, user.ID)
 		c.Set(ctxKeyUserRole, string(user.Role))
 		c.Next()
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/woliubang256/wmind/backend/internal/config"
+	"github.com/woliubang256/wmind/backend/internal/domain"
 	"github.com/woliubang256/wmind/backend/internal/handler"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/middleware"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/response"
@@ -40,6 +41,9 @@ type Deps struct {
 	Sessions *service.AuthService
 	// Users 处理「我的」相关接口（资料、密码、头像）。
 	Users *handler.UserHandler
+	// Site 处理公开的站点配置；AdminSettings 处理管理员的设置读写。
+	Site          *handler.SiteHandler
+	AdminSettings *handler.AdminSettingsHandler
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -74,6 +78,7 @@ func NewRouter(deps Deps) http.Handler {
 
 	v1 := r.Group("/api/v1")
 	registerHealth(v1, deps)
+	registerSite(v1, deps)
 	registerAuth(v1, deps, authLimiters{
 		// 策略见 docs/04 §3.1。登录的限流维度含账号，放在 handler 里，
 		// 这里只处理「只按 IP」的两个入口。
@@ -81,6 +86,7 @@ func NewRouter(deps Deps) http.Handler {
 		refresh:  middleware.NewRateLimiter(30, time.Minute, 30),
 	})
 	registerUsers(v1, deps)
+	registerAdmin(v1, deps)
 
 	// 头像等上传文件由 API 直接提供。生产部署里 Nginx 把 /uploads/ 也代理到
 	// 本进程（见 deploy/nginx.conf），所以这里不需要额外的鉴权：头像本来就是
@@ -101,6 +107,34 @@ func registerUsers(v1 *gin.RouterGroup, deps Deps) {
 	g.PATCH("/me", deps.Users.UpdateMe)
 	g.POST("/me/password", deps.Users.ChangePassword)
 	g.POST("/me/avatar", deps.Users.UploadAvatar)
+}
+
+// registerSite 注册公开的站点配置接口。
+//
+// 未登录可访问：登录页要在拿到令牌之前就知道「注册是否开放、密码几位」。
+func registerSite(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Site == nil {
+		return
+	}
+	v1.GET("/site/config", deps.Site.Config)
+}
+
+// registerAdmin 注册管理后台接口。
+//
+// 整组挂在 RequireAuth + RequireRole(admin) 之后：管理接口漏一个鉴权就是
+// 全站权限失守，逐个接口加容易漏，按组加只需要检查一处。
+func registerAdmin(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Sessions == nil {
+		return
+	}
+	g := v1.Group("/admin",
+		middleware.RequireAuth(deps.Sessions),
+		middleware.RequireRole(domain.RoleAdmin),
+	)
+	if deps.AdminSettings != nil {
+		g.GET("/settings", deps.AdminSettings.Get)
+		g.PUT("/settings", deps.AdminSettings.Update)
+	}
 }
 
 // authLimiters 是认证入口的限流器。

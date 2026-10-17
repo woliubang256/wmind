@@ -166,7 +166,7 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*AuthResu
 	now := s.now()
 	user, err := s.users.Create(ctx, domain.CreateUserInput{
 		UID: id.New(), Username: username, Email: email, PasswordHash: hash,
-		Nickname: nickname, Role: domain.RoleUser, Status: domain.UserStatusActive, Now: now,
+		Nickname: nickname, Role: s.registrationRole(), Status: domain.UserStatusActive, Now: now,
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrDuplicate) {
@@ -175,6 +175,20 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*AuthResu
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
 	return s.issueSession(ctx, user, in.Meta)
+}
+
+// registrationRole 返回新注册用户的角色。
+//
+// 取值来自设置项 auth.default_role，但这里仍做一次白名单收敛：设置值理论上
+// 已经过 schema 校验，而「角色」是权限边界的最后一环，不能依赖上游一定没错。
+// 非法值退回 user 而不是报错——注册失败比降级更糟。
+func (s *AuthService) registrationRole() domain.Role {
+	switch role := domain.Role(s.site.DefaultRole()); role {
+	case domain.RoleAdmin, domain.RoleUser:
+		return role
+	default:
+		return domain.RoleUser
+	}
 }
 
 // Login 校验凭据并签发会话。
