@@ -35,5 +35,8 @@ func TestRepositoryContract(t *testing.T) {
 		t.Fatalf("close PostgreSQL migration connection: %v", err)
 	}
 
-	contracttest.Run(t, NewUserRepository(db), NewMapRepository(db), NewTxManager(db))
+	contracttest.Run(t, contracttest.Repos{
+		Users: NewUserRepository(db), Maps: NewMapRepository(db), Tx: NewTxManager(db),
+		Tokens: NewRefreshTokenRepository(db), Settings: NewSettingsRepository(db), Audit: NewAuditRepository(db),
+	})
 }

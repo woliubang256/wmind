@@ -21,5 +21,8 @@ func TestRepositoryContract(t *testing.T) {
 	if err := migrate.Up("sqlite", db, logger); err != nil {
 		t.Fatalf("apply SQLite migrations: %v", err)
 	}
-	contracttest.Run(t, NewUserRepository(db), NewMapRepository(db), NewTxManager(db))
+	contracttest.Run(t, contracttest.Repos{
+		Users: NewUserRepository(db), Maps: NewMapRepository(db), Tx: NewTxManager(db),
+		Tokens: NewRefreshTokenRepository(db), Settings: NewSettingsRepository(db), Audit: NewAuditRepository(db),
+	})
 }
