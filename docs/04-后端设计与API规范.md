@@ -1035,7 +1035,9 @@ sql:
 
 关键点：
 
-- **`queries/shared` 被两个 target 同时读取**。同一份 `.sql` 生成两套 Go 代码，占位符由 sqlc 按 engine 自动转换（PG 生成 `$1`，SQLite 生成 `?`）。
+- **`queries/shared` 被两个 target 同时读取**。命名参数必须写为 `sqlc.arg(name)`，绝不手写 `$1` 或 `?`；sqlc 会分别生成 PostgreSQL `$1` 与 SQLite `?1`。
+- **shared 与方言 SQL 源文件必须保持 ASCII-only**（含注释和字符串字面量）。sqlc v1.31.1 的 SQLite 参数重写对非 ASCII 查询文本字节偏移不安全，会破坏查询文本。自然语言说明写在本节或 Agent Note，不写入这些 SQL 源。
+- LIMIT/OFFSET 命名参数使用 `page_size` / `row_offset`，不要用 PostgreSQL 保留字 `limit` / `offset` 作参数名。
 - 两个 target 的**包名与输出目录必须不同**，否则生成的 `Queries` 类型会冲突。
 - 驱动包名不同（`pgx/v5` vs `database/sql`），因此生成的方法签名略有差异——这正是需要用 `domain` 接口兜住的原因。
 - 若某个查询无法在 `shared` 下同时通过两个 engine 的解析，就把它移到方言目录，**不要为了共享而牺牲可读性**。

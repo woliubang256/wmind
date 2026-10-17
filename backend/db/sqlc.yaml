@@ -1,0 +1,49 @@
+version: "2"
+
+# 双 target：同一份 queries/shared 被两个 engine 各读一遍，生成两个互不相干的包。
+#
+# 为什么必须分成两个包：驱动不同（pgx/v5 vs database/sql），生成的方法签名也不同。
+# 让它们共用一个包名会让 Queries 类型冲突。差异由 internal/domain 的接口兜住，
+# service / handler 层看不到这一层（见 docs/04 §7.9）。
+#
+# schema 用 *.up.sql 通配而不是整个目录：目录里还有 .down.sql，
+# 全读进来会让 sqlc 试图把 DROP TABLE 也当成 schema 解析。
+
+sql:
+  - engine: "postgresql"
+    schema:
+      - "migrations/postgres/*.up.sql"
+    queries:
+      - "queries/shared"
+      - "queries/postgres"
+    gen:
+      go:
+        package: "pgdb"
+        out: "../internal/repository/postgres/pgdb"
+        sql_package: "pgx/v5"
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        # 只覆盖 inet。pgx 默认把 inet 映射成 netip.Addr，而 SQLite 侧是 TEXT，
+        # 统一成 string 才能让两侧填进同一个 domain 模型。
+        #
+        # 不要试图用 go_type: "[]byte" 覆盖 jsonb：sqlc 拒绝非基本类型
+        # （"Package override `go_type` specifier \"[]byte\" is not a Go basic type"）。
+        # pgx/v5 对 jsonb 的默认映射本来就是 []byte，正好与我们要的一致；
+        # SQLite 侧 TEXT 生成 string，由仓储层做 []byte <-> string 转换。
+        overrides:
+          - db_type: "inet"
+            go_type: "string"
+
+  - engine: "sqlite"
+    schema:
+      - "migrations/sqlite/*.up.sql"
+    queries:
+      - "queries/shared"
+      - "queries/sqlite"
+    gen:
+      go:
+        package: "sqlitedb"
+        out: "../internal/repository/sqlite/sqlitedb"
+        sql_package: "database/sql"
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true

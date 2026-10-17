@@ -1,0 +1,25 @@
+package sqlite
+
+import (
+	"io"
+	"log/slog"
+	"path/filepath"
+	"testing"
+
+	"github.com/woliubang256/wmind/backend/internal/migrate"
+	"github.com/woliubang256/wmind/backend/internal/repository/contracttest"
+)
+
+func TestRepositoryContract(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "contract.db"))
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	defer db.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := migrate.Up("sqlite", db, logger); err != nil {
+		t.Fatalf("apply SQLite migrations: %v", err)
+	}
+	contracttest.Run(t, NewUserRepository(db), NewMapRepository(db), NewTxManager(db))
+}

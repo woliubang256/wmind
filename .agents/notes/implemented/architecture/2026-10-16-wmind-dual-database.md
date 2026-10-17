@@ -1,6 +1,6 @@
 # Agent Note: 同时支持 PostgreSQL 与 SQLite 两种数据库，双方言仓储层 + 两套 compose
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
@@ -25,7 +25,7 @@ SQLite 有一个不可绕过的限制——**单写者**。它决定了「一个
 
 同时还有一个容易被忽略的约束：**用 CGO 版 SQLite 驱动会破坏现有的构建方式**。后端 Dockerfile 是 `CGO_ENABLED=0` 的多阶段 alpine 构建，引入 `mattn/go-sqlite3` 需要 gcc 和 `CGO_ENABLED=1`。
 
-## Proposal
+## Decision
 
 ### 双方言并存，由环境变量选择
 
@@ -74,6 +74,12 @@ err := tx.WithTx(ctx, func(ctx context.Context) error {
 ```
 
 repository 内部用 `dbtx(ctx)` 取「事务句柄或普通连接」——有事务时走事务，没有时走连接池。**service 层完全不感知方言，也不感知是否在事务中**。这是把方言差异关在仓储层的关键设计。
+
+### sqlc 公共查询的解析约束
+
+`queries/shared/*.sql` 和两个方言专属查询文件保持 ASCII-only。使用 sqlc v1.31.1 实测，`sqlc.arg(name)` 在 SQLite engine 下会把参数标记回写到 SQL 文本；只要同一查询中有非 ASCII 注释或字面量，字节偏移处理会破坏周边 SQL（例如生成 `SELEcid`、`UPDATE m?3`），报错还会指向无关的 LIMIT/metadata。
+
+此外，LIMIT/OFFSET 参数名不用 `limit` / `offset`（PostgreSQL 将其视作保留关键字），统一命名为 `page_size` / `row_offset`。生成参数与 domain.Page 字段的映射留在仓储实现。
 
 ### 三条硬性 SQL 纪律
 
@@ -181,28 +187,19 @@ repository 内部用 `dbtx(ctx)` 取「事务句柄或普通连接」——有�
 
 不维护两套迁移集，只写一份，靠 SQL 的子集性质让两边都能执行。**未选**：在纯 DDL 场景下这个想法很快会撞墙——SQLite 没有 `ALTER COLUMN`、没有 `ADD CONSTRAINT`、`JSONB` / `TIMESTAMPTZ` / `SERIAL` 都没有对应物。为了写出一份两边都能跑的 DDL，会把 PostgreSQL 侧的设计压到 SQLite 的水平，这是本末倒置。分开维护两套、用 CI 保证版本号一致，是更诚实的做法。
 
-## Acceptance criteria
+## Verification
 
-1. **同一份二进制**分别以 `WMIND_DB_DRIVER=sqlite` 与 `postgres` 启动，都能跑通完整 CRUD；不需要为某个方言单独构建镜像。
-2. **两套 compose 各自可用**：`docker compose up -d`（SQLite，2 容器）与 `docker compose -f docker-compose.postgres.yml up -d`（PostgreSQL，3 容器）在干净机器上都能部署成功，功能无差异。
-3. **默认值安全**：不设任何 `WMIND_DB_*` 变量时，系统以 SQLite 启动并正常工作；设 `driver=postgres` 但缺 `WMIND_DATABASE_URL` 时，启动失败并给出明确错误（不静默回退到 SQLite）。
-4. **`CGO_ENABLED=0` 构建成功**，最终镜像仍可静态运行。
-5. **迁移集版本号一致**：`verify-migration-parity` 通过；故意只在 PostgreSQL 侧加一个版本时该检查失败。
-6. **仓储契约测试双跑**：同一组用例分别在 `pgdb` 与 `sqlitedb` 上通过。
-7. **方言不泄漏**：静态检查确认 `service` / `handler` 层无 `driver ==` 类分支；在 `service` 层故意插入一个方言分支时检查失败。
-8. **时间格式一致**：两种方言写出的时间字符串格式相同（ISO-8601 UTC，带 `Z`），且由 Go 侧生成而非 SQL 函数。
-9. **SQLite 并发不炸**：并发写入测试（如 20 个 goroutine 同时保存不同导图）不出现未重试的 `SQLITE_BUSY`，全部请求成功或返回业务错误。
-10. **SQLite 单实例约束落地**：文档明确标注；就绪探针在 SQLite 下能识别「可读但不可写」（磁盘满、卷变只读）并返回 503。
-11. **备份可恢复**：`VACUUM INTO` 产物经恢复脚本还原后服务可正常启动且数据完整。
-12. **PostgreSQL 完整回归**：全部 E2E 在 PostgreSQL 上通过，与 SQLite 结果无差异项。
+- `sqlc generate` 同时产出 `pgdb` 与 `sqlitedb`，生成结果纳入版本控制；CI 重生成并检查产物差异。
+- 两套真实迁移由 `cmd/verifyparity` 校验：版本序列配对，SQLite 内省恰有预期业务表，连接 PostgreSQL 时比较真实表/列/类型/索引。
+- 同一份用户与导图契约测试跑 SQLite 临时数据库；设置 `WMIND_TEST_DATABASE_URL` 时同样的用例跑 PostgreSQL。
+- `cmd/dialectcheck` 检查业务层不直接依赖具体方言仓储、handler 不直连仓储；覆盖测试验证违规样例会失败。
+- `go test ./...`、`go vet ./...` 与 `CGO_ENABLED=0 go build ./cmd/server` 通过。
+- compose 以两个独立文件交付；由于开发环境没有 Docker，尚未本机启动验证，部署阶段仍需在装有 Docker 的环境中执行验收。
 
-## Risks
+## Consequences
 
-- **方言漂移是最大的长期风险**。本地开发只跑 SQLite，PostgreSQL 的问题不会自发暴露——而这类问题通常在真实数据上才触发（时间时区、JSON 路径、模糊搜索大小写、唯一约束错误码）。对策：把「PostgreSQL 完整回归」写进发布检查清单，**每个版本**都跑，不能只在 M6 跑一次。这是唯一有效的防线。
-- **SQL 公共子集会被无意侵蚀**。开发者写一个查询时只会在本地（SQLite）验证，很容易顺手用了 SQLite 的特性。对策：`queries/{shared,postgres,sqlite}` 的目录划分本身就是提示；再加契约测试双跑兜底。
-- **两套迁移集的一致性是人工保证的**。`verify-migration-parity` 只能校验版本号序列，校验不了「语义是否等价」——两个版本号相同但内容不同（比如 PostgreSQL 加了索引、SQLite 忘了加）不会被拦住。对策：code review 时把两套迁移文件视为一个原子改动；对性能敏感的索引差异在迁移文件里写注释说明。
-- **`BEGIN IMMEDIATE` 的写锁粒度比 `FOR UPDATE` 粗**。PostgreSQL 只锁被读的行，SQLite 直接锁整个库。在高并发写场景下 SQLite 的排队会更明显。对策：保持写事务短小（不在事务里做网络/文件 IO）；把「写事务等待时长」列为 SQLite 部署的监控指标。
-- **单实例约束会被误用**。需求方或运维方可能在某天尝试把 `api` 扩到 2 个副本以「提高可用性」，结果遇到写阻塞或数据异常。对策：compose 文件里不提供 `replicas` 配置；部署文档的能力矩阵与 FAQ 都明确写出这一条。
-- **`VACUUM INTO` 需要占用与库等量的临时空间**。磁盘接近满时备份会失败，而失败往往正好发生在最需要备份的时候（磁盘告急）。对策：备份脚本先检查可用空间；文档里给出「库体积 > 5 GB 时该迁 PostgreSQL」的阈值提示。
-- **跨方言数据迁移本期不做，这是一个真实缺口**。改了 `WMIND_DB_DRIVER` 之后数据不会跟着过去，用户会以为「切换很简单」然后发现数据不见了。对策：部署文档与 FAQ 都显式写明；二期补 `wmind db migrate`（逐表搬迁 + 行数校验 + 失败回滚）。
-- **sqlc 双 target 增加构建复杂度**。两个 target 意味着两份生成产物，忘记重新生成会编译失败（可接受）或生成过期代码（需 CI 校验产物与 `.sql` 源一致）。
+- **收益**：同一二进制支持默认 SQLite 与 PostgreSQL；领域接口隔离仓储，事务上下文由两侧实现；SQLite 集成测试不依赖 Docker。
+- **收益**：迁移版本序列、数据库结构、生成代码与方言边界有可运行的门禁，减少本地只测 SQLite 时的漂移风险。
+- **代价**：维护两套 DDL、两份生成物及两个仓储映射；每项 schema / SQL 方言差异必须成对处理。PostgreSQL CI 服务是完整验证的一部分，不能省略。
+- **代价与边界**：SQLite 仅支持单 API 实例、本地文件系统卷；`BEGIN IMMEDIATE` 粒度比 PG 行锁更粗。驱动切换不搬迁数据；备份/恢复工具及完整双数据库 E2E 随后续里程碑完成。
+- **已知环境限制**：Compose 文件尚未在本机验证（本机没有 Docker），不得把静态审阅当作 Docker 部署验收。
