@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | 后端 | Go 1.25 + Gin，模块化单体；**SQLite（默认）与 PostgreSQL 双方言** |
-| 前端 | React + TypeScript + Vite + shadcn/ui，纯 SPA，自带暗色模式 |
+| 前端 | React + TypeScript + Vite + Tailwind v4，纯 SPA，自带三档暗色模式（light / dark / system） |
 | 编辑器 | 自研 SVG 渲染 + 自研布局引擎（8 种结构、10 套配色） |
 | 格式 | 自有 `.wmind` 文档格式；导入 XMind / Markdown / OPML，导出 PNG / JPEG / SVG / PDF / Markdown / OPML |
 | 部署 | `docker compose up -d`，一期零外部依赖 |
@@ -14,16 +14,19 @@
 
 ## 当前状态
 
-**项目正从 M0 基建进入 M1–M6 业务开发。** 双数据库后端基建、前端登录/工作台骨架和部署模板已搭建；用户认证、可用的管理员后台、完整导图编辑、导入导出与分享仍需按路线图开发。
+**M0 基建与 M1 账号体系已完成，正在进入 M2 编辑器内核。** 认证闭环（注册 / 登录 / 刷新 / 登出 / 改密 / 头像）、管理员后台（用户管理、站点设置、审计、一次性重置密码）、暗色模式已可用；导图编辑、导入导出与分享按路线图继续开发。
 
 | 模块 | 状态 |
 | --- | --- |
 | 文档与架构决策 | ✅ v1.3 定稿 |
 | 后端骨架、迁移、双 sqlc target、双方言仓储与契约测试 | ✅ M0 实现，SQLite 通过；PostgreSQL 测试由 CI 环境提供 |
 | 方言检查、迁移 parity 与 GitHub Actions | ✅ 已配置 |
-| 前端登录/工作台骨架、品牌图标、API 客户端 | ✅ TypeScript、5 项 API 单元测试与生产构建通过 |
+| 前端登录/工作台骨架、品牌图标、API 客户端 | ✅ 已实现，含 401 单飞刷新与分页信封 |
+| M1 账号体系：认证闭环、个人设置、头像上传 | ✅ 已实现并通过 11 条验收标准（[验收记录](./.agents/notes/implemented/process/2026-10-17-wmind-acceptance-m1.md)） |
+| M1 管理后台：用户管理、站点设置、审计、重置密码 | ✅ 已实现；导图统计字段待 M2 填充 |
+| M1 暗色模式：三档 + 首帧防闪烁 | ✅ 已实现 |
 | 两套 Compose / Dockerfile / Nginx | ✅ 配置已写；按约定未在本机 Docker 验证 |
-| 用户、管理员、导图编辑器、导入导出、分享等业务功能 | ⏳ 后续 M1–M6 |
+| 导图编辑器、导入导出、分享等业务功能 | ⏳ 后续 M2–M6 |
 
 ## 快速开始
 
@@ -53,6 +56,22 @@ WMIND_DB_DRIVER=postgres \
 WMIND_DATABASE_URL='postgres://wmind:wmind@localhost:5432/wmind?sslmode=disable' \
 go run ./cmd/server
 ```
+
+### 前端（本地开发）
+
+```bash
+cd frontend
+pnpm install
+pnpm dev            # http://127.0.0.1:5173
+```
+
+Vite 开发服务器把 `/api` 代理到 `http://127.0.0.1:8080`，浏览器里是同源请求，不受 CORS 限制。
+
+### 首次登录
+
+`users` 表为空时，后端用 `WMIND_ADMIN_EMAIL` / `WMIND_ADMIN_PASSWORD` 创建第一个管理员（示例值 `admin@wmind.local` / `change-me-please`）。**登录后请立刻在「个人设置 → 修改密码」改掉**，生产环境不要沿用示例值。
+
+管理员登录后侧栏会出现「管理概览 / 用户管理 / 网站设置」。一期没有自助找回密码：由管理员在「用户管理」里重置，新密码**只显示一次**。
 
 ### 部署
 
@@ -97,7 +116,7 @@ wmind/
 │   │   ├── convert/          导入导出适配器
 │   │   └── pkg/              apperr / logger / id / reqid 等通用件
 │   └── db/                   两套迁移集、sqlc 配置与查询
-├── frontend/                 React 前端（Vite + TypeScript + shadcn/ui）
+├── frontend/                 React 前端（Vite + TypeScript + Tailwind v4，自建 UI 组件）
 ├── deploy/                   Compose、Dockerfile、Nginx 配置
 ├── docs/                     需求、架构、接口、部署文档
 └── .agents/                  架构决策笔记与校验脚本

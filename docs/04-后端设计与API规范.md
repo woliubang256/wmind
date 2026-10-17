@@ -282,10 +282,13 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
     "importEnabled": true,
     "exportEnabled": true,
     "userTemplateEnabled": true,
+    "shareEnabled": true,
     "version": "1.0.0"
   }
 }
 ```
+
+`shareEnabled` 由 `share.public_link_enabled` 派生，用于在前端隐藏「创建分享链接」入口（对应 `SHARE_DISABLED`）。字段清单由 `internal/handler/site.go` 的 `siteConfig` 结构体白名单决定：**新增设置项不会自动暴露**，必须同时改那里，否则敏感设置会被公开接口带出去。
 
 ### 5.2 认证接口
 
@@ -729,7 +732,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 - 响应中的新密码**仅此一次**返回，服务端不保存明文、不写日志、不可再次查询。
 - 成功后**撤销该用户全部 refresh token**（含当前在线设备），并失效其状态缓存。
 - 不可重置自己的密码（改自己密码走 `POST /users/me/password`），返回 `ADMIN_CANNOT_RESET_SELF`（409），避免误操作锁死自身。
-- 写入审计日志：`action = admin.user.reset_password`，记录操作人、目标用户、时间、IP，**不记录密码**。
+- 写入审计日志：`action = user.reset_password`，记录操作人、目标用户、时间、IP，**不记录密码**（detail 为 `{generated, username}`）。
 
 #### `GET /api/v1/admin/settings`
 
@@ -745,7 +748,9 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 }
 ```
 
-部分更新；未知 key 返回 `SETTINGS_INVALID`；类型不匹配返回 `SETTINGS_INVALID` 并指明字段。
+部分更新；未知 key 或类型不匹配返回 `SETTINGS_INVALID`（422），`error.details.fields` 以**设置键**为键指出哪一项错了。
+
+校验是「全通过才写」：同一请求里只要有一项非法，其余合法项也不会落库——否则「关掉注册成功、改密码长度失败」会让管理员误以为两件事都失败。
 
 #### `GET /api/v1/admin/stats`
 
@@ -766,7 +771,21 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 #### `GET /api/v1/admin/audit-logs`
 
-参数：`page`、`page_size`、`action`、`actor_uid`、`from`、`to`。
+参数：`page`、`page_size`、`action`、`actor_uid`、`from`、`to`（RFC3339 或 `yyyy-mm-dd`）。
+
+动作名集中定义在 `internal/domain/audit.go`，避免各处手写字符串导致统计口径分裂：
+
+| action | 触发时机 | detail |
+| --- | --- | --- |
+| `user.create` | 管理员创建用户 | `{username, email, role}` |
+| `user.update` | 改昵称/邮箱 | `{changes}` |
+| `user.role` | 改角色 | `{from, to}` |
+| `user.disable` / `user.enable` | 禁用 / 启用 | `{from, to}` |
+| `user.delete` | 删除用户 | `{username, email}` |
+| `user.reset_password` | 重置密码 | `{generated, username}`，**不含密码** |
+| `settings.update` | 改站点设置 | `{keys: [...]}`，只记键名不记值 |
+
+> 审计写入失败只打 ERROR 日志，不让管理操作失败：操作已经生效，返回 500 会诱导重试，而重试会重复副作用（重置密码尤其糟糕）。取舍是「可用性优先于完整性」，极端情况下会丢记录。
 
 > **二期归档接口**：`POST /admin/mail/test`（发送测试邮件，支持传入未保存的 `config` 以便「先测再存」，失败返回 `MAIL_SEND_FAILED` 并带 `details.stage = connect | tls | auth | send`）一期不注册，设计见 [09-技术决策记录](./09-技术决策记录.md) ADR-012。
 
