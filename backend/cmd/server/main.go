@@ -15,12 +15,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/woliubang256/wmind/backend/internal/auth"
 	"github.com/woliubang256/wmind/backend/internal/config"
+	"github.com/woliubang256/wmind/backend/internal/domain"
+	"github.com/woliubang256/wmind/backend/internal/handler"
 	"github.com/woliubang256/wmind/backend/internal/httpapi"
 	"github.com/woliubang256/wmind/backend/internal/migrate"
 	"github.com/woliubang256/wmind/backend/internal/pkg/logger"
 	postgresrepo "github.com/woliubang256/wmind/backend/internal/repository/postgres"
 	sqliterepo "github.com/woliubang256/wmind/backend/internal/repository/sqlite"
+	"github.com/woliubang256/wmind/backend/internal/service"
 )
 
 // shutdownTimeout is bounded by the container stop_grace_period with 5s spare.
@@ -48,6 +52,14 @@ func run() error {
 	ready := make([]httpapi.ReadyCheck, 0, 1)
 	var closeDatabase func()
 
+	// These three are the dialect-agnostic handles the service layer works with.
+	// Only this switch is allowed to name a concrete dialect.
+	var (
+		userRepo  domain.UserRepo
+		tokenRepo domain.RefreshTokenRepo
+		txManager domain.TxManager
+	)
+
 	// This is the only server-assembly switch allowed to select a dialect.
 	switch cfg.DB.Driver {
 	case config.DriverSQLite:
@@ -63,6 +75,9 @@ func run() error {
 			}
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: sqliterepo.Check(db)})
+		userRepo = sqliterepo.NewUserRepository(db)
+		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
+		txManager = sqliterepo.NewTxManager(db)
 
 	case config.DriverPostgres:
 		pool, err := postgresrepo.Connect(startupCtx, cfg.DB.URL, cfg.DB.MaxConns)
@@ -87,16 +102,48 @@ func run() error {
 			return fmt.Errorf("close PostgreSQL migration connection: %w", err)
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: postgresrepo.Check(pool)})
+		userRepo = postgresrepo.NewUserRepository(pool)
+		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
+		txManager = postgresrepo.NewTxManager(pool)
 
 	default:
 		return fmt.Errorf("unsupported database driver %q", cfg.DB.Driver)
 	}
 	defer closeDatabase()
 
-	handler := httpapi.NewRouter(httpapi.Deps{Config: cfg, Logger: log, Ready: ready})
+	issuer, err := auth.NewTokenIssuer(cfg.Auth.JWTSecret, cfg.Auth.AccessTTL)
+	if err != nil {
+		return err
+	}
+	authSvc, err := service.NewAuthService(userRepo, tokenRepo, txManager, service.AuthServiceConfig{
+		Issuer:     issuer,
+		RefreshTTL: cfg.Auth.RefreshTTL,
+		// M1-4 replaces this with the settings-backed snapshot.
+		Site:         service.OpenSiteConfig(),
+		UserCacheTTL: 60 * time.Second,
+	})
+	if err != nil {
+		return err
+	}
+
+	seeded, err := authSvc.SeedAdmin(startupCtx, cfg.Admin.Email, cfg.Admin.Password)
+	if err != nil {
+		// A bad seed password must not stop the server: the operator can fix the
+		// environment variable and restart, and an existing admin can still log in.
+		log.Warn("seed admin skipped", "err", err)
+	} else if seeded {
+		log.Info("seed admin created", "email", cfg.Admin.Email)
+	}
+
+	authHandler := handler.NewAuthHandler(authSvc, handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL))
+
+	router := httpapi.NewRouter(httpapi.Deps{
+		Config: cfg, Logger: log, Ready: ready,
+		Auth: authHandler, Sessions: authSvc,
+	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           handler,
+		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

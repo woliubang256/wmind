@@ -12,9 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/woliubang256/wmind/backend/internal/config"
+	"github.com/woliubang256/wmind/backend/internal/handler"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/middleware"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/response"
 	"github.com/woliubang256/wmind/backend/internal/pkg/apperr"
+	"github.com/woliubang256/wmind/backend/internal/service"
 )
 
 // ReadyCheck 是就绪探针的一项依赖检查。
@@ -27,12 +29,14 @@ type ReadyCheck struct {
 
 // Deps 是路由层需要的依赖。
 //
-// 后续里程碑会往这里加 service（Auth / Map / Share / Admin…）。
-// 现在只有配置、日志与健康检查。
+// 后续里程碑会往这里加 service（Map / Share / Admin…）。
 type Deps struct {
 	Config *config.Config
 	Logger *slog.Logger
 	Ready  []ReadyCheck
+	// Auth 处理认证接口；Sessions 提供 RequireAuth 需要的令牌校验。
+	Auth     *handler.AuthHandler
+	Sessions *service.AuthService
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -67,8 +71,28 @@ func NewRouter(deps Deps) http.Handler {
 
 	v1 := r.Group("/api/v1")
 	registerHealth(v1, deps)
+	registerAuth(v1, deps)
 
 	return r
+}
+
+// registerAuth 注册认证接口。
+//
+// /auth/me 需要登录态，其余四个接口本身是「获取登录态」的入口，不能挂
+// RequireAuth——那会形成「没令牌就刷新不了、刷新不了就永远没令牌」的死锁。
+func registerAuth(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Auth == nil {
+		return
+	}
+	g := v1.Group("/auth")
+	g.POST("/register", deps.Auth.Register)
+	g.POST("/login", deps.Auth.Login)
+	g.POST("/refresh", deps.Auth.Refresh)
+	g.POST("/logout", deps.Auth.Logout)
+
+	if deps.Sessions != nil {
+		g.GET("/me", middleware.RequireAuth(deps.Sessions), deps.Auth.Me)
+	}
 }
 
 // notFound 统一 404/405 的响应体。
