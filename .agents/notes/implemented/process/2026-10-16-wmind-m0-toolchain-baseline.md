@@ -14,7 +14,11 @@ M0 要在写业务代码之前把工具链定死：Go 版本、Web 框架版本�
 
 ### 依赖基线：Go 1.25 + Gin v1.12.0
 
-`backend/go.mod` 的 `go` 指令为 **1.25.0**，Gin 为 **v1.12.0**。Dockerfile 构建阶段相应使用 `golang:1.25-alpine`。
+M0 的双方言依赖另有一项关键兼容约束，已记录在 [dual-database](../architecture/2026-10-16-wmind-dual-database.md)：SQLite 选用 `modernc.org/sqlite v1.51.0`，且通过锁定 `modernc.org/libc v1.72.3`、`modernc.org/ccgo/v4 v4.34.0` 与 `golang.org/x/*` 至 Go 1.25 兼容线，避免无意把构建基线抬至 Go 1.26。
+
+`backend/go.mod` 的 `go` 指令为 **1.25.11**，Gin 为 **v1.12.0**。Dockerfile 构建阶段相应使用 `golang:1.25-alpine`（跟随 1.25 最新补丁；若镜像补丁低于 1.25.11，Go 的 `GOTOOLCHAIN=auto` 会自行取回对应工具链）。
+
+`1.25.11` 不是随手写的补丁号，而是被迁移工具顶上去的：`github.com/golang-migrate/migrate/v4 v4.20.1` 的 `go` 指令就是 1.25.11。M0 里它负责跑两套迁移，属于不能省的依赖，因此整个模块的 Go 下限随之确定。CI 的 `setup-go` 直接读 `go-version-file: backend/go.mod`，与 Dockerfile 共用同一个事实来源。
 
 下限由传递依赖顶上去，逐级量出来的结果是：
 
@@ -56,5 +60,5 @@ Node 22.18+ 与 24 都支持该标志，因此本地与 CI 用同一条命令。
 
 - `cd backend && go build ./... && go vet ./...` 通过，`gofmt -l .` 无输出。
 - `cd backend && go test ./...` 通过（config / httpapi / apperr 三包）。
-- `npm run verify-notes` 在无 `node_modules` 的干净仓库中通过，输出 `13 note(s) verified`。
-- `grep -m1 '^go ' backend/go.mod` 得到 `go 1.25.0`。
+- `npm run verify-notes` 在无 `node_modules` 的干净仓库中通过（M0 收尾时 16 篇笔记全部过树、格式与归档检查）。
+- `grep -m1 '^go ' backend/go.mod` 得到 `go 1.25.11`；`go list -m -f '{{.Path}} {{.GoVersion}}' all` 中要求 1.25.11 的只有 `golang-migrate/migrate/v4`。

@@ -14,15 +14,16 @@
 
 ## 当前状态
 
-**M0 工程脚手架进行中，尚无可用界面。**
+**项目正从 M0 基建进入 M1–M6 业务开发。** 双数据库后端基建、前端登录/工作台骨架和部署模板已搭建；用户认证、可用的管理员后台、完整导图编辑、导入导出与分享仍需按路线图开发。
 
 | 模块 | 状态 |
 | --- | --- |
 | 文档与架构决策 | ✅ v1.3 定稿 |
-| 后端骨架（配置 / 日志 / 统一响应 / 健康检查 / 中间件 / 优雅退出） | ✅ 已完成 |
-| 数据库双方言基建（两套迁移集 / sqlc 双 target / 双方言仓储） | ⬜ 进行中 |
-| 前端骨架 | ⬜ 未开始 |
-| 部署编排与 CI | ⬜ 未开始 |
+| 后端骨架、迁移、双 sqlc target、双方言仓储与契约测试 | ✅ M0 实现，SQLite 通过；PostgreSQL 测试由 CI 环境提供 |
+| 方言检查、迁移 parity 与 GitHub Actions | ✅ 已配置 |
+| 前端登录/工作台骨架、品牌图标、API 客户端 | ✅ TypeScript、5 项 API 单元测试与生产构建通过 |
+| 两套 Compose / Dockerfile / Nginx | ✅ 配置已写；按约定未在本机 Docker 验证 |
+| 用户、管理员、导图编辑器、导入导出、分享等业务功能 | ⏳ 后续 M1–M6 |
 
 ## 快速开始
 
@@ -67,7 +68,7 @@ docker compose up -d          # 默认 SQLite，两个容器
 docker compose -f docker-compose.postgres.yml up -d
 ```
 
-> 部署编排在 M0 后期补齐，当前尚未提交。
+> 本项目 SQLite 形态为单 API 实例，数据库卷必须使用本地存储；PostgreSQL 形态可扩展 API 实例。切换数据库驱动不会迁移现有数据。
 
 ## 常用命令
 
@@ -96,7 +97,7 @@ wmind/
 │   │   ├── convert/          导入导出适配器
 │   │   └── pkg/              apperr / logger / id / reqid 等通用件
 │   └── db/                   两套迁移集、sqlc 配置与查询
-├── frontend/                 React 前端（M0 后期建立）
+├── frontend/                 React 前端（Vite + TypeScript + shadcn/ui）
 ├── deploy/                   Compose、Dockerfile、Nginx 配置
 ├── docs/                     需求、架构、接口、部署文档
 └── .agents/                  架构决策笔记与校验脚本
