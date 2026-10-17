@@ -6,6 +6,8 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,14 +44,21 @@ func DefaultCookieConfig(secure bool, maxAge time.Duration) CookieConfig {
 type AuthHandler struct {
 	svc    *service.AuthService
 	cookie CookieConfig
+	// loginLimiter 按「IP + 账号」限制登录尝试频率。为空表示不限流
+	// （单测与内部调用）。
+	loginLimiter *middleware.RateLimiter
 }
 
 // NewAuthHandler 构造认证 handler。
-func NewAuthHandler(svc *service.AuthService, cookie CookieConfig) *AuthHandler {
+//
+// 登录限流放在 handler 而不是中间件，是因为限流维度里包含账号，
+// 而账号在请求体里——中间件要拿到它就得先读一遍 body 再塞回去，
+// 反而更脆。注册与刷新只按 IP，走中间件即可。
+func NewAuthHandler(svc *service.AuthService, cookie CookieConfig, loginLimiter *middleware.RateLimiter) *AuthHandler {
 	if cookie.Name == "" {
 		cookie = DefaultCookieConfig(false, 7*24*time.Hour)
 	}
-	return &AuthHandler{svc: svc, cookie: cookie}
+	return &AuthHandler{svc: svc, cookie: cookie, loginLimiter: loginLimiter}
 }
 
 type registerRequest struct {
@@ -90,8 +99,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.Fail(c, apperr.Wrap(apperr.CodeBadRequest, err))
 		return
 	}
+	if !h.allowLoginAttempt(c, req.Identifier) {
+		return
+	}
 	result, err := h.svc.Login(c.Request.Context(), service.LoginInput{
-		Identifier: req.Identifier, Password: req.Password, Meta: h.sessionMeta(c),
+		Identifier: req.Identifier, Password: req.Password,
+		ClientIP: c.ClientIP(), Meta: h.sessionMeta(c),
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -99,6 +112,25 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	h.setRefreshCookie(c, result)
 	response.OK(c, toAuthResponse(result))
+}
+
+// allowLoginAttempt 按「IP + 账号」限流。超限时已写好响应，返回 false。
+func (h *AuthHandler) allowLoginAttempt(c *gin.Context, identifier string) bool {
+	if h.loginLimiter == nil {
+		return true
+	}
+	key := c.ClientIP() + "|" + strings.ToLower(strings.TrimSpace(identifier))
+	allowed, retryAfter := h.loginLimiter.Allow(key)
+	if allowed {
+		return true
+	}
+	seconds := int(retryAfter.Seconds())
+	if seconds < 1 {
+		seconds = 1
+	}
+	c.Header("Retry-After", strconv.Itoa(seconds))
+	response.Fail(c, apperr.New(apperr.CodeRateLimited, "").WithDetail("retryAfter", seconds))
+	return false
 }
 
 type refreshRequest struct {

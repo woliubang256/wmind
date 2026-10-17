@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -71,23 +72,34 @@ func NewRouter(deps Deps) http.Handler {
 
 	v1 := r.Group("/api/v1")
 	registerHealth(v1, deps)
-	registerAuth(v1, deps)
+	registerAuth(v1, deps, authLimiters{
+		// 策略见 docs/04 §3.1。登录的限流维度含账号，放在 handler 里，
+		// 这里只处理「只按 IP」的两个入口。
+		register: middleware.NewRateLimiter(3, time.Hour, 3),
+		refresh:  middleware.NewRateLimiter(30, time.Minute, 30),
+	})
 
 	return r
+}
+
+// authLimiters 是认证入口的限流器。
+type authLimiters struct {
+	register *middleware.RateLimiter
+	refresh  *middleware.RateLimiter
 }
 
 // registerAuth 注册认证接口。
 //
 // /auth/me 需要登录态，其余四个接口本身是「获取登录态」的入口，不能挂
 // RequireAuth——那会形成「没令牌就刷新不了、刷新不了就永远没令牌」的死锁。
-func registerAuth(v1 *gin.RouterGroup, deps Deps) {
+func registerAuth(v1 *gin.RouterGroup, deps Deps, limiters authLimiters) {
 	if deps.Auth == nil {
 		return
 	}
 	g := v1.Group("/auth")
-	g.POST("/register", deps.Auth.Register)
+	g.POST("/register", limiters.register.Middleware(middleware.ClientIPKey), deps.Auth.Register)
 	g.POST("/login", deps.Auth.Login)
-	g.POST("/refresh", deps.Auth.Refresh)
+	g.POST("/refresh", limiters.refresh.Middleware(middleware.ClientIPKey), deps.Auth.Refresh)
 	g.POST("/logout", deps.Auth.Logout)
 
 	if deps.Sessions != nil {

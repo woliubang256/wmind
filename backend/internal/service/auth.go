@@ -53,7 +53,9 @@ type RegisterInput struct {
 type LoginInput struct {
 	Identifier string
 	Password   string
-	Meta       SessionMeta
+	// ClientIP 用于「连续失败锁定」的分桶键，与账号一起构成锁定维度。
+	ClientIP string
+	Meta     SessionMeta
 }
 
 // AuthServiceConfig 是 AuthService 的依赖与策略。
@@ -65,6 +67,8 @@ type AuthServiceConfig struct {
 	// 禁用账号时由管理端调用 InvalidateUser 主动失效，所以缓存不会让
 	// 「禁用」延迟生效。
 	UserCacheTTL time.Duration
+	// Throttle 是登录失败锁定器；为空时使用默认的「5 次失败锁 15 分钟」。
+	Throttle *LoginThrottle
 	// Now 为空时使用 time.Now；测试可注入固定时钟。
 	Now Clock
 }
@@ -80,6 +84,7 @@ type AuthService struct {
 	refreshTTL time.Duration
 	site       SiteConfigProvider
 	now        Clock
+	throttle   *LoginThrottle
 
 	cacheTTL time.Duration
 	mu       sync.RWMutex
@@ -119,9 +124,13 @@ func NewAuthService(users domain.UserRepo, tokens domain.RefreshTokenRepo, tx do
 	if cfg.Now == nil {
 		cfg.Now = SystemClock
 	}
+	if cfg.Throttle == nil {
+		cfg.Throttle = NewLoginThrottle(5, 15*time.Minute, cfg.Now)
+	}
 	return &AuthService{
 		users: users, tokens: tokens, tx: tx,
 		issuer: cfg.Issuer, refreshTTL: cfg.RefreshTTL, site: cfg.Site, now: cfg.Now,
+		throttle: cfg.Throttle,
 		cacheTTL: cfg.UserCacheTTL, cache: make(map[string]cachedUser),
 	}, nil
 }
@@ -174,6 +183,13 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*AuthResu
 // 等于免费提供账号枚举接口。
 func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, error) {
 	identifier := strings.TrimSpace(in.Identifier)
+	throttleKey := loginThrottleKey(in.ClientIP, identifier)
+
+	// 锁定期内直接拒绝，连密码都不验：否则攻击者仍能通过响应差异
+	// 判断「账号是否存在」，锁定就失去意义。
+	if locked, remaining := s.throttle.Locked(throttleKey); locked {
+		return nil, tooManyAttempts(remaining)
+	}
 	if identifier == "" || in.Password == "" {
 		return nil, apperr.New(apperr.CodeAuthInvalidCredentials, "")
 	}
@@ -192,7 +208,7 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 			// 等时比较：账号不存在时也跑一次 bcrypt，否则「不存在」会比
 			// 「密码错误」快一个数量级，用响应时间就能枚举账号。
 			auth.VerifyPassword(decoyPasswordHash(), in.Password)
-			return nil, apperr.New(apperr.CodeAuthInvalidCredentials, "")
+			return nil, s.loginFailure(throttleKey)
 		}
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
@@ -200,12 +216,13 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 	// 先验密码再查状态：否则拿别人的邮箱随便试一个密码，就能从
 	// 「403 账号已禁用」得知该账号存在且被禁用。
 	if !auth.VerifyPassword(user.PasswordHash, in.Password) {
-		return nil, apperr.New(apperr.CodeAuthInvalidCredentials, "")
+		return nil, s.loginFailure(throttleKey)
 	}
 	if !user.IsActive() {
-		return nil, apperr.New(apperr.CodeAuthAccountDisabled, "")
+		return nil, s.loginFailure(throttleKey, apperr.New(apperr.CodeAuthAccountDisabled, ""))
 	}
 
+	s.throttle.Reset(throttleKey)
 	loginAt := s.now()
 	if err := s.users.TouchLastLogin(ctx, user.ID, loginAt); err == nil {
 		// 仓储返回的是副本，响应里要带上本次登录时间，否则前端拿到的
@@ -213,6 +230,28 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 		user.LastLoginAt = &loginAt
 	}
 	return s.issueSession(ctx, user, in.Meta)
+}
+
+// loginFailure 记一次失败并决定返回哪个错误。
+//
+// 第 N 次失败触发锁定时直接返回 AUTH_TOO_MANY_ATTEMPTS（429），
+// 让客户端知道「现在该等」而不是「密码又错了」。
+func (s *AuthService) loginFailure(key string, fallback ...*apperr.Error) error {
+	if locked, remaining := s.throttle.Fail(key); locked {
+		return tooManyAttempts(remaining)
+	}
+	if len(fallback) > 0 && fallback[0] != nil {
+		return fallback[0]
+	}
+	return apperr.New(apperr.CodeAuthInvalidCredentials, "")
+}
+
+func tooManyAttempts(remaining time.Duration) error {
+	seconds := int(remaining.Seconds())
+	if seconds < 1 {
+		seconds = 1
+	}
+	return apperr.New(apperr.CodeAuthTooManyAttempts, "").WithDetail("retryAfter", seconds)
 }
 
 // Refresh 用刷新令牌换取新的 Access Token，并轮换刷新令牌。

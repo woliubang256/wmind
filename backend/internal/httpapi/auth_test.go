@@ -67,7 +67,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 			Auth: config.Auth{JWTSecret: "http-test-secret-that-is-long-enough", AccessTTL: 15 * time.Minute, RefreshTTL: 7 * 24 * time.Hour},
 		},
 		Logger:   logger,
-		Auth:     handler.NewAuthHandler(svc, handler.DefaultCookieConfig(false, 7*24*time.Hour)),
+		Auth:     handler.NewAuthHandler(svc, handler.DefaultCookieConfig(false, 7*24*time.Hour), nil),
 		Sessions: svc,
 	})
 
@@ -213,5 +213,63 @@ func TestAuthValidationAndConflicts(t *testing.T) {
 	})
 	if status != http.StatusConflict || body.Error.Code != "AUTH_EMAIL_TAKEN" {
 		t.Fatalf("重复邮箱 = %d %#v", status, body.Error)
+	}
+}
+
+func TestRegisterRateLimit(t *testing.T) {
+	s := newAuthTestServer(t)
+
+	// 策略：3 次/小时（docs/04 §3.1）。前三次放行，第四次 429。
+	for i, name := range []string{"reg1", "reg2", "reg3"} {
+		status, body := s.do(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+			"username": name, "email": name + "@example.com", "password": "correct-horse",
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("第 %d 次注册 = %d %#v", i+1, status, body.Error)
+		}
+	}
+
+	status, body := s.do(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+		"username": "reg4", "email": "reg4@example.com", "password": "correct-horse",
+	})
+	if status != http.StatusTooManyRequests || body.Error.Code != "RATE_LIMITED" {
+		t.Fatalf("超限注册 = %d %#v; 期望 429 RATE_LIMITED", status, body.Error)
+	}
+	if body.Error.Details["retryAfter"] == nil {
+		t.Fatalf("限流响应应带 retryAfter: %#v", body.Error.Details)
+	}
+}
+
+func TestLoginLockoutOverHTTP(t *testing.T) {
+	s := newAuthTestServer(t)
+
+	if status, body := s.do(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+		"username": "carol", "email": "carol@example.com", "password": "correct-horse",
+	}); status != http.StatusCreated {
+		t.Fatalf("注册 = %d %#v", status, body.Error)
+	}
+
+	// 连续 5 次密码错误：前 4 次 401，第 5 次 429。
+	for i := 1; i <= 4; i++ {
+		status, body := s.do(http.MethodPost, "/api/v1/auth/login", "", map[string]string{
+			"identifier": "carol", "password": "wrong-password",
+		})
+		if status != http.StatusUnauthorized || body.Error.Code != "AUTH_INVALID_CREDENTIALS" {
+			t.Fatalf("第 %d 次失败 = %d %#v", i, status, body.Error)
+		}
+	}
+	status, body := s.do(http.MethodPost, "/api/v1/auth/login", "", map[string]string{
+		"identifier": "carol", "password": "wrong-password",
+	})
+	if status != http.StatusTooManyRequests || body.Error.Code != "AUTH_TOO_MANY_ATTEMPTS" {
+		t.Fatalf("第 5 次失败 = %d %#v; 期望 429 AUTH_TOO_MANY_ATTEMPTS", status, body.Error)
+	}
+
+	// 锁定期内正确密码也被拒。
+	status, body = s.do(http.MethodPost, "/api/v1/auth/login", "", map[string]string{
+		"identifier": "carol", "password": "correct-horse",
+	})
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("锁定期间正确密码 = %d %#v", status, body.Error)
 	}
 }

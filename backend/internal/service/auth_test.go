@@ -340,3 +340,53 @@ func TestSeedAdminRejectsWeakPassword(t *testing.T) {
 		t.Fatal("弱密码应被拒绝")
 	}
 }
+
+func TestLoginLockoutAfterRepeatedFailures(t *testing.T) {
+	f := newAuthFixture(t, nil)
+	registerAlice(t, f)
+	ctx := context.Background()
+	attacker := LoginInput{Identifier: "alice", Password: "wrong-password", ClientIP: "203.0.113.9"}
+
+	for i := 1; i <= 4; i++ {
+		_, err := f.svc.Login(ctx, attacker)
+		requireCode(t, err, apperr.CodeAuthInvalidCredentials)
+	}
+
+	// 第 5 次失败触发锁定，返回 429 而不是 401。
+	_, err := f.svc.Login(ctx, attacker)
+	requireCode(t, err, apperr.CodeAuthTooManyAttempts)
+
+	// 锁定期内即使密码正确也拒绝：否则「锁定」只是延迟了爆破。
+	_, err = f.svc.Login(ctx, LoginInput{Identifier: "alice", Password: "correct-horse", ClientIP: "203.0.113.9"})
+	requireCode(t, err, apperr.CodeAuthTooManyAttempts)
+
+	// 换个 IP 不受影响（锁定维度是 IP + 账号）。
+	if _, err := f.svc.Login(ctx, LoginInput{Identifier: "alice", Password: "correct-horse", ClientIP: "203.0.113.10"}); err != nil {
+		t.Fatalf("其它 IP 登录失败: %v", err)
+	}
+
+	// 锁定到期后恢复。
+	*f.now = f.now.Add(15*time.Minute + time.Second)
+	if _, err := f.svc.Login(ctx, LoginInput{Identifier: "alice", Password: "correct-horse", ClientIP: "203.0.113.9"}); err != nil {
+		t.Fatalf("锁定到期后仍无法登录: %v", err)
+	}
+}
+
+func TestLoginSuccessResetsFailureCount(t *testing.T) {
+	f := newAuthFixture(t, nil)
+	registerAlice(t, f)
+	ctx := context.Background()
+	key := LoginInput{Identifier: "alice", Password: "wrong-password", ClientIP: "198.51.100.7"}
+
+	for i := 0; i < 3; i++ {
+		_, _ = f.svc.Login(ctx, key)
+	}
+	if _, err := f.svc.Login(ctx, LoginInput{Identifier: "alice", Password: "correct-horse", ClientIP: "198.51.100.7"}); err != nil {
+		t.Fatalf("成功登录: %v", err)
+	}
+	// 成功一次后计数清零：再来 4 次失败也不该锁定。
+	for i := 0; i < 4; i++ {
+		_, err := f.svc.Login(ctx, key)
+		requireCode(t, err, apperr.CodeAuthInvalidCredentials)
+	}
+}

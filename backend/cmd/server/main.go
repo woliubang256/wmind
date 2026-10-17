@@ -20,6 +20,7 @@ import (
 	"github.com/woliubang256/wmind/backend/internal/domain"
 	"github.com/woliubang256/wmind/backend/internal/handler"
 	"github.com/woliubang256/wmind/backend/internal/httpapi"
+	"github.com/woliubang256/wmind/backend/internal/httpapi/middleware"
 	"github.com/woliubang256/wmind/backend/internal/migrate"
 	"github.com/woliubang256/wmind/backend/internal/pkg/logger"
 	postgresrepo "github.com/woliubang256/wmind/backend/internal/repository/postgres"
@@ -135,7 +136,11 @@ func run() error {
 		log.Info("seed admin created", "email", cfg.Admin.Email)
 	}
 
-	authHandler := handler.NewAuthHandler(authSvc, handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL))
+	authHandler := handler.NewAuthHandler(
+		authSvc,
+		handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL),
+		middleware.NewRateLimiter(5, time.Minute, 5),
+	)
 
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: cfg, Logger: log, Ready: ready,
