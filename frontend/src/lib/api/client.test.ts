@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiRequest, getAccessToken, setAccessToken, setUnauthorizedHandler } from './client';
+import { apiList, apiRequest, getAccessToken, setAccessToken, setUnauthorizedHandler } from './client';
 
 const json = (status: number, payload: unknown) =>
   new Response(JSON.stringify(payload), {
@@ -63,5 +63,48 @@ describe('apiRequest', () => {
   it('returns undefined for 204 responses', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
     await expect(apiRequest('/logout', { method: 'POST' })).resolves.toBeUndefined();
+  });
+
+  it('merges concurrent 401 refreshes into a single refresh request', async () => {
+    // 验收标准 5 的后半句：多个并发请求只触发一次刷新。
+    // 刷新令牌是一次性轮换的，并发刷新会让后到的请求把前一个刚换来的令牌
+    // 判成重放，整条会话被撤销。
+    let refreshCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/auth/refresh')) {
+        refreshCalls += 1;
+        // 故意延迟，让三个请求都有机会在刷新完成前拿到 401。
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return json(200, { data: { accessToken: 'shared-token' } });
+      }
+      const headers = init?.headers as Headers | undefined;
+      if (headers?.get('Authorization') === 'Bearer shared-token') {
+        return json(200, { data: { path: url } });
+      }
+      return json(401, { error: { code: 'AUTH_TOKEN_EXPIRED', message: 'expired' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const results = await Promise.all([
+      apiRequest<{ path: string }>('/a'),
+      apiRequest<{ path: string }>('/b'),
+      apiRequest<{ path: string }>('/c'),
+    ]);
+
+    expect(refreshCalls).toBe(1);
+    expect(results.map((r) => r.path)).toEqual(['/api/v1/a', '/api/v1/b', '/api/v1/c']);
+  });
+
+  it('keeps pagination out of the way for plain requests and returns it for lists', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(200, {
+      data: [{ uid: 'a' }, { uid: 'b' }],
+      pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+    })));
+
+    await expect(apiList<{ uid: string }>('/admin/users')).resolves.toEqual({
+      items: [{ uid: 'a' }, { uid: 'b' }],
+      pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+    });
   });
 });

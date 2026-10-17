@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 const titles: Record<string, string> = {
   templates: '模板',
   trash: '回收站',
+  shares: '我的分享',
   account: '个人设置',
   users: '用户管理',
   settings: '网站设置',
@@ -63,16 +64,6 @@ export function PlaceholderPage({ page }: { page: keyof typeof titles }) {
       <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon name="waypoints" className="size-5" /></div>
       <h1 className="mt-5 text-2xl font-semibold tracking-tight">{titles[page]}</h1>
       <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">页面路由与应用外壳已搭建。该功能会在后续里程碑接入。</p>
-    </section>
-  );
-}
-
-export function RegisterPage() {
-  const { t } = useTranslation();
-  return (
-    <section className="rounded-3xl border border-border/80 bg-card p-8 text-center shadow-xl shadow-primary/5">
-      <h1 className="text-xl font-semibold">注册</h1>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">{t('auth.registerClosed')}</p>
     </section>
   );
 }

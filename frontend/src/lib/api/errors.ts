@@ -70,3 +70,34 @@ export class ApiError extends Error {
     this.requestId = envelope.requestId;
   }
 }
+
+/**
+ * 取出后端返回的字段级错误（`error.details.fields`）。
+ *
+ * 后端把「哪个字段错了」放在这里（`WithFieldErrors`），前端把它直接铺到
+ * 表单上——两条校验路径（本地先校验、后端再校验）因此共用同一套渲染。
+ */
+export function fieldErrorsFrom(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError)) return {};
+  const details = error.details;
+  if (typeof details !== 'object' || details === null) return {};
+  const fields = (details as { fields?: unknown }).fields;
+  if (typeof fields !== 'object' || fields === null) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields as Record<string, unknown>)) {
+    if (typeof value === 'string') out[key] = value;
+  }
+  return out;
+}
+
+/** 把已知的错误码映射到具体字段，让 409 也能标红到输入框上。 */
+export function codeToField(code: string): string | undefined {
+  switch (code) {
+    case 'AUTH_EMAIL_TAKEN':
+      return 'email';
+    case 'AUTH_USERNAME_TAKEN':
+      return 'username';
+    default:
+      return undefined;
+  }
+}

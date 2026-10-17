@@ -1,4 +1,5 @@
 import { ApiError, type ApiErrorEnvelope } from './errors';
+import type { Paged, Pagination } from './types';
 
 const API_BASE = '/api/v1';
 let accessToken: string | null = null;
@@ -19,6 +20,7 @@ export function setUnauthorizedHandler(handler: (() => void) | undefined) {
 
 interface ApiEnvelope<T> {
   data: T;
+  pagination?: Pagination;
   requestId?: string;
 }
 
@@ -28,6 +30,14 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   retryAuth?: boolean;
 }
 
+/**
+ * 静默刷新访问令牌。
+ *
+ * 单例 Promise 是这里的关键：多个请求同时拿到 401 时，只有第一个真正发出
+ * 刷新请求，其余的都等同一个 Promise。没有这一层，一次页面加载里五六个
+ * 并发请求会触发五六次刷新，而刷新令牌是「用一次就轮换」的——后到的几个
+ * 必然失败，还会把前一个刚换来的令牌判成「重放」并撤销整条会话。
+ */
 async function refreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
@@ -63,7 +73,7 @@ function isBodyInit(body: RequestOptions['body']): body is BodyInit {
   );
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function requestEnvelope<T>(path: string, options: RequestOptions = {}): Promise<ApiEnvelope<T>> {
   const { auth = true, retryAuth = true, headers: inputHeaders, body, ...init } = options;
   const headers = new Headers(inputHeaders);
   headers.set('Accept', 'application/json');
@@ -93,13 +103,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (response.status === 401 && auth && retryAuth && path !== '/auth/refresh') {
     const token = await refreshAccessToken();
     if (token) {
-      return apiRequest<T>(path, { ...options, retryAuth: false });
+      return requestEnvelope<T>(path, { ...options, retryAuth: false });
     }
     accessToken = null;
     onUnauthorized?.();
   }
 
-  if (response.status === 204) return undefined as T;
+  if (response.status === 204) return { data: undefined as T };
 
   let payload: unknown;
   try {
@@ -119,7 +129,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (typeof payload !== 'object' || payload === null || !('data' in payload)) {
     throw new Error('服务器响应格式无效。');
   }
-  return (payload as ApiEnvelope<T>).data;
+  return payload as ApiEnvelope<T>;
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const envelope = await requestEnvelope<T>(path, options);
+  return envelope.data;
+}
+
+/**
+ * 请求一个列表接口，返回 `{items, pagination}`。
+ *
+ * 单独一个函数是因为分页信息在信封的 `pagination` 字段里，而 `apiRequest`
+ * 只取 `data`。让 `apiRequest` 也能返回分页会把返回类型变成联合类型，
+ * 每个调用点都要判断。
+ */
+export async function apiList<T>(path: string, options: RequestOptions = {}): Promise<Paged<T>> {
+  const envelope = await requestEnvelope<T[]>(path, options);
+  return {
+    items: envelope.data ?? [],
+    pagination: envelope.pagination ?? { page: 1, pageSize: envelope.data?.length ?? 0, total: envelope.data?.length ?? 0, totalPages: 1 },
+  };
 }
 
 export const api = {
@@ -133,6 +163,8 @@ export const api = {
     apiRequest<T>(path, { ...options, method: 'PUT', body }),
   delete: <T>(path: string, options?: Omit<RequestOptions, 'method' | 'body'>) =>
     apiRequest<T>(path, { ...options, method: 'DELETE' }),
+  list: <T>(path: string, options?: Omit<RequestOptions, 'method' | 'body'>) =>
+    apiList<T>(path, { ...options, method: 'GET' }),
 };
 
 export interface CurrentUser {

@@ -1,7 +1,31 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import { AuthLayout, PublicLayout, RequireAdmin, RequireAuth } from './layouts';
 import { LoginPage } from '@/features/auth/login-page';
-import { PlaceholderPage, PublicSharePage, RecentPage, RegisterPage } from '@/features/dashboard/pages';
+import { RegisterPage } from '@/features/auth/register-page';
+import { AccountPage } from '@/features/account/account-page';
+import { PlaceholderPage, PublicSharePage, RecentPage } from '@/features/dashboard/pages';
+
+/**
+ * 管理后台三个页面按需加载。
+ *
+ * 普通用户永远看不到它们，把这几千行（表格、设置表单、审计列表）塞进
+ * 主 bundle 只会让所有人的首屏变慢。React.lazy 在路由层就够用，不必
+ * 手写 Suspense。
+ */
+const adminRoutes = [
+  {
+    path: '/admin',
+    lazy: async () => ({ Component: (await import('@/features/admin/overview-page')).AdminOverviewPage }),
+  },
+  {
+    path: '/admin/users',
+    lazy: async () => ({ Component: (await import('@/features/admin/users-page')).AdminUsersPage }),
+  },
+  {
+    path: '/admin/settings',
+    lazy: async () => ({ Component: (await import('@/features/admin/settings-page')).AdminSettingsPage }),
+  },
+];
 
 export const router = createBrowserRouter([
   {
@@ -26,16 +50,10 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', element: <RecentPage /> },
           { path: '/templates', element: <PlaceholderPage page="templates" /> },
-          { path: '/shares', element: <PlaceholderPage page="account" /> },
+          { path: '/shares', element: <PlaceholderPage page="shares" /> },
           { path: '/trash', element: <PlaceholderPage page="trash" /> },
-          { path: '/account', element: <PlaceholderPage page="account" /> },
-          {
-            element: <RequireAdmin />,
-            children: [
-              { path: '/admin/users', element: <PlaceholderPage page="users" /> },
-              { path: '/admin/settings', element: <PlaceholderPage page="settings" /> },
-            ],
-          },
+          { path: '/account', element: <AccountPage /> },
+          { element: <RequireAdmin />, children: adminRoutes },
           { path: '/maps/:uid', element: <PlaceholderPage page="templates" /> },
         ],
       },
