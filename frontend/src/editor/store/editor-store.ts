@@ -24,6 +24,8 @@ export interface SaveState {
   at: number | null;
   /** 失败原因，直接展示给用户。 */
   error: string | null;
+  /** 冲突时服务器的版本号与更新时间；`status === 'conflict'` 时才有值。 */
+  conflict: { version: number; updatedAt: string | null } | null;
 }
 
 export interface Viewport {
@@ -52,6 +54,14 @@ export interface EditorState {
   save: SaveState;
   /** 文档变更计数。自动保存用它做「自上次保存后是否有变化」的判断。 */
   revision: number;
+  /**
+   * 服务器端的乐观锁版本号。
+   *
+   * 放在 store 里而不是自动保存的闭包里：版本号是「这份文档的身份」的一部分，
+   * 撤销、重做、冲突覆盖都要读它，而闭包只有自动保存看得见。本地新建
+   * （演示文档 / 压测文档）时为 0，表示「还没有对应的服务器记录」。
+   */
+  version: number;
   lastCommand: { type: string; key: string | null; at: number } | null;
 
   dispatch(command: EditorCommand): void;
@@ -66,13 +76,29 @@ export interface EditorState {
   setViewport(viewport: Viewport): void;
   setSave(patch: Partial<SaveState>): void;
 
-  /** 整份替换（导入 / 从模板创建），会清空历史。 */
+  /**
+   * 保存成功。
+   *
+   * `revisionAtStart` 是**发起保存时**的 revision：请求往返期间用户可能又敲了
+   * 几个字，此时文档已经比刚存上去的那份新。无条件置成 `saved` 会让界面显示
+   * 「已保存」而实际有未落盘的改动，下一次编辑前的窗口期里刷新就丢了。
+   */
+  markSaved(version: number, revisionAtStart: number): void;
+
+  /** 收到 409：记下服务器版本，等用户选怎么处理。 */
+  markConflict(version: number, updatedAt: string | null): void;
+
+  setVersion(version: number): void;
+
+  /** 整份替换（导入 / 从模板创建 / 放弃本地修改），会清空历史。 */
   loadDocument(doc: WmindDocument): void;
 }
 
 export interface EditorStoreOptions {
   doc: WmindDocument;
   sheetId?: string;
+  /** 服务器版本号。本地文档（演示 / 压测）不传，视作 0。 */
+  version?: number;
   /** 历史栈上限。默认 200（docs/05 §4.7）。 */
   historyLimit?: number;
   /** 连续同类命令的合并窗口。默认 800ms。 */
@@ -85,6 +111,18 @@ export interface EditorStoreOptions {
 
 export const DEFAULT_HISTORY_LIMIT = 200;
 export const DEFAULT_COALESCE_WINDOW_MS = 800;
+
+/**
+ * 编辑之后的状态。
+ *
+ * 冲突未处理时**保持 `conflict` 不变**：用户可能没注意对话框又继续编辑，
+ * 若这里把状态打回 `dirty`，自动保存会立刻再发一次请求、再撞一次 409，
+ * 对话框反复弹出——而用户其实还没决定要怎么处理。
+ */
+function dirtySave(previous: SaveState): SaveState {
+  if (previous.status === 'conflict') return previous;
+  return { status: 'dirty', at: previous.at, error: null, conflict: null };
+}
 
 export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorState> {
   const historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
@@ -102,8 +140,9 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
     viewport: { x: 0, y: 0, zoom: 1 },
     past: [],
     future: [],
-    save: { status: 'idle', at: null, error: null },
+    save: { status: 'idle', at: null, error: null, conflict: null },
     revision: 0,
+    version: options.version ?? 0,
     lastCommand: null,
 
     dispatch(command: EditorCommand): void {
@@ -156,7 +195,7 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
         selection: selected ?? state.selection,
         editingId: outcome.result?.edit ? (selected?.[0] ?? null) : null,
         revision: state.revision + 1,
-        save: { status: 'dirty', at: state.save.at, error: null },
+        save: dirtySave(state.save),
         lastCommand: { type: command.type, key, at },
       });
     },
@@ -184,7 +223,7 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
         lastCommand: null,
         editingId: null,
         revision: state.revision + 1,
-        save: { status: 'dirty', at: state.save.at, error: null },
+        save: dirtySave(state.save),
       });
     },
 
@@ -207,7 +246,7 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
         lastCommand: null,
         editingId: null,
         revision: state.revision + 1,
-        save: { status: 'dirty', at: state.save.at, error: null },
+        save: dirtySave(state.save),
       });
     },
 
@@ -240,6 +279,32 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
       set({ save: { ...get().save, ...patch } });
     },
 
+    markSaved(version: number, revisionAtStart: number): void {
+      const state = get();
+      // 请求往返期间又编辑过 → 仍然是 dirty。但版本号必须采纳：这次保存
+      // 已经落盘并自增了版本，继续用旧版本号发下一次请求会立刻 409。
+      const stillDirty = state.revision !== revisionAtStart;
+      set({
+        version,
+        save: {
+          status: stillDirty ? 'dirty' : 'saved',
+          at: now(),
+          error: null,
+          conflict: null,
+        },
+      });
+    },
+
+    markConflict(version: number, updatedAt: string | null): void {
+      set({
+        save: { status: 'conflict', at: get().save.at, error: null, conflict: { version, updatedAt } },
+      });
+    },
+
+    setVersion(version: number): void {
+      set({ version });
+    },
+
     loadDocument(doc: WmindDocument): void {
       set({
         doc,
@@ -250,7 +315,7 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
         future: [],
         lastCommand: null,
         revision: 0,
-        save: { status: 'idle', at: null, error: null },
+        save: { status: 'idle', at: null, error: null, conflict: null },
       });
     },
   }));

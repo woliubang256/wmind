@@ -1,16 +1,6 @@
 import { api } from './client';
+import { query } from './query';
 import type { AdminStats, AuditLog, Paged, ResetPasswordResult, SettingsMap, User } from './types';
-
-/** 把查询参数拼成 query string，跳过空值。 */
-function query(params: Record<string, string | number | boolean | undefined | null>): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === '') continue;
-    search.set(key, String(value));
-  }
-  const encoded = search.toString();
-  return encoded ? `?${encoded}` : '';
-}
 
 /** 「我的」相关接口。 */
 export const userApi = {

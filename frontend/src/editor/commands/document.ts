@@ -6,13 +6,26 @@ import { findTopic } from '../model/traverse';
 import type { StructureClass, WmindDocument } from '../model/types';
 import { defineCommand, type EditorCommand } from './types';
 
+/**
+ * 改文档标题。
+ *
+ * 同时改当前画布的根主题标题——这两个字段在模型里是分开的（`doc.title` 是
+ * 文件名/列表项，`rootTopic.title` 是画布上的中心主题），但对用户来说是
+ * **同一件事**：页头写着「产品规划」而中心主题写着「未命名导图」，看起来
+ * 就像保存串了。XMind 的模型也是「根主题即文件名」。
+ *
+ * 放在一条命令里而不是派发两次：两次派发会产生两条撤销记录，用户按一次
+ * Ctrl+Z 只改回一半，另一半留在原地。
+ */
 export function changeTitleCommand(title: string): EditorCommand {
   return defineCommand({
     type: 'title.change',
     label: '修改标题',
     coalesceKey: 'title',
-    apply(draft): void {
+    apply(draft, ctx): void {
       draft.title = title;
+      const sheet = draft.sheets.find((s) => s.id === ctx.sheetId) ?? draft.sheets[0];
+      if (sheet) sheet.rootTopic.title = title;
     },
   });
 }

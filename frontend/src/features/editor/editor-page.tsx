@@ -1,12 +1,21 @@
 /**
  * 编辑器页面。
  *
- * 文档目前来自内置演示数据（M2.6 换成后端加载）。这一层负责三件事：
+ * 文档来源有两条路：
+ *
+ * - `/maps/stress` → 本地生成的 2000 节点压测文档，不连后端（验收标准 3）；
+ * - `/maps/:uid` → 从 `GET /maps/:uid` 拉取，落盘走自动保存（M2.6）。
+ *
+ * 页面主体（`Workspace`）对两者是同一套代码，区别只在 `enabled`：自动保存、
+ * 本地草稿、离开保护在本地文档上没有意义，硬挂上去只会每 800ms 撞一次 404。
+ *
+ * 这一层负责四件事：
  *
  * 1. 持有视口——「缩放到适应」既要知道容器尺寸又要写视口，让查看器自己管
  *    的话工具栏就拿不到写入口；
  * 2. 把 store 与查看器接起来（选中 / 折叠 / 编辑回写）；
- * 3. 把键盘动作接到命令上（见 `useEditorActions`）。
+ * 3. 把键盘动作接到命令上（见 `useEditorActions`）；
+ * 4. 持久化：加载、自动保存、冲突、草稿、离开保护（见 `persistence/`）。
  *
  * 查看器本身不含任何交互：它拿到的是插件列表，只读预览时换一批插件即可。
  */
@@ -14,6 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { countNodes, sheetById } from '@/editor/model/traverse';
@@ -36,24 +46,125 @@ import {
   toggleCollapseCommand,
 } from '@/editor/commands/topic';
 import { changeTitleCommand } from '@/editor/commands/document';
+import { mapApi, type MapDetail } from '@/lib/api/maps';
+import { ApiError } from '@/lib/api/errors';
 import { createDemoDocument, createStressDocument } from './demo-document';
+import { useAutosave, pickDraftToRestore } from './persistence/use-autosave';
+import { clearDraft, pruneDrafts, type LocalDraft } from './persistence/local-draft';
+import { ConflictDialog, LeaveDialog } from './persistence/dialogs';
+import { SaveIndicator } from './persistence/save-indicator';
 
 export function EditorPage() {
-  const { uid } = useParams();
-  // 每张导图一个 store：切路由时重建，避免上一张图的撤销栈泄漏到下一张。
-  // `/maps/stress` 是压测入口（验收标准 3），其余 uid 都加载演示文档。
+  const { uid = '' } = useParams();
+  // 两个本地入口，都不连后端：
+  // - `/maps/demo`：内置演示文档，用来验证渲染与交互（不需要账号里的数据）；
+  // - `/maps/stress`：2000 节点压测文档（验收标准 3）。
+  // 它们和真实导图共用同一套页面代码，区别只有「不挂自动保存」。
+  if (uid === 'demo') return <LocalEditor uid={uid} kind="demo" />;
+  if (uid === 'stress') return <LocalEditor uid={uid} kind="stress" />;
+  return <RemoteEditor uid={uid} />;
+}
+
+/**
+ * 本地文档的编辑器。
+ *
+ * `kind` 而不是直接传 `doc`：文档对象必须在这里用 `useMemo` 造，否则父组件
+ * 每渲染一次就换一份新文档，store 跟着重建——撤销栈和选中状态会被无声清空。
+ */
+function LocalEditor({ uid, kind }: { uid: string; kind: 'demo' | 'stress' }) {
   const store = useMemo(
-    () => createEditorStore({ doc: uid === 'stress' ? createStressDocument(2000) : createDemoDocument() }),
-    [uid],
+    () => createEditorStore({ doc: kind === 'demo' ? createDemoDocument() : createStressDocument(2000) }),
+    [kind],
   );
   return (
     <EditorProvider store={store}>
-      <Workspace />
+      <Workspace uid={uid} enabled={false} initialDraft={null} />
     </EditorProvider>
   );
 }
 
-function Workspace() {
+function RemoteEditor({ uid }: { uid: string }) {
+  const { t } = useTranslation();
+  const query = useQuery({
+    queryKey: ['map', uid],
+    queryFn: () => mapApi.get(uid),
+    // 打开失败重试没有意义：404 就是 404，网络断了重试三次也只是让用户多等。
+    retry: false,
+    // 编辑器里的文档是唯一权威，任何后台刷新都会把用户正在改的内容冲掉。
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  if (query.isPending) {
+    return (
+      <div className="grid h-[calc(100svh-9.5rem)] min-h-[420px] place-items-center rounded-2xl border border-border/70 bg-card">
+        <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
+          <span className="size-6 animate-spin rounded-full border-2 border-border border-t-primary" />
+          {t('editor.loading')}
+        </div>
+      </div>
+    );
+  }
+
+  if (query.isError) {
+    const notFound = query.error instanceof ApiError && query.error.code === 'MAP_NOT_FOUND';
+    return (
+      <div className="grid h-[calc(100svh-9.5rem)] min-h-[420px] place-items-center rounded-2xl border border-border/70 bg-card px-6 text-center">
+        <div className="max-w-sm">
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-secondary text-secondary-foreground">
+            <Icon name={notFound ? 'files' : 'alert'} className="size-5" />
+          </span>
+          <h2 className="mt-4 font-semibold">
+            {notFound ? t('editor.loadError.notFoundTitle') : t('editor.loadError.title')}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            {notFound ? t('editor.loadError.notFoundBody') : t('editor.loadError.body')}
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            {notFound ? null : (
+              <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
+                {t('editor.loadError.retry')}
+              </Button>
+            )}
+            <Button size="sm" onClick={() => window.history.back()}>
+              {t('editor.back')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <LoadedEditor detail={query.data} />;
+}
+
+function LoadedEditor({ detail }: { detail: MapDetail }) {
+  // 每张导图一个 store：切路由时重建，避免上一张图的撤销栈泄漏到下一张。
+  const store = useMemo(
+    () => createEditorStore({ doc: detail.document, version: detail.version }),
+    [detail],
+  );
+  // 草稿检查只在首次挂载做一次：之后再算会把用户自己刚保存的内容当成「本地修改」。
+  const [draft] = useState<LocalDraft | null>(() => {
+    pruneDrafts();
+    return pickDraftToRestore(detail.uid, detail.updatedAt, detail.document);
+  });
+
+  return (
+    <EditorProvider store={store}>
+      <Workspace uid={detail.uid} enabled initialDraft={draft} />
+    </EditorProvider>
+  );
+}
+
+interface WorkspaceProps {
+  uid: string;
+  enabled: boolean;
+  initialDraft: LocalDraft | null;
+}
+
+function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   const { t } = useTranslation();
   const store = useEditorStoreApi();
   const doc = useEditor((state) => state.doc);
@@ -62,11 +173,22 @@ function Workspace() {
   const editingId = useEditor((state) => state.editingId);
   const pastCount = useEditor((state) => state.past.length);
   const futureCount = useEditor((state) => state.future.length);
-  const saveStatus = useEditor((state) => state.save.status);
+  const saveState = useEditor((state) => state.save);
+  const version = useEditor((state) => state.version);
 
   const [preview, setPreview] = useState(false);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
+  const [draft, setDraft] = useState<LocalDraft | null>(initialDraft);
+  const [conflictOpen, setConflictOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+
+  const autosave = useAutosave({ uid, store, enabled });
+
+  // 冲突出现时自动打开对话框。放在 effect 里而不是渲染时判断：用户可能手动
+  // 关掉它去核对内容，之后再编辑时不应该被强行再弹一次。
+  useEffect(() => {
+    if (autosave.conflict) setConflictOpen(true);
+  }, [autosave.conflict]);
 
   const sheet = useMemo(() => sheetById(doc, sheetId), [doc, sheetId]);
   const layout = useMemo(() => layoutMindmap({ sheet, theme: doc.theme }), [sheet, doc.theme]);
@@ -116,14 +238,10 @@ function Workspace() {
     );
   }, []);
 
-  /**
-   * Ctrl+S。M2.6 接上后端之后这里换成真正的 flush（取消防抖 + 立刻提交）。
-   * 现在没有可提交的目标，所以只把状态落成「已保存」——比什么都不做诚实，
-   * 也保证键位表是完整的，M2.6 只需替换这一个函数的实现。
-   */
+  /** Ctrl+S：跳过防抖，立刻落盘。 */
   const save = useCallback(() => {
-    store.getState().setSave({ status: 'saved', at: Date.now(), error: null });
-  }, [store]);
+    void autosave.flush();
+  }, [autosave]);
 
   const actions = useEditorActions({
     layout,
@@ -176,6 +294,20 @@ function Workspace() {
   useHotkeys(canvasRef, actions, { enabled: !preview && editingId === null });
 
   const activeId = selection[0] ?? sheet.rootTopic.id;
+
+  const restoreDraft = () => {
+    if (!draft) return;
+    store.getState().loadDocument(draft.document);
+    setDraft(null);
+    // 恢复出来的内容立刻存一次：用户点「恢复」的意图就是「把这份内容留下」，
+    // 让它再等 800ms 防抖只是给了个丢它的机会。
+    void autosave.flush();
+  };
+
+  const discardDraft = () => {
+    clearDraft(uid);
+    setDraft(null);
+  };
 
   return (
     <div className="flex h-[calc(100svh-9.5rem)] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card">
@@ -275,6 +407,22 @@ function Workspace() {
         </Button>
       </header>
 
+      {draft ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300"
+        >
+          <Icon name="clock" className="size-3.5" />
+          <span className="flex-1">{t('editor.draft.found', { time: new Date(draft.savedAt).toLocaleString() })}</span>
+          <Button size="sm" variant="outline" onClick={restoreDraft}>
+            {t('editor.draft.restore')}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={discardDraft}>
+            {t('editor.draft.discard')}
+          </Button>
+        </div>
+      ) : null}
+
       {/*
         画布容器是键盘焦点的落点：`tabIndex={0}` + 点击即聚焦。
         快捷键只在这个容器有焦点时生效，所以用户在标题输入框里按 Tab
@@ -309,7 +457,11 @@ function Workspace() {
             canvasRef.current?.focus({ preventScroll: true });
           }}
           onCommitTitle={(id, title, options) => {
-            store.getState().dispatch(renameTopicCommand(id, title));
+            // 根主题的标题就是导图标题：走 changeTitleCommand 让两个字段一起变，
+            // 否则页头写着「未命名导图」而中心主题写着别的，看起来像保存串了。
+            store
+              .getState()
+              .dispatch(id === sheet.rootTopic.id ? changeTitleCommand(title) : renameTopicCommand(id, title));
             store.getState().setEditing(null);
             // 键盘提交后输入框卸载，焦点会掉到 body 上，键盘导航就断了。
             // 失焦提交（点了别处）不能抢焦点，否则那次点击等于没生效。
@@ -329,8 +481,28 @@ function Workspace() {
       <footer className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-1.5 text-xs text-muted-foreground">
         <span>{t('editor.nodeCount', { count: countNodes(doc) })}</span>
         <span>{t('editor.zoomLevel', { percent: Math.round(viewport.zoom * 100) })}</span>
-        <span>{saveStatus === 'dirty' ? t('editor.unsaved') : t('editor.saved')}</span>
+        {enabled ? (
+          <SaveIndicator
+            save={saveState}
+            onRetry={autosave.retry}
+            onResolveConflict={() => setConflictOpen(true)}
+          />
+        ) : (
+          <span>{t('editor.save.localOnly')}</span>
+        )}
       </footer>
+
+      <ConflictDialog
+        open={conflictOpen && autosave.conflict !== null}
+        conflict={autosave.conflict}
+        localVersion={version}
+        busy={autosave.resolving}
+        onOverwrite={() => void autosave.overwrite()}
+        onReload={() => void autosave.reload()}
+        onSaveAsCopy={() => void autosave.saveAsCopy()}
+      />
+
+      <LeaveDialog open={autosave.blocked} onStay={autosave.stay} onLeave={autosave.leave} />
     </div>
   );
 }

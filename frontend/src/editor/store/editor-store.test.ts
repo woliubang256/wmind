@@ -249,3 +249,52 @@ describe('loadDocument', () => {
     expect(state.revision).toBe(0);
   });
 });
+
+describe('保存状态', () => {
+  it('markSaved：期间没有新编辑才置为已保存', () => {
+    const { store } = makeStore();
+    store.getState().dispatch(addChildCommand('a'));
+    const revision = store.getState().revision;
+
+    store.getState().markSaved(2, revision);
+    expect(store.getState().save.status).toBe('saved');
+    expect(store.getState().version).toBe(2);
+  });
+
+  it('markSaved：期间又编辑过则仍是未保存，但版本号必须采纳', () => {
+    const { store } = makeStore();
+    store.getState().dispatch(addChildCommand('a'));
+    const revisionAtStart = store.getState().revision;
+    store.getState().dispatch(addChildCommand('a'));
+
+    store.getState().markSaved(2, revisionAtStart);
+    // 显示「已保存」而实际有没落盘的改动，是最坏的一种谎。
+    expect(store.getState().save.status).toBe('dirty');
+    // 版本号不采纳的话，下一次保存必然 409。
+    expect(store.getState().version).toBe(2);
+  });
+
+  it('markConflict 记录服务器版本，编辑不会把它打回 dirty', () => {
+    const { store } = makeStore();
+    store.getState().markConflict(7, '2026-10-18T10:00:00Z');
+    expect(store.getState().save.status).toBe('conflict');
+    expect(store.getState().save.conflict).toEqual({ version: 7, updatedAt: '2026-10-18T10:00:00Z' });
+
+    // 冲突未处理时用户又编辑：状态必须留在 conflict，否则自动保存会立刻
+    // 再撞一次 409，对话框无限弹。
+    store.getState().dispatch(addChildCommand('a'));
+    expect(store.getState().save.status).toBe('conflict');
+  });
+
+  it('loadDocument 清掉冲突状态', () => {
+    const { store } = makeStore();
+    store.getState().markConflict(7, null);
+    store.getState().loadDocument(docWithTree());
+    expect(store.getState().save).toEqual({ status: 'idle', at: null, error: null, conflict: null });
+  });
+
+  it('构造时可带服务器版本号', () => {
+    const store = createEditorStore({ doc: docWithTree(), version: 5 });
+    expect(store.getState().version).toBe(5);
+  });
+});

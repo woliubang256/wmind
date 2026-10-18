@@ -2,8 +2,8 @@
  * 演示文档。
  *
  * M2.6 之前编辑器还没有持久化，先给一份内置内容，让渲染 / 布局 / 交互
- * 能在真实形状上被看见和验证。M2.6 接通后端后，这份数据会被
- * `GET /maps/{uid}` 的结果取代，此文件退化为「新建导图」的初始内容。
+ * 能在真实形状上被看见和验证。M2.6 接通后端后，这份数据退化为
+ * 「新建导图」的初始内容（见 `createStarterDocument`），以及压测入口。
  */
 
 import { createDocument, createTopic } from '@/editor/model/create';
@@ -15,6 +15,25 @@ const GROUPS: { title: string; items: string[] }[] = [
   { title: '技术方案', items: ['SVG 渲染', '自动保存', '乐观锁', '双方言存储'] },
   { title: '上线计划', items: ['内测', '公测', '正式发布'] },
 ];
+
+/**
+ * 新建导图的初始内容。
+ *
+ * 只有根节点 + 三个空分支，不带任何「示例」文案：新建一张图看到「用户研究 /
+ * 功能设计」这种别人写好的内容，第一件事是逐个删掉。三个空分支是为了让
+ * 「Tab 建子节点」这个动作有一个可见的起点——空画布上只有一个中心主题时，
+ * 新手不知道该往哪按。
+ */
+export function createStarterDocument(title = '未命名导图'): WmindDocument {
+  const doc = createDocument({ title });
+  const sheet = doc.sheets[0];
+  if (!sheet) return doc;
+  sheet.rootTopic.title = title;
+  for (let i = 0; i < 3; i += 1) {
+    sheet.rootTopic.children.attached.push(createTopic({ title: '分支主题' }));
+  }
+  return doc;
+}
 
 export function createDemoDocument(): WmindDocument {
   const doc = createDocument({ title: '产品规划' });
