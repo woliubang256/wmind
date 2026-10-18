@@ -60,6 +60,14 @@ func (s *Snapshot) UploadMaxMB() int {
 	return 10
 }
 
+// MapsPerUser 返回每个用户的导图数量上限；0 表示不限制。
+//
+// 默认值就是 0（schema 里的 Default 与 Min 都是 0），语义是「不限」而不是
+// 「一个都不许建」——把 0 当成上限会让新装的站点直接不能建导图。
+func (s *Snapshot) MapsPerUser() int {
+	return s.Int("limit.maps_per_user")
+}
+
 // DefaultRole 返回新用户默认角色。
 func (s *Snapshot) DefaultRole() string {
 	if role := s.String("auth.default_role"); role != "" {

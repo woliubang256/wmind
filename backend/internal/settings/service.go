@@ -253,6 +253,12 @@ func (s *Service) PasswordMinLength() int { return s.Snapshot().PasswordMinLengt
 // DefaultRole 返回新注册用户的默认角色。
 func (s *Service) DefaultRole() string { return s.Snapshot().DefaultRole() }
 
+// MapsPerUser 返回每个用户的导图数量上限；0 表示不限制。
+//
+// 和上面几个一样每次都读当前快照：管理员调小上限后，下一个创建请求
+// 就该被拦住，而不是等重启。
+func (s *Service) MapsPerUser() int { return s.Snapshot().MapsPerUser() }
+
 // 编译期确认 Service 满足认证流程需要的站点配置接口。
 //
 // 不 import service 包（会形成反向依赖），只在这里声明方法集——调用方

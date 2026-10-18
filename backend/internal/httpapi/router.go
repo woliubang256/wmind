@@ -46,6 +46,8 @@ type Deps struct {
 	AdminSettings *handler.AdminSettingsHandler
 	// Admin 处理管理后台的用户、统计与审计接口。
 	Admin *handler.AdminHandler
+	// Maps 处理导图的增删改查与回收站。
+	Maps *handler.MapHandler
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -88,6 +90,7 @@ func NewRouter(deps Deps) http.Handler {
 		refresh:  middleware.NewRateLimiter(30, time.Minute, 30),
 	})
 	registerUsers(v1, deps)
+	registerMaps(v1, deps)
 	registerAdmin(v1, deps)
 
 	// 头像等上传文件由 API 直接提供。生产部署里 Nginx 把 /uploads/ 也代理到
@@ -119,6 +122,33 @@ func registerSite(v1 *gin.RouterGroup, deps Deps) {
 		return
 	}
 	v1.GET("/site/config", deps.Site.Config)
+}
+
+// registerMaps 注册导图与回收站接口，全部要求登录态。
+//
+// 导图的属主隔离在仓储层用 owner_id 谓词强制（见 domain.MapRepo 的注释），
+// 所以这里不需要额外的权限中间件——**没有「管理员可以看别人导图」的入口**，
+// 那是刻意留白的：一期没有这个需求，多一个入口就多一处越权风险。
+func registerMaps(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Maps == nil || deps.Sessions == nil {
+		return
+	}
+	auth := middleware.RequireAuth(deps.Sessions)
+
+	g := v1.Group("/maps", auth)
+	g.GET("", deps.Maps.List)
+	g.POST("", deps.Maps.Create)
+	g.GET("/:uid", deps.Maps.Get)
+	g.PUT("/:uid", deps.Maps.Save)
+	g.PATCH("/:uid", deps.Maps.Rename)
+	g.DELETE("/:uid", deps.Maps.Delete)
+	g.POST("/:uid/duplicate", deps.Maps.Duplicate)
+
+	trash := v1.Group("/trash", auth)
+	trash.GET("", deps.Maps.ListTrash)
+	trash.DELETE("", deps.Maps.EmptyTrash)
+	trash.POST("/:uid/restore", deps.Maps.Restore)
+	trash.DELETE("/:uid", deps.Maps.Purge)
 }
 
 // registerAdmin 注册管理后台接口。

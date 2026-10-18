@@ -62,6 +62,7 @@ func run() error {
 		tokenRepo    domain.RefreshTokenRepo
 		settingsRepo domain.SettingsRepo
 		auditRepo    domain.AuditRepo
+		mapRepo      domain.MapRepo
 		txManager    domain.TxManager
 	)
 
@@ -84,6 +85,7 @@ func run() error {
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
 		settingsRepo = sqliterepo.NewSettingsRepository(db)
 		auditRepo = sqliterepo.NewAuditRepository(db)
+		mapRepo = sqliterepo.NewMapRepository(db)
 		txManager = sqliterepo.NewTxManager(db)
 
 	case config.DriverPostgres:
@@ -113,6 +115,7 @@ func run() error {
 		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
 		settingsRepo = postgresrepo.NewSettingsRepository(pool)
 		auditRepo = postgresrepo.NewAuditRepository(pool)
+		mapRepo = postgresrepo.NewMapRepository(pool)
 		txManager = postgresrepo.NewTxManager(pool)
 
 	default:
@@ -176,6 +179,13 @@ func run() error {
 		return err
 	}
 
+	mapSvc, err := service.NewMapService(service.MapServiceConfig{
+		Maps: mapRepo, Limits: settingsSvc,
+	})
+	if err != nil {
+		return err
+	}
+
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(
 		authSvc,
@@ -190,6 +200,7 @@ func run() error {
 		Site:          handler.NewSiteHandler(settingsSvc, config.Version),
 		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
 		Admin:         handler.NewAdminHandler(adminSvc),
+		Maps:          handler.NewMapHandler(mapSvc),
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

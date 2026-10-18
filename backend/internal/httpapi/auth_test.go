@@ -111,6 +111,15 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewAdminService: %v", err)
 	}
 
+	// 导图服务：Limits 传真实 settings，这样「导图数量上限」也是真的从
+	// 站点设置里读出来的（默认 0 = 不限），测试不会因为上限差异而漂移。
+	mapSvc, err := service.NewMapService(service.MapServiceConfig{
+		Maps: sqlite.NewMapRepository(db), Limits: settingsSvc,
+	})
+	if err != nil {
+		t.Fatalf("NewMapService: %v", err)
+	}
+
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
@@ -127,6 +136,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Site:          handler.NewSiteHandler(settingsSvc, "test-version"),
 		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
 		Admin:         handler.NewAdminHandler(adminSvc),
+		Maps:          handler.NewMapHandler(mapSvc),
 	})
 
 	server := httptest.NewServer(router)
