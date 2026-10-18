@@ -144,6 +144,12 @@
     "leave.description": "现在离开会丢掉最近的编辑。",
     "leave.hint": "我会先把内容存成本地草稿，下次打开这张导图时可以恢复。",
     "leave.stay": "留在此页",
-    "leave.leave": "离开"
+    "leave.leave": "离开",
+    "structure": "结构",
+    "structures.mindmap": "思维导图",
+    "structures.logic-right": "逻辑图（向右）",
+    "structures.logic-left": "逻辑图（向左）",
+    "structures.tree-right": "树状图（向右）",
+    "structures.org-chart": "组织架构图"
   }
 }

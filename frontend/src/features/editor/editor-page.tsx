@@ -34,6 +34,7 @@ import { MIN_ZOOM, zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
 import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import type { Viewport } from '@/editor/viewer/viewer-types';
+import type { StructureClass } from '@/editor/model/types';
 import { useHotkeys } from '@/editor/interaction/hotkeys';
 import { isTextEntryTarget } from '@/editor/interaction/keymap';
 import { useEditorActions } from '@/editor/interaction/use-editor-actions';
@@ -45,7 +46,7 @@ import {
   renameTopicCommand,
   toggleCollapseCommand,
 } from '@/editor/commands/topic';
-import { changeTitleCommand } from '@/editor/commands/document';
+import { changeStructureCommand, changeTitleCommand } from '@/editor/commands/document';
 import { mapApi, type MapDetail } from '@/lib/api/maps';
 import { ApiError } from '@/lib/api/errors';
 import { createDemoDocument, createStressDocument } from './demo-document';
@@ -158,6 +159,12 @@ function LoadedEditor({ detail }: { detail: MapDetail }) {
   );
 }
 
+/**
+ * 工具栏里可选的结构。只列已经实现几何的四种：把 `timeline` / `fishbone`
+ * 放进下拉框，用户选了会看到退回 `mindmap` 的样子，等于骗人。
+ */
+const STRUCTURES: StructureClass[] = ['mindmap', 'logic-right', 'logic-left', 'tree-right', 'org-chart'];
+
 interface WorkspaceProps {
   uid: string;
   enabled: boolean;
@@ -221,8 +228,25 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
     return () => observer.disconnect();
   }, []);
 
-  const zoomAtCenter = (factor: number) => {
-    const element = canvasRef.current;
+  /**
+   * 切换结构后重新适配视野。
+   *
+   * 结构的几何差别很大：`mindmap` 是横向铺开的，`org-chart` 是竖向铺开的，
+   * 同一张图换个结构，包围盒可能宽高互换。不重新适配的话，用户切完看到的是
+   * 半棵跑到画布外面的树——而「缩放到适应」是唯一能自己发现这件事的动作。
+   *
+   * 只在结构变化时触发，不跟着布局走：每敲一个字都重新适配会把用户手动
+   * 缩放/平移的位置抢走。
+   */
+  const structure = sheet.structure;
+  const fittedStructure = useRef(structure);
+  useEffect(() => {
+    if (fittedStructure.current === structure) return;
+    fittedStructure.current = structure;
+    fitRef.current();
+  }, [structure]);
+
+  const zoomAtCenter = (factor: number) => {    const element = canvasRef.current;
     if (!element) return;
     const rect = element.getBoundingClientRect();
     setViewport((prev) => zoomedViewport(prev, factor, { x: rect.width / 2, y: rect.height / 2 }));
@@ -396,6 +420,28 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
             <Icon name="maximize" className="size-4" />
           </Button>
         </div>
+
+        {/*
+          结构切换。用原生 <select>：一共四个选项，为它引入一个下拉组件
+          （焦点陷阱、键盘导航、定位）不划算，而原生控件在键盘与读屏上
+          本来就是最好的。
+        */}
+        {!preview ? (
+          <select
+            aria-label={t('editor.structure')}
+            value={sheet.structure}
+            onChange={(event) =>
+              store.getState().dispatch(changeStructureCommand(event.target.value as StructureClass))
+            }
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+          >
+            {STRUCTURES.map((value) => (
+              <option key={value} value={value}>
+                {t(`editor.structures.${value}`)}
+              </option>
+            ))}
+          </select>
+        ) : null}
 
         <Button
           variant={preview ? 'default' : 'outline'}

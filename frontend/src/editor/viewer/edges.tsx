@@ -10,10 +10,16 @@
 
 import type { EdgePath } from '../layout/types';
 
-/** 三次贝塞尔的控制点放在水平中点：两端切线水平，连线从节点侧面平滑伸出。 */
+/**
+ * 连线路径。
+ *
+ * 控制点/折点放在**走向**的中点：横向树里连线从节点侧面伸出，两端切线水平，
+ * 所以控制点在 x 的中点；纵向树（org-chart）从下沿伸出，切线垂直，控制点在
+ * y 的中点。用 `from.y === to.y` 之类的几何猜测在斜边上会猜错，所以走向由
+ * 布局层显式给出（`edge.orientation`）。
+ */
 export function edgePath(edge: EdgePath): string {
-  const { from, to } = edge;
-  const midX = (from.x + to.x) / 2;
+  const { from, to, orientation } = edge;
 
   switch (edge.lineStyle) {
     case 'none':
@@ -21,10 +27,18 @@ export function edgePath(edge: EdgePath): string {
     case 'straight':
       return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
     case 'elbow':
-      return `M ${from.x} ${from.y} H ${midX} V ${to.y} H ${to.x}`;
+      if (orientation === 'v') {
+        const midY = (from.y + to.y) / 2;
+        return `M ${from.x} ${from.y} V ${midY} H ${to.x} V ${to.y}`;
+      }
+      return `M ${from.x} ${from.y} H ${(from.x + to.x) / 2} V ${to.y} H ${to.x}`;
     case 'curve':
     default:
-      return `M ${from.x} ${from.y} C ${midX} ${from.y} ${midX} ${to.y} ${to.x} ${to.y}`;
+      if (orientation === 'v') {
+        const midY = (from.y + to.y) / 2;
+        return `M ${from.x} ${from.y} C ${from.x} ${midY} ${to.x} ${midY} ${to.x} ${to.y}`;
+      }
+      return `M ${from.x} ${from.y} C ${(from.x + to.x) / 2} ${from.y} ${(from.x + to.x) / 2} ${to.y} ${to.x} ${to.y}`;
   }
 }
 
@@ -35,8 +49,10 @@ interface EndProps {
 function LineEnd({ edge }: EndProps) {
   if (edge.lineEnd === 'none') return null;
   const { to } = edge;
-  // 方向由「父在左还是在右」决定：右侧分支向右生长，左侧向左。
-  const direction = to.x >= edge.from.x ? 1 : -1;
+  // 方向由走向决定：纵向树向下生长，横向树向右或向左。
+  const direction = edge.orientation === 'v'
+    ? (to.y >= edge.from.y ? 1 : -1)
+    : (to.x >= edge.from.x ? 1 : -1);
 
   if (edge.lineEnd === 'dot') {
     return <circle cx={to.x} cy={to.y} r={Math.max(2, edge.lineWidth * 1.4)} fill={edge.lineColor} />;
@@ -44,16 +60,20 @@ function LineEnd({ edge }: EndProps) {
 
   const size = Math.max(6, edge.lineWidth * 3);
   const half = size / 2;
-  return (
-    <polygon
-      points={[
+  // 纵向的箭头沿 y 轴，横向的沿 x 轴——旋转 90° 而不是另画一套坐标。
+  const points = edge.orientation === 'v'
+    ? [
+        [to.x, to.y],
+        [to.x - half, to.y - direction * size],
+        [to.x + half, to.y - direction * size],
+      ]
+    : [
         [to.x, to.y],
         [to.x - direction * size, to.y - half],
         [to.x - direction * size, to.y + half],
-      ].map((p) => p.join(',')).join(' ')}
-      fill={edge.lineColor}
-    />
-  );
+      ];
+
+  return <polygon points={points.map((p) => p.join(',')).join(' ')} fill={edge.lineColor} />;
 }
 
 export function EdgeLine({ edge }: { edge: EdgePath }) {

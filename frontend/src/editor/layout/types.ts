@@ -16,7 +16,13 @@ export interface Rect {
   height: number;
 }
 
-export type Side = 'left' | 'right' | 'none';
+/**
+ * 节点相对父节点的方位。
+ *
+ * `bottom` 是 `org-chart` 用的：自上而下的树里，子节点在父节点下方，
+ * 折叠徽标也该落在下沿而不是右沿。`none` 只给根与自由主题。
+ */
+export type Side = 'left' | 'right' | 'bottom' | 'none';
 
 export interface NodeBox extends Rect {
   id: string;
@@ -36,6 +42,15 @@ export interface Point {
   y: number;
 }
 
+/**
+ * 连线的走向。
+ *
+ * 渲染层要靠它决定贝塞尔的控制点放在哪个中点、折线先走横还是先走竖——
+ * 横向树的连线从节点侧面伸出（切线水平），纵向树的连线从下沿伸出（切线垂直）。
+ * 让渲染层去猜「from.y === to.y 大概是横向吧」在斜边上会猜错。
+ */
+export type EdgeOrientation = 'h' | 'v';
+
 /** 一条父子连线。端点已经算在节点边缘上，渲染层不再做几何计算。 */
 export interface EdgePath {
   /** 稳定 key：`<parentId>-><childId>`。 */
@@ -44,6 +59,7 @@ export interface EdgePath {
   childId: string;
   from: Point;
   to: Point;
+  orientation: EdgeOrientation;
   lineStyle: LineStyle;
   lineEnd: LineEnd;
   lineColor: string;

@@ -43,8 +43,10 @@ export const TopicNode = memo(function TopicNode({
       ? box.x + box.width - NODE_METRICS.paddingX
       : box.x + box.width / 2;
 
-  // 折叠徽标放在「远离根」的一侧：左侧分支在左边缘，其余在右边缘。
-  const badgeX = box.side === 'left' ? box.x : box.x + box.width;
+  // 折叠徽标放在「远离根」的一侧：左侧分支在左边缘，右侧在右边缘，
+  // 自上而下的结构（org-chart）在下沿。
+  const badgeX = box.side === 'left' ? box.x : box.side === 'bottom' ? box.x + box.width / 2 : box.x + box.width;
+  const badgeY = box.side === 'bottom' ? box.y + box.height : centerY;
   const showBadge = box.collapsed && box.hiddenChildren > 0;
 
   return (
@@ -78,7 +80,7 @@ export const TopicNode = memo(function TopicNode({
         <g data-collapse-toggle={box.id} style={{ cursor: 'pointer' }}>
           <circle
             cx={badgeX}
-            cy={centerY}
+            cy={badgeY}
             r={BADGE_RADIUS}
             fill="var(--wmind-badge-bg, #FFFFFF)"
             stroke={style.lineColor}
@@ -86,7 +88,7 @@ export const TopicNode = memo(function TopicNode({
           />
           <text
             x={badgeX}
-            y={centerY}
+            y={badgeY}
             textAnchor="middle"
             dominantBaseline="central"
             pointerEvents="none"
@@ -103,14 +105,14 @@ export const TopicNode = memo(function TopicNode({
         <g className="wmind-collapse-toggle" data-collapse-toggle={box.id} style={{ cursor: 'pointer' }}>
           <circle
             cx={badgeX}
-            cy={centerY}
+            cy={badgeY}
             r={BADGE_RADIUS}
             fill="var(--wmind-badge-bg, #FFFFFF)"
             stroke={style.lineColor}
             strokeWidth={1.5}
           />
           <path
-            d={`M ${badgeX - 4} ${centerY} H ${badgeX + 4}`}
+            d={`M ${badgeX - 4} ${badgeY} H ${badgeX + 4}`}
             stroke={style.lineColor}
             strokeWidth={1.5}
             strokeLinecap="round"

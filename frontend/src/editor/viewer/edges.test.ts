@@ -9,6 +9,7 @@ function makeEdge(overrides: Partial<EdgePath> = {}): EdgePath {
     childId: 'c',
     from: { x: 100, y: 50 },
     to: { x: 200, y: 80 },
+    orientation: 'h',
     lineStyle: 'curve',
     lineEnd: 'none',
     lineColor: '#000000',
@@ -32,6 +33,16 @@ describe('edgePath', () => {
 
   it('lineStyle 为 none 时返回空字符串（调用方据此跳过渲染）', () => {
     expect(edgePath(makeEdge({ lineStyle: 'none' }))).toBe('');
+  });
+
+  it('纵向连线的控制点在垂直中点（org-chart）', () => {
+    expect(edgePath(makeEdge({ orientation: 'v', from: { x: 100, y: 50 }, to: { x: 160, y: 200 } }))).toBe(
+      'M 100 50 C 100 125 160 125 160 200',
+    );
+  });
+
+  it('纵向折线先竖后横再竖', () => {
+    expect(edgePath(makeEdge({ orientation: 'v', lineStyle: 'elbow' }))).toBe('M 100 50 V 65 H 200 V 80');
   });
 
   it('左侧分支（to.x < from.x）同样成立', () => {

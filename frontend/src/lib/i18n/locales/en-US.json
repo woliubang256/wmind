@@ -144,6 +144,12 @@
     "leave.description": "Leaving now will discard your latest edits.",
     "leave.hint": "A local draft is written first, so you can restore it next time you open this map.",
     "leave.stay": "Stay here",
-    "leave.leave": "Leave"
+    "leave.leave": "Leave",
+    "structure": "Structure",
+    "structures.mindmap": "Mind map",
+    "structures.logic-right": "Logic chart (right)",
+    "structures.logic-left": "Logic chart (left)",
+    "structures.tree-right": "Tree (right)",
+    "structures.org-chart": "Org chart"
   }
 }
