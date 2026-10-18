@@ -53,8 +53,11 @@ export const router = createBrowserRouter([
           { path: '/shares', element: <PlaceholderPage page="shares" /> },
           { path: '/trash', element: <PlaceholderPage page="trash" /> },
           { path: '/account', element: <AccountPage /> },
-          { element: <RequireAdmin />, children: adminRoutes },
-          { path: '/maps/:uid', element: <PlaceholderPage page="templates" /> },
+          {element: <RequireAdmin />, children: adminRoutes},
+          {
+            path: '/maps/:uid',
+            lazy: async () => ({ Component: (await import('@/features/editor/editor-page')).EditorPage }),
+          },
         ],
       },
     ],

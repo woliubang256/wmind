@@ -90,5 +90,27 @@
     "subtitle": "Turn ideas into clear mind maps.",
     "create": "New mind map",
     "empty": "Your mind maps will appear here."
+  },
+  "editor": {
+    "back": "Back",
+    "titlePlaceholder": "Untitled map",
+    "undo": "Undo",
+    "redo": "Redo",
+    "addChild": "Add subtopic",
+    "delete": "Delete selection",
+    "collapse": "Collapse / expand",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "zoomReset": "Reset zoom to 100%",
+    "fit": "Fit to screen",
+    "preview": "Read-only preview",
+    "exitPreview": "Exit preview",
+    "nodeCount": "{{count}} topics",
+    "zoomLevel": "Zoom {{percent}}%",
+    "unsaved": "Unsaved",
+    "saved": "Saved",
+    "emptySelection": "Select a topic first",
+    "previewHint": "Read-only preview: no editing plugins are mounted",
+    "readOnly": "Read-only"
   }
 }

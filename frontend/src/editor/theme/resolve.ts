@@ -124,6 +124,39 @@ function roleStyle(ctx: StyleContext, theme: Theme): Partial<Style> | null {
   return theme.subTopic;
 }
 
+/**
+ * 按背景亮度选文字颜色。
+ *
+ * 调色板是固定的 6 个饱和色，其中 #FDD835（黄）上写白字几乎看不清，
+ * 而 #E53935（红）上写黑字同样难受。逐个颜色手写「该配什么字色」既枯燥
+ * 又会在换配色方案时失效，所以按 WCAG 的相对亮度算：亮度 > 0.5 用深色字，
+ * 否则用白字。
+ *
+ * 这只是**默认值**：`topic.style.textColor` 显式指定时仍然优先，
+ * 用户想强制某个颜色不会被这里覆盖。
+ */
+function readableTextColor(fill: string | null): string {
+  const luminance = relativeLuminance(fill);
+  if (luminance === null) return '#333333';
+  return luminance > 0.5 ? '#333333' : '#FFFFFF';
+}
+
+/** WCAG 相对亮度。解析不了（渐变、颜色名）时返回 null，由调用方兜底。 */
+function relativeLuminance(color: string | null): number | null {
+  if (!color) return null;
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!match) return null;
+  const raw = match[1] ?? '';
+  const full = raw.length === 3
+    ? raw.split('').map((ch) => ch + ch).join('')
+    : raw;
+  const channel = (offset: number): number => {
+    const value = Number.parseInt(full.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
 /** 一级分支取色：彩虹开启时用 `rainbowColors`，否则用 `palette.colors`。 */
 function branchColor(ctx: StyleContext, theme: Theme, key: 'colors' | 'lineColors'): string | null {
   if (ctx.branchIndex < 0) return null;
@@ -164,6 +197,9 @@ export function computeStyle(topic: Topic, ctx: StyleContext, theme: Theme): Com
   }
 
   apply(out, assigned, topic.style);
+
+  // 文字颜色没被任何一层显式指定时，按最终填充色的亮度自动选深/浅。
+  if (!assigned.has('textColor')) out.textColor = readableTextColor(out.fill);
 
   // 节点级 rainbowBranch 可以推翻主题设置；但根节点没有分支序号，取不到色，
   // 保持角色样式即可。

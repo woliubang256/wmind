@@ -7,7 +7,7 @@
  * 和将来的服务端渲染。
  */
 
-import type { LineEnd, LineStyle } from '../model/types';
+import type { ComputedStyle, LineEnd, LineStyle } from '../model/types';
 
 export interface Rect {
   x: number;
@@ -25,6 +25,8 @@ export interface NodeBox extends Rect {
   branchIndex: number;
   side: Side;
   collapsed: boolean;
+  /** 直接子节点数（attached）。用于渲染「折叠/展开」按钮。 */
+  childCount: number;
   /** 折叠时被隐藏的后代总数（含多层），展开时为 0。 */
   hiddenChildren: number;
 }
@@ -55,6 +57,15 @@ export interface LayoutResult {
   bounds: Rect;
   /** 节点测量结果，渲染层要拿它取折行后的文本。 */
   sizes: Map<string, TopicSize>;
+  /**
+   * 每个节点的计算样式。
+   *
+   * 布局阶段本来就要算一遍（测量需要字号），顺手存下来，渲染层直接用。
+   * 让渲染层自己再 `resolveStyle` 一次有两个坏处：多一次查表，
+   * 以及万一两边的上下文（depth / branchIndex）不一致，就会出现
+   * 「测出来 100px、画出来用 18px 字号」的错位。
+   */
+  styles: Map<string, ComputedStyle>;
 }
 
 export interface TopicSize {

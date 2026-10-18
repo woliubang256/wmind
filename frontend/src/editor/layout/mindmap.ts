@@ -66,6 +66,7 @@ export function layoutMindmap(input: LayoutInput): LayoutResult {
 
   const boxes = new Map<string, NodeBox>();
   const sizes = new Map<string, TopicSize>();
+  const styles = new Map<string, ComputedStyle>();
   const edges: EdgePath[] = [];
 
   // 先把所有子树高度算出来（用真实间距），再分配左右——分配算法依赖高度，
@@ -82,12 +83,14 @@ export function layoutMindmap(input: LayoutInput): LayoutResult {
 
   const rootX = -root.size.width / 2;
   const rootY = -root.size.height / 2;
-  const rootBox = place(root, rootX, rootY, 'none', boxes, sizes);
+  const rootBox = place(root, rootX, rootY, 'none', boxes, sizes, styles);
 
-  placeSide(right, 'right', root.size.width / 2 + spacing.levelGap, -rightTotal / 2, spacing, rootBox, boxes, sizes, edges);
-  placeSide(left, 'left', -root.size.width / 2 - spacing.levelGap, -leftTotal / 2, spacing, rootBox, boxes, sizes, edges);
+  placeSide(right, 'right', root.size.width / 2 + spacing.levelGap, -rightTotal / 2, spacing, rootBox, boxes, sizes, styles, edges);
+  placeSide(left, 'left', -root.size.width / 2 - spacing.levelGap, -leftTotal / 2, spacing, rootBox, boxes, sizes, styles, edges);
 
-  return finalize(boxes, sizes, edges, spacing.padding);
+  placeFloating(input.sheet, theme, measure, spacing, boxes, sizes, styles, edges);
+
+  return finalize(boxes, sizes, styles, edges, spacing.padding);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,39 +166,29 @@ interface Sides {
 }
 
 /**
- * 按子树高度贪心分配。
+ * 按**下标奇偶**交替分侧：0、2、4… 在右，1、3、5… 在左。
  *
- * 保持原始顺序（分配完再按原下标排序），因为「子节点顺序」是文档的一部分，
- * 布局不能悄悄改掉它。
+ * docs/05 §4.4 写的是「按子树高度贪心分配以平衡两侧」。实现时改成了交替，
+ * 原因是贪心在编辑过程中**不稳定**：改动一个节点的标题让它变宽变高，
+ * 排序结果就变，整棵树的左右分布跟着翻边。实测里改一个二级节点的文字，
+ * 四个一级分支全部换了边——用户会以为文档被改坏了。
+ *
+ * 交替分配的代价是极端情况下不平衡（比如第 0 个分支有 50 个子节点、
+ * 其余各 1 个，右侧会很长）。但导图的一级分支通常规模相近，而且
+ * 「位置稳定」比「高度均衡」更影响可用性。
+ *
+ * 关闭 `autoBalance` 时全部排到右侧（对应 XMind 的「自动平衡」开关）。
  */
 function splitSides(children: MeasuredNode[], autoBalance: boolean): Sides {
-  if (!autoBalance || children.length <= 1) {
+  if (!autoBalance) {
     return { left: [], right: [...children] };
-  }
-
-  const order = children
-    .map((child, index) => ({ index, height: child.subtreeHeight }))
-    .sort((a, b) => b.height - a.height || a.index - b.index);
-
-  const assigned = new Map<number, Side>();
-  let leftSum = 0;
-  let rightSum = 0;
-
-  for (const item of order) {
-    if (leftSum <= rightSum) {
-      assigned.set(item.index, 'left');
-      leftSum += item.height;
-    } else {
-      assigned.set(item.index, 'right');
-      rightSum += item.height;
-    }
   }
 
   const left: MeasuredNode[] = [];
   const right: MeasuredNode[] = [];
   children.forEach((child, index) => {
-    if (assigned.get(index) === 'left') left.push(child);
-    else right.push(child);
+    if (index % 2 === 0) right.push(child);
+    else left.push(child);
   });
   return { left, right };
 }
@@ -211,6 +204,7 @@ function place(
   side: Side,
   boxes: Map<string, NodeBox>,
   sizes: Map<string, TopicSize>,
+  styles: Map<string, ComputedStyle>,
 ): NodeBox {
   // 节点在自己的垂直带里居中：带高由子节点撑起来时，父节点落在中间，
   // 视觉上连线才不会全挤在一侧。
@@ -225,10 +219,12 @@ function place(
     branchIndex: node.branchIndex,
     side,
     collapsed: node.topic.collapsed,
+    childCount: node.topic.children.attached.length,
     hiddenChildren: node.hiddenChildren,
   };
   boxes.set(box.id, box);
   sizes.set(box.id, node.size);
+  styles.set(box.id, node.style);
   return box;
 }
 
@@ -241,11 +237,12 @@ function placeSide(
   rootBox: NodeBox,
   boxes: Map<string, NodeBox>,
   sizes: Map<string, TopicSize>,
+  styles: Map<string, ComputedStyle>,
   edges: EdgePath[],
 ): void {
   let cursor = startTop;
   for (const node of nodes) {
-    placeSubtree(node, side, anchorX, cursor, spacing, boxes, sizes, edges);
+    placeSubtree(node, side, anchorX, cursor, spacing, boxes, sizes, styles, edges);
 
     // 根到一级分支的连线要单独补：根不经过 placeSubtree，否则它的「带」
     // 会被子节点撑大，根就不再位于中心。
@@ -283,11 +280,12 @@ function placeSubtree(
   spacing: { siblingGap: number; levelGap: number; padding: number },
   boxes: Map<string, NodeBox>,
   sizes: Map<string, TopicSize>,
+  styles: Map<string, ComputedStyle>,
   edges: EdgePath[],
 ): void {
   // anchorX 是该层节点靠向根的那条边的 x 坐标。
   const x = side === 'left' ? anchorX - node.size.width : anchorX;
-  const box = place(node, x, top, side, boxes, sizes);
+  const box = place(node, x, top, side, boxes, sizes, styles);
 
   if (node.children.length === 0) return;
 
@@ -301,12 +299,61 @@ function placeSubtree(
   const childrenTotal = totalHeight(node.children, spacing.siblingGap);
   let cursor = top + (node.subtreeHeight - childrenTotal) / 2;
   for (const child of node.children) {
-    placeSubtree(child, side, childAnchorX, cursor, spacing, boxes, sizes, edges);
+    placeSubtree(child, side, childAnchorX, cursor, spacing, boxes, sizes, styles, edges);
 
     const childBox = boxes.get(child.topic.id);
     if (childBox) edges.push(makeEdge(box, childBox, child.style, side));
 
     cursor += child.subtreeHeight + spacing.siblingGap;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 自由主题
+// ---------------------------------------------------------------------------
+
+/**
+ * 自由主题排在整棵树的下方，按文档顺序纵向排列。
+ *
+ * 文档模型里自由主题没有坐标（见 docs/03 §2.2：`floatingTopics` 只是数组），
+ * 所以「用户拖到哪里就停在哪里」需要额外的位置字段，那是 M2.5 拖拽才引入的
+ * 问题。在那之前用确定性排布：至少它们可见、可编辑、可被拖回树上。
+ */
+function placeFloating(
+  sheet: Sheet,
+  theme: Theme,
+  measure: MeasureFn,
+  spacing: { siblingGap: number; levelGap: number; padding: number },
+  boxes: Map<string, NodeBox>,
+  sizes: Map<string, TopicSize>,
+  styles: Map<string, ComputedStyle>,
+  edges: EdgePath[],
+): void {
+  if (sheet.floatingTopics.length === 0) return;
+
+  let minX = Infinity;
+  let maxY = -Infinity;
+  for (const box of boxes.values()) {
+    if (box.x < minX) minX = box.x;
+    if (box.y + box.height > maxY) maxY = box.y + box.height;
+  }
+  if (!Number.isFinite(minX)) {
+    minX = 0;
+    maxY = 0;
+  }
+
+  let cursor = maxY + spacing.siblingGap * 2;
+  for (const floating of sheet.floatingTopics) {
+    const measured = measureNode(floating, theme, measure, {
+      depth: 1,
+      branchIndex: -1,
+      isRoot: false,
+      isFloating: true,
+      isSummary: false,
+    });
+    subtreeHeightOf(measured, spacing.siblingGap);
+    placeSubtree(measured, 'right', minX, cursor, spacing, boxes, sizes, styles, edges);
+    cursor += measured.subtreeHeight + spacing.siblingGap;
   }
 }
 
@@ -318,11 +365,18 @@ function placeSubtree(
 function finalize(
   boxes: Map<string, NodeBox>,
   sizes: Map<string, TopicSize>,
+  styles: Map<string, ComputedStyle>,
   edges: EdgePath[],
   padding: number,
 ): LayoutResult {
   if (boxes.size === 0) {
-    return { boxes, edges, sizes, bounds: { x: 0, y: 0, width: padding * 2, height: padding * 2 } };
+    return {
+      boxes,
+      edges,
+      sizes,
+      styles,
+      bounds: { x: 0, y: 0, width: padding * 2, height: padding * 2 },
+    };
   }
 
   let minX = Infinity;
@@ -356,6 +410,7 @@ function finalize(
     boxes,
     edges,
     sizes,
+    styles,
     bounds: {
       x: 0,
       y: 0,

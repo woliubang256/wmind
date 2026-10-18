@@ -85,3 +85,22 @@ body {
 }
 button, input { font: inherit; }
 ::selection { background: color-mix(in srgb, var(--primary) 24%, transparent); }
+
+/* ------------------------------------------------------------------ */
+/* 导图画布                                                            */
+/* ------------------------------------------------------------------ */
+
+/* 展开态节点的折叠按钮：默认透明，鼠标悬停在该节点上时浮现。
+   放在节点自身的 <g> 里（而不是 overlay 层）就是为了让 `:hover` 能命中——
+   两者不在同一棵子树里时 CSS 选不中。 */
+.wmind-collapse-toggle {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.wmind-topic:hover .wmind-collapse-toggle,
+.wmind-collapse-toggle:focus-visible {
+  opacity: 1;
+}
+
+.wmind-topic { outline: none; }
+.wmind-topic:focus-visible > rect:last-of-type { stroke: var(--primary); }

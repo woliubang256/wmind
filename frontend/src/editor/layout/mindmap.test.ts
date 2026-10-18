@@ -36,10 +36,24 @@ function overlaps(a: NodeBox, b: NodeBox): boolean {
 describe('mindmap 布局', () => {
   it('所有可见节点都有盒子，根节点 side 为 none', () => {
     const result = layout();
-    expect([...result.boxes.keys()].sort()).toEqual(['a', 'a1', 'a2', 'b', 'b1', 'root']);
+    expect([...result.boxes.keys()].sort()).toEqual(['a', 'a1', 'a2', 'b', 'b1', 'f1', 'f1x', 'root']);
     expect(box(result, 'root').side).toBe('none');
-    expect(box(result, 'a').side).toBe('left');
-    expect(box(result, 'b').side).toBe('right');
+    // 一级分支按下标奇偶交替：0 → 右，1 → 左。
+    expect(box(result, 'a').side).toBe('right');
+    expect(box(result, 'b').side).toBe('left');
+  });
+
+  it('自由主题排在整棵树的下方，且不参与左右平衡', () => {
+    const result = layout();
+    const treeBottom = Math.max(
+      ...[...result.boxes.values()]
+        .filter((b) => !b.id.startsWith('f'))
+        .map((b) => b.y + b.height),
+    );
+    expect(box(result, 'f1').y).toBeGreaterThan(treeBottom);
+    expect(box(result, 'f1').side).toBe('right');
+    // 自由主题的子节点挂在它右侧，与树的层级无关。
+    expect(box(result, 'f1x').x).toBeGreaterThan(box(result, 'f1').x);
   });
 
   it('折叠节点的后代不参与布局，且记录隐藏数量', () => {
@@ -77,7 +91,8 @@ describe('mindmap 布局', () => {
 
   it('父子连线的端点落在节点边缘上', () => {
     const result = layout();
-    expect(result.edges).toHaveLength(5); // 6 个节点，5 条边
+    // 树 6 个节点 → 5 条边，加自由主题的 1 条 = 6 条
+    expect(result.edges).toHaveLength(6);
 
     for (const edge of result.edges) {
       const parent = box(result, edge.parentId);
@@ -135,6 +150,7 @@ describe('mindmap 布局', () => {
   it('空画布（只有根）也能布局', () => {
     const doc = docWithTree();
     doc.sheets[0]!.rootTopic.children.attached = [];
+    doc.sheets[0]!.floatingTopics = [];
     const result = layoutMindmap({
       sheet: doc.sheets[0]!,
       theme: defaultTheme(),
@@ -158,6 +174,7 @@ describe('性能基线', () => {
     const doc = docWithTree();
     const root = doc.sheets[0]!.rootTopic;
     root.children.attached = [];
+    doc.sheets[0]!.floatingTopics = [];
     for (let b = 0; b < 10; b += 1) {
       const branch = topic(`br-${b}`, `分支 ${b}`);
       for (let i = 0; i < 99; i += 1) {
