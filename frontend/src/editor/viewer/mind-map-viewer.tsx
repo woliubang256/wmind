@@ -41,6 +41,8 @@ export interface MindMapViewerProps {
   onBeginEdit?(id: string): void;
   onCommitTitle?(id: string, title: string, options?: CommitTitleOptions): void;
   onCancelEdit?(): void;
+  onMoveTopics?(ids: string[], parentId: string, index?: number): void;
+  onDetachTopics?(ids: string[]): void;
   /** 受控视口。传了它就由外部持有，内部不再维护状态。 */
   viewport?: Viewport;
   initialViewport?: Viewport;
@@ -62,6 +64,8 @@ export function MindMapViewer({
   onBeginEdit,
   onCommitTitle,
   onCancelEdit,
+  onMoveTopics,
+  onDetachTopics,
   viewport: controlledViewport,
   initialViewport,
   onViewportChange,
@@ -150,6 +154,16 @@ export function MindMapViewer({
     [onCommitTitle],
   );
 
+  const moveTopics = useCallback(
+    (ids: string[], parentId: string, index?: number) => onMoveTopics?.(ids, parentId, index),
+    [onMoveTopics],
+  );
+
+  const detachTopics = useCallback(
+    (ids: string[]) => onDetachTopics?.(ids),
+    [onDetachTopics],
+  );
+
   const context = useMemo<ViewerContextValue>(
     () => ({
       layout,
@@ -169,6 +183,8 @@ export function MindMapViewer({
       beginEdit,
       cancelEdit,
       commitTitle,
+      moveTopics,
+      detachTopics,
     }),
     [
       layout,
@@ -187,6 +203,8 @@ export function MindMapViewer({
       beginEdit,
       cancelEdit,
       commitTitle,
+      moveTopics,
+      detachTopics,
     ],
   );
 

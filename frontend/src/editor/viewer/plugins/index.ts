@@ -12,6 +12,8 @@ import { PanZoomPlugin } from './pan-zoom';
 import { CollapsePlugin } from './collapse';
 import { SelectionPlugin } from './selection';
 import { EditingPlugin } from './editing';
+import { DragPlugin } from './drag';
+import { MarqueePlugin } from './marquee';
 
 /** 分享页：只能看、只能缩放折叠。 */
 export const READ_ONLY_PLUGINS: ViewerPlugin[] = [
@@ -19,10 +21,17 @@ export const READ_ONLY_PLUGINS: ViewerPlugin[] = [
   { key: 'collapse', Overlay: CollapsePlugin },
 ];
 
-/** 编辑器：查看 + 选中 + 双击编辑。拖拽与键盘在 M2.4 / M2.5 追加。 */
+/**
+ * 编辑器：查看 + 选中 + 双击编辑 + 拖拽 + 框选。
+ *
+ * 顺序即 overlay 的绘制顺序：拖拽与框选的指示图形必须压在最上面，
+ * 否则会被节点盖住一半。
+ */
 export const EDITOR_PLUGINS: ViewerPlugin[] = [
   { key: 'pan-zoom', Overlay: PanZoomPlugin },
   { key: 'collapse', Overlay: CollapsePlugin },
   { key: 'selection', Overlay: SelectionPlugin },
   { key: 'editing', Overlay: EditingPlugin },
+  { key: 'drag', Overlay: DragPlugin },
+  { key: 'marquee', Overlay: MarqueePlugin },
 ];

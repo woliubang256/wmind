@@ -11,9 +11,11 @@
 
 import { useEffect } from 'react';
 import { useViewer } from '../viewer-context';
+import { useLatest } from './use-latest';
 
 export function CollapsePlugin() {
-  const { svgRef, toggleCollapse } = useViewer();
+  const { svgRef } = useViewer();
+  const latest = useLatest(useViewer());
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -29,13 +31,13 @@ export function CollapsePlugin() {
       // 折叠按钮就不只是折叠，还顺带改了选中态。
       event.preventDefault();
       event.stopPropagation();
-      toggleCollapse(id);
+      latest.current.toggleCollapse(id);
     };
 
     // 用捕获阶段：选中插件在冒泡阶段监听，先到先得能保证折叠优先。
     svg.addEventListener('click', onClick, true);
     return () => svg.removeEventListener('click', onClick, true);
-  }, [svgRef, toggleCollapse]);
+  }, [svgRef, latest]);
 
   return null;
 }

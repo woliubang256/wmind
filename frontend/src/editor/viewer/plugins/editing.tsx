@@ -9,9 +9,11 @@
 
 import { useEffect } from 'react';
 import { useViewer } from '../viewer-context';
+import { useLatest } from './use-latest';
 
 export function EditingPlugin() {
-  const { svgRef, beginEdit, readOnly } = useViewer();
+  const { svgRef, readOnly } = useViewer();
+  const latest = useLatest(useViewer());
 
   useEffect(() => {
     if (readOnly) return undefined;
@@ -25,12 +27,12 @@ export function EditingPlugin() {
       const id = node.getAttribute('data-topic-id');
       if (!id) return;
       event.preventDefault();
-      beginEdit(id);
+      latest.current.beginEdit(id);
     };
 
     svg.addEventListener('dblclick', onDoubleClick);
     return () => svg.removeEventListener('dblclick', onDoubleClick);
-  }, [svgRef, beginEdit, readOnly]);
+  }, [svgRef, readOnly, latest]);
 
   return null;
 }

@@ -14,7 +14,7 @@ import {
   isDescendant,
   walkSheet,
 } from '../model/traverse';
-import type { Sheet, Topic } from '../model/types';
+import type { Sheet, Topic, WmindDocument } from '../model/types';
 import { defineCommand, type CommandResult, type EditorCommand } from './types';
 
 /** 从父数组里摘掉一个节点。返回是否真的摘掉了。 */
@@ -192,58 +192,109 @@ export function toggleCollapseCommand(id: string): EditorCommand {
 }
 
 /**
- * 移动主题到新的父节点下。
+ * 去掉「祖先也在被拖集合里」的节点。
  *
- * 合法性：目标不能是自身或自己的后代。这不是「防御性编程」而是必须的——
- * 把子树挂到自己下面会让这棵子树从文档里彻底消失（既不在根树里，
- * 也不在自由主题里），用户的所有内容就丢了。
+ * 框选很容易同时选中父节点和它的子节点。如果两个都搬，子节点会被父节点
+ * 带进新位置，然后再单独插一遍——同一棵子树在文档里出现两份。
  */
-export function moveTopicCommand(id: string, newParentId: string, index?: number): EditorCommand {
+function topLevelOnly(draft: WmindDocument, ids: readonly string[]): string[] {
+  const set = new Set(ids);
+  return ids.filter((id) => {
+    let found = findTopic(draft, id);
+    while (found?.parent) {
+      if (set.has(found.parent.id)) return false;
+      found = findTopic(draft, found.parent.id);
+    }
+    return true;
+  });
+}
+
+/**
+ * 移动一组主题到新的父节点下。
+ *
+ * 批量版本单独写而不是循环调用单节点版本，是为了让「一次拖拽 = 一条历史」。
+ * 循环 dispatch 会产生 N 条撤销记录，用户按一次 Ctrl+Z 只退回去一个节点，
+ * 看起来像撤销坏了。
+ *
+ * 实现上是「先全部摘下来，再按给定顺序插进去」。顺序很重要：如果边摘边插，
+ * 后续节点的目标下标会随着数组变短而错位——这类 off-by-one 在多选拖拽里
+ * 特别难复现（单节点永远是对的）。
+ *
+ * 合法性：目标不能是自身或任何被拖节点的后代。这不是防御性编程，而是必须的——
+ * 把子树挂到自己下面会让这棵子树从文档里彻底消失（既不在根树里，也不在
+ * 自由主题里），用户的所有内容就丢了。非法时整批拒绝，不做「能动的先动」。
+ */
+export function moveTopicsCommand(
+  ids: readonly string[],
+  newParentId: string,
+  index?: number,
+): EditorCommand {
   return defineCommand({
     type: 'topic.move',
-    label: '移动主题',
+    label: ids.length > 1 ? `移动 ${ids.length} 个主题` : '移动主题',
     apply(draft): CommandResult | void {
-      if (id === newParentId) return;
-      const found = findTopic(draft, id);
-      if (!found) return;
-      if (!found.parent && !found.isFloating) return; // 根不能移动
-      if (isDescendant(found.topic, newParentId)) return;
-
       const target = findTopic(draft, newParentId);
-      if (!target) return;
-      // 自由主题只能作为根级主题的兄弟存在，不能有父节点；
-      // 反过来，树上的节点也不能挂到自由主题下面（自由主题没有子树语义）。
-      if (target.isFloating) return;
+      // 自由主题没有子树语义，不能当父节点。
+      if (!target || target.isFloating) return;
 
-      const topic = found.topic;
-      detachFromParent(found.sheet, found);
+      const moving: Topic[] = [];
+      for (const id of topLevelOnly(draft, ids)) {
+        if (id === newParentId) return;
+        const found = findTopic(draft, id);
+        if (!found) continue;
+        if (!found.parent) return; // 根与自由主题不参与移动
+        if (isDescendant(found.topic, newParentId)) return;
+        moving.push(found.topic);
+      }
+      if (moving.length === 0) return;
+
+      for (const id of moving.map((topic) => topic.id)) {
+        const found = findTopic(draft, id);
+        if (found?.parent) detachFromParent(found.sheet, found);
+      }
 
       const siblings = target.topic.children.attached;
-      const at = index === undefined
-        ? siblings.length
-        : Math.max(0, Math.min(index, siblings.length));
+      const at = index === undefined ? siblings.length : Math.max(0, Math.min(index, siblings.length));
       target.topic.collapsed = false;
-      siblings.splice(at, 0, topic);
-      return { select: [topic.id] };
+      siblings.splice(at, 0, ...moving);
+      return { select: moving.map((topic) => topic.id) };
     },
   });
 }
 
-/** 拖到画布空白处：脱离树结构，变成自由主题。 */
-export function detachTopicCommand(id: string): EditorCommand {
+/** 移动单个主题。 */
+export function moveTopicCommand(id: string, newParentId: string, index?: number): EditorCommand {
+  return moveTopicsCommand([id], newParentId, index);
+}
+
+/**
+ * 拖到画布空白处：脱离树结构，变成自由主题。
+ *
+ * 批量版本同样是为了「一次拖拽 = 一条历史」。
+ */
+export function detachTopicsCommand(ids: readonly string[]): EditorCommand {
   return defineCommand({
     type: 'topic.detach',
-    label: '转为自由主题',
+    label: ids.length > 1 ? `${ids.length} 个主题转为自由主题` : '转为自由主题',
     apply(draft): CommandResult | void {
-      const found = findTopic(draft, id);
-      if (!found) return;
-      if (!found.parent) return; // 根与已是自由主题的节点不动
-      const topic = found.topic;
-      detachFromParent(found.sheet, found);
-      found.sheet.floatingTopics.push(topic);
-      return { select: [topic.id] };
+      const moved: Topic[] = [];
+      for (const id of topLevelOnly(draft, ids)) {
+        const found = findTopic(draft, id);
+        if (!found) continue;
+        if (!found.parent) continue; // 根与已是自由主题的节点不动
+        const topic = found.topic;
+        detachFromParent(found.sheet, found);
+        found.sheet.floatingTopics.push(topic);
+        moved.push(topic);
+      }
+      if (moved.length === 0) return;
+      return { select: moved.map((topic) => topic.id) };
     },
   });
+}
+
+export function detachTopicCommand(id: string): EditorCommand {
+  return detachTopicsCommand([id]);
 }
 
 /** 粘贴：把外部（或复制的）子树挂到目标节点下，全部换新 id。 */

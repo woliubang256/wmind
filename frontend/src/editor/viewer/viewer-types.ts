@@ -58,6 +58,10 @@ export interface ViewerContextValue {
   beginEdit(id: string): void;
   cancelEdit(): void;
   commitTitle(id: string, title: string, options?: CommitTitleOptions): void;
+  /** 拖拽落定：把一组节点移到新父节点下（`index` 省略表示追加到末尾）。 */
+  moveTopics(ids: string[], parentId: string, index?: number): void;
+  /** 拖到空白处：把一组节点转为自由主题。 */
+  detachTopics(ids: string[]): void;
 }
 
 /**

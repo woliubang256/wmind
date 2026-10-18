@@ -16,6 +16,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useViewer } from '../viewer-context';
+import { useLatest } from './use-latest';
 
 export const MIN_ZOOM = 0.2;
 export const MAX_ZOOM = 4;
@@ -31,7 +32,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function PanZoomPlugin() {
-  const { svgRef, setViewport } = useViewer();
+  const { svgRef } = useViewer();
+  const latest = useLatest(useViewer());
   const spaceDown = useRef(false);
 
   useEffect(() => {
@@ -46,7 +48,7 @@ export function PanZoomPlugin() {
     /** 以 (px, py)（相对 svg 左上角）为锚点缩放。 */
     const zoomAt = (factor: number, clientX: number, clientY: number) => {
       const point = localPoint(clientX, clientY);
-      setViewport((prev) => {
+      latest.current.setViewport((prev) => {
         const zoom = clampZoom(prev.zoom * factor);
         if (zoom === prev.zoom) return prev;
         // 保持光标下的画布坐标不动：world = (point - translate) / zoom
@@ -71,10 +73,10 @@ export function PanZoomPlugin() {
         return;
       }
       if (event.shiftKey) {
-        setViewport((prev) => ({ ...prev, x: prev.x - dy }));
+        latest.current.setViewport((prev) => ({ ...prev, x: prev.x - dy }));
         return;
       }
-      setViewport((prev) => ({ ...prev, x: prev.x - dx, y: prev.y - dy }));
+      latest.current.setViewport((prev) => ({ ...prev, x: prev.x - dx, y: prev.y - dy }));
     };
 
     let panning = false;
@@ -102,7 +104,7 @@ export function PanZoomPlugin() {
       const dy = event.clientY - lastY;
       lastX = event.clientX;
       lastY = event.clientY;
-      setViewport((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      latest.current.setViewport((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
     };
 
     const endPan = (event: PointerEvent) => {
@@ -155,7 +157,7 @@ export function PanZoomPlugin() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [svgRef, setViewport]);
+  }, [svgRef, latest]);
 
   return null;
 }

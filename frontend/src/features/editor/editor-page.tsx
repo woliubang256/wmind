@@ -29,6 +29,8 @@ import { isTextEntryTarget } from '@/editor/interaction/keymap';
 import { useEditorActions } from '@/editor/interaction/use-editor-actions';
 import {
   addChildCommand,
+  detachTopicsCommand,
+  moveTopicsCommand,
   removeTopicsCommand,
   renameTopicCommand,
   toggleCollapseCommand,
@@ -314,6 +316,12 @@ function Workspace() {
             if (options?.restoreFocus) canvasRef.current?.focus({ preventScroll: true });
             // 编辑中按 Tab：先落字，再在这个节点下新建子主题并继续编辑。
             if (options?.addChild) store.getState().dispatch(addChildCommand(id));
+          }}
+          onMoveTopics={(ids, parentId, index) => {
+            store.getState().dispatch(moveTopicsCommand(ids, parentId, index));
+          }}
+          onDetachTopics={(ids) => {
+            store.getState().dispatch(detachTopicsCommand(ids));
           }}
         />
       </div>
