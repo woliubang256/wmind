@@ -57,5 +57,21 @@ export interface ViewerContextValue {
   editingId: string | null;
   beginEdit(id: string): void;
   cancelEdit(): void;
-  commitTitle(id: string, title: string): void;
+  commitTitle(id: string, title: string, options?: CommitTitleOptions): void;
+}
+
+/**
+ * 提交标题时的附加意图。
+ *
+ * `addChild` 用于「编辑中按 Tab」：XMind 的语义是「先落字，再在这个节点下
+ * 新建子节点」，比「先提交、再按一次 Tab」少一次按键，而且不会丢掉
+ * 刚输入的内容。查看器不认识命令层，只能把意图原样转给宿主。
+ *
+ * `restoreFocus` 只在键盘提交时为真。输入框卸载后焦点会掉到 `body` 上，
+ * 画布的快捷键随之失效——所以键盘提交要把焦点还回去。但**失焦提交不能还**：
+ * 用户是点了别的地方（比如标题输入框）才失焦的，这时抢回焦点等于让点击失效。
+ */
+export interface CommitTitleOptions {
+  addChild?: boolean;
+  restoreFocus?: boolean;
 }

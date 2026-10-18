@@ -20,7 +20,7 @@ import type { EdgePath, LayoutResult, NodeBox } from '../layout/types';
 import type { ComputedStyle, Sheet, Theme } from '../model/types';
 import { fontStack } from '../theme/fonts';
 import { ViewerContext } from './viewer-context';
-import type { ViewerContextValue, ViewerPlugin, Viewport } from './viewer-types';
+import type { CommitTitleOptions, ViewerContextValue, ViewerPlugin, Viewport } from './viewer-types';
 import { TopicNode } from './topic-node';
 import { EdgeLine } from './edges';
 import { BoundariesLayer, RelationshipsLayer } from './decorations';
@@ -39,7 +39,7 @@ export interface MindMapViewerProps {
   onSelectionChange?(ids: string[]): void;
   onToggleCollapse?(id: string): void;
   onBeginEdit?(id: string): void;
-  onCommitTitle?(id: string, title: string): void;
+  onCommitTitle?(id: string, title: string, options?: CommitTitleOptions): void;
   onCancelEdit?(): void;
   /** 受控视口。传了它就由外部持有，内部不再维护状态。 */
   viewport?: Viewport;
@@ -145,7 +145,8 @@ export function MindMapViewer({
 
   const cancelEdit = useCallback(() => onCancelEdit?.(), [onCancelEdit]);
   const commitTitle = useCallback(
-    (id: string, title: string) => onCommitTitle?.(id, title),
+    (id: string, title: string, options?: CommitTitleOptions) =>
+      onCommitTitle?.(id, title, options),
     [onCommitTitle],
   );
 
@@ -236,7 +237,7 @@ export function MindMapViewer({
             style={editingStyle}
             viewport={viewport}
             initialValue={findTitle(sheet, editingBox.id)}
-            onCommit={(value) => commitTitle(editingBox.id, value)}
+            onCommit={(value, options) => commitTitle(editingBox.id, value, options)}
             onCancel={cancelEdit}
           />
         ) : null}
@@ -331,7 +332,7 @@ interface EditingOverlayProps {
   style: ComputedStyle;
   viewport: Viewport;
   initialValue: string;
-  onCommit(value: string): void;
+  onCommit(value: string, options?: CommitTitleOptions): void;
   onCancel(): void;
 }
 
@@ -356,10 +357,10 @@ function EditingOverlay({ box, style, viewport, initialValue, onCommit, onCancel
     el.select();
   }, []);
 
-  const settle = (commit: boolean) => {
+  const settle = (commit: boolean, options?: CommitTitleOptions) => {
     if (settled.current) return;
     settled.current = true;
-    if (commit) onCommit(value);
+    if (commit) onCommit(value, options);
     else onCancel();
   };
 
@@ -384,7 +385,15 @@ function EditingOverlay({ box, style, viewport, initialValue, onCommit, onCancel
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
-          settle(true);
+          settle(true, { restoreFocus: true });
+          return;
+        }
+        // Tab 在编辑态 = 「落字并在当前节点下新建子主题」。不吞掉的话
+        // 浏览器会把焦点移走，输入框失焦又触发一次提交，等于白按。
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          event.stopPropagation();
+          settle(true, { addChild: !event.shiftKey, restoreFocus: true });
         }
       }}
       spellCheck={false}

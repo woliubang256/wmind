@@ -1,12 +1,14 @@
 /**
  * 编辑器页面。
  *
- * M2.3 阶段只做「渲染 + 只读查看器」的可见化：文档来自内置演示数据
- * （M2.6 换成后端加载），工具栏提供撤销 / 重做 / 缩放 / 折叠 / 只读预览，
- * 用来验证渲染层与插件抽象。键盘与拖拽在 M2.4 / M2.5 补。
+ * 文档目前来自内置演示数据（M2.6 换成后端加载）。这一层负责三件事：
  *
- * 视口由页面持有（受控），因为「缩放到适应」既要知道容器尺寸又要写视口——
- * 让查看器自己管会让工具栏拿不到写入口。
+ * 1. 持有视口——「缩放到适应」既要知道容器尺寸又要写视口，让查看器自己管
+ *    的话工具栏就拿不到写入口；
+ * 2. 把 store 与查看器接起来（选中 / 折叠 / 编辑回写）；
+ * 3. 把键盘动作接到命令上（见 `useEditorActions`）。
+ *
+ * 查看器本身不含任何交互：它拿到的是插件列表，只读预览时换一批插件即可。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -22,6 +24,9 @@ import { MIN_ZOOM, zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
 import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import type { Viewport } from '@/editor/viewer/viewer-types';
+import { useHotkeys } from '@/editor/interaction/hotkeys';
+import { isTextEntryTarget } from '@/editor/interaction/keymap';
+import { useEditorActions } from '@/editor/interaction/use-editor-actions';
 import {
   addChildCommand,
   removeTopicsCommand,
@@ -98,6 +103,75 @@ function Workspace() {
     const rect = element.getBoundingClientRect();
     setViewport((prev) => zoomedViewport(prev, factor, { x: rect.width / 2, y: rect.height / 2 }));
   };
+
+  /** Ctrl+0：回到 100%，以当前视口中心为锚点（和滚轮缩放的手感一致）。 */
+  const resetZoom = useCallback(() => {
+    const element = canvasRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    setViewport((prev) =>
+      zoomedViewport(prev, 1 / prev.zoom, { x: rect.width / 2, y: rect.height / 2 }),
+    );
+  }, []);
+
+  /**
+   * Ctrl+S。M2.6 接上后端之后这里换成真正的 flush（取消防抖 + 立刻提交）。
+   * 现在没有可提交的目标，所以只把状态落成「已保存」——比什么都不做诚实，
+   * 也保证键位表是完整的，M2.6 只需替换这一个函数的实现。
+   */
+  const save = useCallback(() => {
+    store.getState().setSave({ status: 'saved', at: Date.now(), error: null });
+  }, [store]);
+
+  const actions = useEditorActions({
+    layout,
+    sheet,
+    onFit: fit,
+    onResetZoom: resetZoom,
+    onSave: save,
+  });
+
+  /**
+   * 进入编辑时把节点挪进视野。
+   *
+   * 新建的节点总是挂在一棵子树的末尾，而子树是往右长的——在已经缩放到
+   * 适应的画布上按 Tab，新节点的输入框会正好压在右边缘外，用户看到一个
+   * 半截的框，不知道该往哪打字。这里只做「平移」，不缩放：缩放会改变
+   * 用户当前的视野基准，连续按 Tab 时会一直跳。
+   */
+  useEffect(() => {
+    if (!editingId) return;
+    const box = layout.boxes.get(editingId);
+    const element = canvasRef.current;
+    if (!box || !element) return;
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const padding = 64;
+
+    setViewport((prev) => {
+      const left = prev.x + box.x * prev.zoom;
+      const top = prev.y + box.y * prev.zoom;
+      const right = left + box.width * prev.zoom;
+      const bottom = top + box.height * prev.zoom;
+
+      let dx = 0;
+      let dy = 0;
+      // 右边优先：新节点通常从右侧溢出，先保证右边看得见。
+      if (right > rect.width - padding) dx = rect.width - padding - right;
+      if (left + dx < padding) dx = padding - left;
+      if (bottom > rect.height - padding) dy = rect.height - padding - bottom;
+      if (top + dy < padding) dy = padding - top;
+
+      // 没有位移就返回原对象，让 React 跳过重渲染（否则每次布局变化
+      // 都会写一次 viewport，滚轮位置被反复重置）。
+      if (dx === 0 && dy === 0) return prev;
+      return { ...prev, x: prev.x + dx, y: prev.y + dy };
+    });
+  }, [editingId, layout]);
+
+  // 编辑态整张键位表都关掉：输入框自己处理 Esc / Enter / Shift+Enter / Tab，
+  // 导图再插手就会把用户的换行吞成「新建主题」。
+  useHotkeys(canvasRef, actions, { enabled: !preview && editingId === null });
 
   const activeId = selection[0] ?? sheet.rootTopic.id;
 
@@ -199,7 +273,21 @@ function Workspace() {
         </Button>
       </header>
 
-      <div ref={canvasRef} className="relative min-h-0 flex-1">
+      {/*
+        画布容器是键盘焦点的落点：`tabIndex={0}` + 点击即聚焦。
+        快捷键只在这个容器有焦点时生效，所以用户在标题输入框里按 Tab
+        不会被导图截走。`outline-none` 是因为焦点环画在一个铺满屏幕的
+        元素上非常难看——替代的可视反馈是选中节点的描边。
+      */}
+      <div
+        ref={canvasRef}
+        tabIndex={0}
+        onPointerDownCapture={(event) => {
+          if (isTextEntryTarget(event.target)) return;
+          canvasRef.current?.focus({ preventScroll: true });
+        }}
+        className="relative min-h-0 flex-1 outline-none"
+      >
         <MindMapViewer
           sheet={sheet}
           theme={doc.theme}
@@ -214,10 +302,18 @@ function Workspace() {
           onSelectionChange={(ids) => store.getState().select(ids)}
           onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
           onBeginEdit={(id) => store.getState().setEditing(id)}
-          onCancelEdit={() => store.getState().setEditing(null)}
-          onCommitTitle={(id, title) => {
+          onCancelEdit={() => {
+            store.getState().setEditing(null);
+            canvasRef.current?.focus({ preventScroll: true });
+          }}
+          onCommitTitle={(id, title, options) => {
             store.getState().dispatch(renameTopicCommand(id, title));
             store.getState().setEditing(null);
+            // 键盘提交后输入框卸载，焦点会掉到 body 上，键盘导航就断了。
+            // 失焦提交（点了别处）不能抢焦点，否则那次点击等于没生效。
+            if (options?.restoreFocus) canvasRef.current?.focus({ preventScroll: true });
+            // 编辑中按 Tab：先落字，再在这个节点下新建子主题并继续编辑。
+            if (options?.addChild) store.getState().dispatch(addChildCommand(id));
           }}
         />
       </div>
