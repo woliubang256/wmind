@@ -68,6 +68,9 @@ jobs:
       - name: Verify architecture notes
         run: npm run verify-notes
 
+      - name: Check palette contrast
+        run: npm run check:palette
+
       - name: Verify dialect boundaries
         working-directory: backend
         run: go run ./cmd/dialectcheck .

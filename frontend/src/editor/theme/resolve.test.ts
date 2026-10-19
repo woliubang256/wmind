@@ -32,21 +32,21 @@ beforeEach(() => {
 describe('解析顺序', () => {
   it('根节点用 centralTopic，且不被调色板覆盖', () => {
     const style = styleOf('root');
-    expect(style.fill).toBe('#1E88E5');
+    expect(style.fill).toBe('#1878CD');
     expect(style.fontSize).toBe(24);
     expect(style.fontWeight).toBe(700);
     expect(style.rainbowBranch).toBe(false); // 根没有分支序号
   });
 
   it('一级分支按 branchIndex 取调色板颜色', () => {
-    expect(styleOf('a').fill).toBe('#E53935');
+    expect(styleOf('a').fill).toBe('#E32925');
     expect(styleOf('b').fill).toBe('#FB8C00');
   });
 
   it('二级及以下继承分支序号，但保留 subTopic 的显式白色填充', () => {
     const a1 = styleOf('a1');
     expect(a1.fill).toBe('#FFFFFF'); // subTopic 显式指定
-    expect(a1.lineColor).toBe('#E53935'); // 未被指定 → 取分支色
+    expect(a1.lineColor).toBe('#E32925'); // 未被指定 → 取分支色
   });
 
   it('theme.global 提供字体、字号与线宽', () => {
@@ -78,12 +78,25 @@ describe('解析顺序', () => {
     expect(style.borderColor).toBe('#FFB300');
   });
 
-  it('关闭彩虹后用 palette.colors 而不是 rainbowColors', () => {
+  it('关闭彩虹分支后所有分支用同一个颜色（开关必须真的有效）', () => {
     const custom: Theme = {
       ...theme,
       rainbowBranch: false,
       palette: { colors: ['#111111', '#222222'], lineColors: ['#333333', '#444444'], backgroundColor: '#FFF' },
       rainbowColors: ['#AAAAAA', '#BBBBBB'],
+    };
+    expect(styleOf('a', custom).fill).toBe('#111111');
+    expect(styleOf('b', custom).fill).toBe('#111111');
+    expect(styleOf('a', custom).lineColor).toBe('#333333');
+    expect(styleOf('b', custom).lineColor).toBe('#333333');
+  });
+
+  it('彩虹序列为空时回落到配色方案', () => {
+    const custom: Theme = {
+      ...theme,
+      rainbowBranch: true,
+      palette: { colors: ['#111111', '#222222'], lineColors: ['#333333'], backgroundColor: '#FFF' },
+      rainbowColors: [],
     };
     expect(styleOf('a', custom).fill).toBe('#111111');
     expect(styleOf('b', custom).fill).toBe('#222222');
@@ -92,8 +105,9 @@ describe('解析顺序', () => {
   it('分支序号超出色板长度时取模循环', () => {
     const custom: Theme = {
       ...theme,
-      rainbowBranch: false,
+      rainbowBranch: true,
       palette: { colors: ['#111111', '#222222'], lineColors: ['#333333'], backgroundColor: '#FFF' },
+      rainbowColors: ['#111111', '#222222'],
     };
     const a = findTopic(docWithTree(), 'a')!.topic;
     const style = (branchIndex: number) =>

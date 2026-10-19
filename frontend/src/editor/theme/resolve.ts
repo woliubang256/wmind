@@ -39,7 +39,7 @@ const BUILTIN: ComputedStyle = {
   fontWeight: 400,
   fontStyle: 'normal',
   textDecoration: 'none',
-  textColor: '#333333',
+  textColor: '#1F1F1F',
   textAlign: 'center',
   width: 160,
   autoWidth: true,
@@ -124,21 +124,35 @@ function roleStyle(ctx: StyleContext, theme: Theme): Partial<Style> | null {
   return theme.subTopic;
 }
 
+const DARK_TEXT = '#1F1F1F';
+const LIGHT_TEXT = '#FFFFFF';
+
+/** WCAG 对比度。两个参数都是相对亮度，调用方负责先算好。 */
+function contrastRatio(a: number, b: number): number {
+  const [hi, lo] = a > b ? [a, b] : [b, a];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 /**
  * 按背景亮度选文字颜色。
  *
  * 调色板是固定的 6 个饱和色，其中 #FDD835（黄）上写白字几乎看不清，
  * 而 #E53935（红）上写黑字同样难受。逐个颜色手写「该配什么字色」既枯燥
- * 又会在换配色方案时失效，所以按 WCAG 的相对亮度算：亮度 > 0.5 用深色字，
- * 否则用白字。
+ * 又会在换配色方案时失效，所以按 WCAG 对比度算：**深灰与白字里选高的那个**。
+ *
+ * 注意不能按「亮度 > 0.5 用深色」这种阈值拍脑袋：中间调的饱和色两边都勉强，
+ * 阈值会把 #E53935（白字 4.2、深字 4.6）判给白字，正好选了差的那个。
+ * 选高者永远不劣于阈值法，且能保证所有校准过的配色都 ≥ 4.5:1。
  *
  * 这只是**默认值**：`topic.style.textColor` 显式指定时仍然优先，
  * 用户想强制某个颜色不会被这里覆盖。
  */
 function readableTextColor(fill: string | null): string {
   const luminance = relativeLuminance(fill);
-  if (luminance === null) return '#333333';
-  return luminance > 0.5 ? '#333333' : '#FFFFFF';
+  if (luminance === null) return DARK_TEXT;
+  const onDark = contrastRatio(luminance, relativeLuminance(DARK_TEXT) ?? 0);
+  const onLight = contrastRatio(luminance, 1); // 纯白亮度为 1
+  return onDark >= onLight ? DARK_TEXT : LIGHT_TEXT;
 }
 
 /** WCAG 相对亮度。解析不了（渐变、颜色名）时返回 null，由调用方兜底。 */
@@ -157,15 +171,22 @@ function relativeLuminance(color: string | null): number | null {
   return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
 }
 
-/** 一级分支取色：彩虹开启时用 `rainbowColors`，否则用 `palette.colors`。 */
+/**
+ * 一级分支取色。
+ *
+ * **彩虹分支开**：按 `branchIndex` 在 `rainbowColors` 里循环，每条分支一个颜色。
+ * **彩虹分支关**：所有分支统一用配色方案的第一色——这正是这个开关的意义所在。
+ *
+ * 早先的实现是「关掉也用 colors[i % n] 循环」，于是开关两侧结果完全一样，
+ * 面板上点它没有任何反馈；而 `palette.colors` 也被 `rainbowColors` 架空，
+ * 换配色方案时分支颜色纹丝不动。两种「看起来能点、实际没反应」的控件，
+ * 比缺一个控件更让人困惑。
+ */
 function branchColor(ctx: StyleContext, theme: Theme, key: 'colors' | 'lineColors'): string | null {
   if (ctx.branchIndex < 0) return null;
-  const rainbow = theme.rainbowBranch;
-  const list = rainbow
-    ? theme.rainbowColors
-    : key === 'colors'
-      ? theme.palette.colors
-      : theme.palette.lineColors;
+  const base = key === 'colors' ? theme.palette.colors : theme.palette.lineColors;
+  if (!theme.rainbowBranch) return base[0] ?? null;
+  const list = theme.rainbowColors.length > 0 ? theme.rainbowColors : base;
   if (list.length === 0) return null;
   return list[ctx.branchIndex % list.length] ?? null;
 }

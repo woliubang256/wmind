@@ -16,84 +16,16 @@ import type {
   WmindDocument,
 } from './types';
 import { newDocumentId, newSheetId, newTopicId } from './ids';
+import { DEFAULT_PALETTE_ID, themeById } from '../theme/palettes';
 
-/** 内置默认配色（「彩虹」）。 */
-export const RAINBOW_COLORS = [
-  '#E53935',
-  '#FB8C00',
-  '#FDD835',
-  '#43A047',
-  '#1E88E5',
-  '#8E24AA',
-] as const;
-
+/**
+ * 新建文档用的默认主题（「经典 · 彩虹」）。
+ *
+ * 主题数据本身在 `theme/palettes.json`——这里是唯一入口，避免「新建文档」和
+ * 「配色面板切换」两条路径各自维护一份默认值。
+ */
 export function defaultTheme(): Theme {
-  return {
-    id: 'classic-rainbow',
-    name: '彩虹',
-    category: 'classic',
-    palette: {
-      colors: [...RAINBOW_COLORS],
-      lineColors: [...RAINBOW_COLORS],
-      backgroundColor: '#FFFFFF',
-    },
-    global: {
-      fontFamily: 'sans',
-      fontSize: 14,
-      lineWidth: 2,
-      backgroundColor: '#FFFFFF',
-    },
-    centralTopic: {
-      shape: 'rounded-rect',
-      fontSize: 24,
-      fontWeight: 700,
-      fill: '#1E88E5',
-      borderColor: '#1E88E5',
-      borderWidth: 0,
-      lineWidth: 3,
-    },
-    mainTopic: {
-      shape: 'rounded-rect',
-      fontSize: 16,
-      fontWeight: 600,
-      borderWidth: 0,
-      lineWidth: 2,
-    },
-    subTopic: {
-      shape: 'rounded-rect',
-      fontSize: 14,
-      fontWeight: 400,
-      fill: '#FFFFFF',
-      borderColor: '#BDBDBD',
-      borderWidth: 1,
-      lineWidth: 2,
-    },
-    floatingTopic: {
-      shape: 'rounded-rect',
-      fontSize: 14,
-      fill: '#FFF8E1',
-      borderColor: '#FFB300',
-      borderWidth: 1,
-    },
-    summaryTopic: {
-      shape: 'underline',
-      fontSize: 13,
-      fontStyle: 'italic',
-      textColor: '#616161',
-    },
-    boundary: { borderColor: '#999999', borderStyle: 'dash', fill: '#F5F5F5' },
-    relationship: { lineColor: '#999999', lineWidth: 1, lineEnd: 'arrow' },
-    rainbowBranch: true,
-    rainbowColors: [...RAINBOW_COLORS],
-    layout: {
-      autoBalance: true,
-      compact: false,
-      alignSiblings: false,
-      freeBranch: false,
-      flexibleFloating: false,
-      topicOverlap: false,
-    },
-  };
+  return themeById(DEFAULT_PALETTE_ID);
 }
 
 /** 新建主题时写入的样式。留空表示全部继承主题——这才是「换主题能整体生效」的前提。 */
