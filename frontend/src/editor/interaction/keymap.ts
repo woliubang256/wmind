@@ -178,3 +178,22 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
   return element.isContentEditable === true;
 }
+
+/**
+ * 是否落在任何「自己能吃按键」的控件上（按钮、链接、选项卡、复选开关……）。
+ *
+ * 与 `isTextEntryTarget` 分开是因为两者的处置不同：
+ *
+ * - 文本输入框里**所有**键都不拦，连 ⌘Z 也要留给浏览器做文字撤销；
+ * - 按钮/下拉/选项卡里只拦**不带修饰键**的键（Tab 要走焦点、方向键要在
+ *   下拉里选值），而 ⌘Z / ⌘S 这类组合仍然作用于导图——用户刚点完面板里的
+ *   色块，焦点停在那个按钮上，此时按 ⌘Z 想撤销的显然是刚才那次改色。
+ */
+export function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!target || typeof (target as Element).closest !== 'function') return false;
+  return Boolean(
+    (target as Element).closest(
+      'button, a[href], select, input, textarea, summary, [contenteditable="true"], [role="tab"], [role="checkbox"], [role="switch"]',
+    ),
+  );
+}

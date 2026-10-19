@@ -55,12 +55,29 @@ describe('updateStyleCommand', () => {
     expect(style).toEqual({ fontWeight: 700 });
   });
 
-  it('fill 置 null 表示回到继承', () => {
+  it('fill 置 null 表示无填充（不是继承）', () => {
     const store = createEditorStore({ doc: docWithTree() });
-    store.getState().dispatch(updateStyleCommand(['a'], { fill: '#E53935' }));
+    store.getState().dispatch(updateStyleCommand(['a'], { fill: '#E32925' }));
     store.getState().dispatch(updateStyleCommand(['a'], { fill: null }));
 
     expect(findTopic(store.getState().doc, 'a')!.topic.style!.fill).toBeNull();
+  });
+
+  it('传 undefined 把字段删掉，回到继承', () => {
+    const store = createEditorStore({ doc: docWithTree() });
+    store.getState().dispatch(updateStyleCommand(['a'], { fill: '#E32925', fontWeight: 700 }));
+    store.getState().dispatch(updateStyleCommand(['a'], { fill: undefined }));
+
+    const style = findTopic(store.getState().doc, 'a')!.topic.style!;
+    expect('fill' in style).toBe(false);
+    expect(style.fontWeight).toBe(700);
+  });
+
+  it('已经是继承态时再传 undefined 是空操作', () => {
+    const store = createEditorStore({ doc: docWithTree() });
+    const revision = store.getState().revision;
+    store.getState().dispatch(updateStyleCommand(['a'], { fill: undefined }));
+    expect(store.getState().revision).toBe(revision);
   });
 
   it('批量作用于多个节点，不存在的 id 静默跳过', () => {

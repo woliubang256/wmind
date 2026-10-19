@@ -66,6 +66,46 @@ interface Ctx {
   spacing: LayoutSpacing;
   structure: StructureClass;
   out: Out;
+  /** 「同级对齐」开启时的列坐标；关闭或纵向树为 null。 */
+  columns: Columns | null;
+}
+
+/**
+ * 「同级主题对齐」的列坐标。
+ *
+ * 普通布局里，子节点的 x 是「父节点右边 + 间距」算出来的，于是同一层里宽度
+ * 不同的父节点会把各自的子节点推到不同的列——看上去像随手撒的。对齐打开后
+ * 每层预留该层最宽的节点，所有同层节点落在同一列。
+ *
+ * 代价是画布变宽：一层里只要有一个长标题，整层都按它的宽度留白。所以这是
+ * 开关而不是默认。
+ */
+interface Columns {
+  /** 右侧：每层节点的**左**边缘。 */
+  right: Map<number, number>;
+  /** 左侧：每层节点的**右**边缘。 */
+  left: Map<number, number>;
+}
+
+function buildColumns(root: MeasuredNode, spacing: LayoutSpacing): Columns {
+  const maxWidth = new Map<number, number>();
+  let maxDepth = 0;
+  const visit = (node: MeasuredNode): void => {
+    maxWidth.set(node.depth, Math.max(maxWidth.get(node.depth) ?? 0, node.size.width));
+    maxDepth = Math.max(maxDepth, node.depth);
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+
+  const right = new Map<number, number>([[1, root.size.width / 2 + spacing.levelGap]]);
+  const left = new Map<number, number>([[1, -root.size.width / 2 - spacing.levelGap]]);
+  for (let depth = 2; depth <= maxDepth; depth += 1) {
+    const prevRight = right.get(depth - 1) ?? 0;
+    const prevLeft = left.get(depth - 1) ?? 0;
+    right.set(depth, prevRight + (maxWidth.get(depth - 1) ?? 0) + spacing.levelGap);
+    left.set(depth, prevLeft - (maxWidth.get(depth - 1) ?? 0) - spacing.levelGap);
+  }
+  return { right, left };
 }
 
 export function layoutMindmap(input: LayoutInput): LayoutResult {
@@ -74,6 +114,7 @@ export function layoutMindmap(input: LayoutInput): LayoutResult {
   const structure = input.sheet.structure;
   const spacing = spacingFor(input.options?.compact ?? theme.layout.compact);
   const autoBalance = input.options?.autoBalance ?? theme.layout.autoBalance;
+  const alignSiblings = input.options?.alignSiblings ?? theme.layout.alignSiblings;
 
   const root = measureNode(input.sheet.rootTopic, theme, measure, {
     depth: 0,
@@ -84,7 +125,13 @@ export function layoutMindmap(input: LayoutInput): LayoutResult {
   });
 
   const out: Out = { boxes: new Map(), sizes: new Map(), styles: new Map(), edges: [] };
-  const ctx: Ctx = { spacing, structure, out };
+  const ctx: Ctx = {
+    spacing,
+    structure,
+    out,
+    // 纵向树是「每层一行」，对齐的是 y；列对齐只对横向树有意义。
+    columns: alignSiblings && structure !== 'org-chart' ? buildColumns(root, spacing) : null,
+  };
 
   if (structure === 'org-chart') {
     layoutVertical(root, ctx);
@@ -265,10 +312,23 @@ function placeSide(
   }
 }
 
-function placeSubtreeH(node: MeasuredNode, side: Side, anchorX: number, top: number, ctx: Ctx): void {
+function placeSubtreeH(
+  node: MeasuredNode,
+  side: Side,
+  anchorX: number,
+  top: number,
+  ctx: Ctx,
+  useColumns = true,
+): void {
   const { siblingGap, levelGap } = ctx.spacing;
+  const columns = useColumns ? ctx.columns : null;
   // anchorX 是该层节点靠向根的那条边的 x 坐标。
-  const x = side === 'left' ? anchorX - node.size.width : anchorX;
+  const naturalX = side === 'left' ? anchorX - node.size.width : anchorX;
+  const x = columns
+    ? side === 'left'
+      ? (columns.left.get(node.depth) ?? naturalX) - node.size.width
+      : (columns.right.get(node.depth) ?? naturalX)
+    : naturalX;
   // 节点在自己的垂直带里居中：带高由子节点撑起来时，父节点落在中间，
   // 视觉上连线才不会全挤在一侧。
   const y = top + (node.subtreeHeight - node.size.height) / 2;
@@ -286,7 +346,7 @@ function placeSubtreeH(node: MeasuredNode, side: Side, anchorX: number, top: num
   const childrenTotal = totalHeight(node.children, siblingGap);
   let cursor = top + (node.subtreeHeight - childrenTotal) / 2;
   for (const child of node.children) {
-    placeSubtreeH(child, side, childAnchorX, cursor, ctx);
+    placeSubtreeH(child, side, childAnchorX, cursor, ctx, useColumns);
 
     const childBox = ctx.out.boxes.get(child.topic.id);
     if (childBox) ctx.out.edges.push(makeEdgeH(box, childBox, child.style, side, ctx));
@@ -458,7 +518,9 @@ function placeFloating(sheet: Sheet, theme: Theme, measure: MeasureFn, ctx: Ctx)
       isSummary: false,
     });
     subtreeHeightOf(measured, siblingGap);
-    placeSubtreeH(measured, 'right', minX, cursor, ctx);
+    // 自由主题不参与列对齐：它们的起点是整棵树的左边界，套用主树的列坐标
+    // 会被拽到树中间去。
+    placeSubtreeH(measured, 'right', minX, cursor, ctx, false);
     cursor += measured.subtreeHeight + siblingGap;
   }
 }

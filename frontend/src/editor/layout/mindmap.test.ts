@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { layoutMindmap } from './mindmap';
 import { docWithTree, topic } from '../test-utils';
-import { defaultTheme } from '../model/create';
+import { createDocument, createSheet, defaultTheme } from '../model/create';
 import type { NodeBox } from './types';
 import type { Topic } from '../model/types';
 
@@ -195,5 +195,80 @@ describe('性能基线', () => {
     expect(elapsed).toBeLessThan(1500);
     // 顺带确认没有退化成 O(n²)：1000 节点的布局在开发机上通常是几毫秒。
     expect(elapsed).toBeLessThan(500);
+  });
+});
+
+describe('布局开关', () => {
+  /** 宽度随标题长度变化，才能看出「列对齐」到底对齐了什么。 */
+  const variableMeasure = (t: Topic) => ({
+    width: 60 + t.title.length * 24,
+    height: 40,
+    lines: [t.title],
+  });
+
+  /** 单向树：两个一级分支都在右侧，且宽度不同。 */
+  function rightTree(
+    options: Parameters<typeof layoutMindmap>[0]['options'] = {},
+    measure = variableMeasure,
+  ) {
+    const doc = createDocument({ title: 't' });
+    doc.sheets = [
+      {
+        ...createSheet({ id: 'sh', structure: 'logic-right' }),
+        rootTopic: topic('root', '中心主题', [
+          topic('a', '很长的分支标题', [topic('a1', 'A1')]),
+          topic('b', 'B', [topic('b1', 'B1')]),
+        ]),
+        floatingTopics: [],
+      },
+    ];
+    return layoutMindmap({ sheet: doc.sheets[0]!, theme: defaultTheme(), measure, options });
+  }
+
+  it('紧凑型把同级与父子间距都压小', () => {
+    const normal = layout({ compact: false });
+    const compact = layout({ compact: true });
+    expect(compact.bounds.width).toBeLessThan(normal.bounds.width);
+    expect(compact.bounds.height).toBeLessThan(normal.bounds.height);
+  });
+
+  it('关闭自动平衡后一级分支全在右侧', () => {
+    const result = layout({ autoBalance: false });
+    expect(box(result, 'a').side).toBe('right');
+    expect(box(result, 'b').side).toBe('right');
+    expect(box(result, 'b').x).toBeGreaterThan(box(result, 'root').x);
+  });
+
+  it('同级对齐让同深度节点落在同一列', () => {
+    const loose = rightTree();
+    expect(box(loose, 'a1').x).not.toBe(box(loose, 'b1').x);
+
+    const aligned = rightTree({ alignSiblings: true });
+    expect(box(aligned, 'a').x).toBe(box(aligned, 'b').x);
+    expect(box(aligned, 'a1').x).toBe(box(aligned, 'b1').x);
+    // 对齐的是列，不是 y：同层节点仍然各自占自己的垂直位置。
+    expect(box(aligned, 'a1').y).not.toBe(box(aligned, 'b1').y);
+  });
+
+  it('同级对齐不影响自由主题的位置', () => {
+    const plain = layout({ alignSiblings: false });
+    const aligned = layout({ alignSiblings: true });
+    const offset = (result: ReturnType<typeof layout>) => box(result, 'f1').x - box(result, 'root').x;
+    expect(offset(aligned)).toBe(offset(plain));
+  });
+
+  it('纵向树忽略列对齐（它对齐的是行）', () => {
+    const doc = docWithTree();
+    doc.sheets[0]!.structure = 'org-chart';
+    const plain = layoutMindmap({ sheet: doc.sheets[0]!, theme: defaultTheme(), measure: stubMeasure });
+    const aligned = layoutMindmap({
+      sheet: doc.sheets[0]!,
+      theme: defaultTheme(),
+      measure: stubMeasure,
+      options: { alignSiblings: true },
+    });
+    expect([...aligned.boxes.entries()].map(([id, b]) => [id, b.x, b.y])).toEqual(
+      [...plain.boxes.entries()].map(([id, b]) => [id, b.x, b.y]),
+    );
   });
 });

@@ -10,12 +10,22 @@ import { findTopic } from '../model/traverse';
 import type { Style, Theme } from '../model/types';
 import { defineCommand, type EditorCommand } from './types';
 
-/** 批量改样式。`null` 值表示「清空该字段、回到继承」。 */
+/**
+ * 批量改样式。
+ *
+ * - `null`：该字段的显式值就是「无」（例如 `fill: null` = 无填充）。
+ * - `undefined`：**把字段从 `topic.style` 里删掉**，回到继承主题。
+ *
+ * 两种「空」必须分开：`null` 是用户表达过的意图（我不要填充），`undefined`
+ * 是「我没意见，听主题的」。合成一个就没法表达「恢复默认颜色」，而换配色
+ * 方案时这个区别决定了节点跟不跟着变。
+ */
 export function updateStyleCommand(ids: readonly string[], patch: Partial<Style>): EditorCommand {
   return defineCommand({
     type: 'style.update',
     label: ids.length > 1 ? `修改 ${ids.length} 个主题样式` : '修改样式',
     apply(draft): void {
+      const keys = Object.keys(patch) as (keyof Style)[];
       for (const id of ids) {
         const found = findTopic(draft, id);
         if (!found) continue;
@@ -23,10 +33,17 @@ export function updateStyleCommand(ids: readonly string[], patch: Partial<Style>
         // 补丁里的每个值都等于现值时**不写回**。写一个内容相同的新对象，
         // immer 仍会判定「改过了」（它比较的是引用），于是重复按同一个样式键
         // 会在历史栈里堆出一串撤销了也看不出差别的空记录。
-        const changed = (Object.keys(patch) as (keyof Style)[])
-          .some((key) => current[key] !== patch[key]);
+        const changed = keys.some((key) =>
+          patch[key] === undefined ? key in current : current[key] !== patch[key],
+        );
         if (!changed) continue;
-        found.topic.style = { ...current, ...patch };
+
+        const next = { ...current } as Record<string, unknown>;
+        for (const key of keys) {
+          if (patch[key] === undefined) delete next[key];
+          else next[key] = patch[key];
+        }
+        found.topic.style = next as Partial<Style>;
       }
     },
   });

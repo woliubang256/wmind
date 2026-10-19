@@ -35,6 +35,15 @@ import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import type { Viewport } from '@/editor/viewer/viewer-types';
 import type { StructureClass } from '@/editor/model/types';
+import type { Style, Theme } from '@/editor/model/types';
+import {
+  applyThemeCommand,
+  resetStyleCommand,
+  updateStyleCommand,
+} from '@/editor/commands/style';
+import { CanvasPanel, type PanelTab } from './panel/canvas-panel';
+import { StyleTab } from './panel/style-tab';
+import { PaletteTab } from './panel/palette-tab';
 import { useHotkeys } from '@/editor/interaction/hotkeys';
 import { isTextEntryTarget } from '@/editor/interaction/keymap';
 import { useEditorActions } from '@/editor/interaction/use-editor-actions';
@@ -187,7 +196,11 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [draft, setDraft] = useState<LocalDraft | null>(initialDraft);
   const [conflictOpen, setConflictOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelTab, setPanelTab] = useState<PanelTab>('style');
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  /** 快捷键监听挂在这里：包含画布与面板，但排除侧栏与页头之外的一切。 */
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   const autosave = useAutosave({ uid, store, enabled });
 
@@ -200,6 +213,32 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   const sheet = useMemo(() => sheetById(doc, sheetId), [doc, sheetId]);
   const layout = useMemo(() => layoutMindmap({ sheet, theme: doc.theme }), [sheet, doc.theme]);
   const selectionSet = useMemo(() => new Set(selection), [selection]);
+
+  /**
+   * 面板作用对象：有选中就用选中，没有就编辑中心主题。
+   *
+   * 「没选中时改中心主题」比「没选中时面板整个禁用」有用得多——用户打开一张
+   * 新图想先调一下中心主题，不该先学会怎么选中它。多选时批量作用，回显用第一个。
+   */
+  const panelTargets = useMemo(
+    () =>
+      (selection.length > 0 ? selection : [sheet.rootTopic.id]).filter((id) => layout.styles.has(id)),
+    [selection, sheet.rootTopic.id, layout],
+  );
+  const panelStyle = panelTargets.length > 0 ? (layout.styles.get(panelTargets[0]!) ?? null) : null;
+
+  const patchStyle = useCallback(
+    (patch: Partial<Style>) => {
+      if (panelTargets.length === 0) return;
+      store.getState().dispatch(updateStyleCommand(panelTargets, patch));
+    },
+    [panelTargets, store],
+  );
+
+  const applyTheme = useCallback(
+    (theme: Theme) => store.getState().dispatch(applyThemeCommand(theme)),
+    [store],
+  );
 
   const fit = useCallback(() => {
     const element = canvasRef.current;
@@ -315,7 +354,7 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
 
   // 编辑态整张键位表都关掉：输入框自己处理 Esc / Enter / Shift+Enter / Tab，
   // 导图再插手就会把用户的换行吞成「新建主题」。
-  useHotkeys(canvasRef, actions, { enabled: !preview && editingId === null });
+  useHotkeys(rootRef, actions, { enabled: !preview && editingId === null });
 
   /**
    * 挂载后把焦点放到画布上。
@@ -348,7 +387,10 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   };
 
   return (
-    <div className="flex h-[calc(100svh-9.5rem)] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card">
+    <div
+      ref={rootRef}
+      className="flex h-[calc(100svh-9.5rem)] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card"
+    >
       <header className="flex flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2">
         <Link
           to="/"
@@ -457,6 +499,18 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
           </select>
         ) : null}
 
+        {!preview ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={panelOpen ? t('editor.panel.hide') : t('editor.panel.show')}
+            aria-pressed={panelOpen}
+            onClick={() => setPanelOpen((value) => !value)}
+          >
+            <Icon name="settings" className="size-4" />
+          </Button>
+        ) : null}
+
         <Button
           variant={preview ? 'default' : 'outline'}
           size="sm"
@@ -489,53 +543,92 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
         不会被导图截走。`outline-none` 是因为焦点环画在一个铺满屏幕的
         元素上非常难看——替代的可视反馈是选中节点的描边。
       */}
-      <div
-        ref={canvasRef}
-        tabIndex={0}
-        onPointerDownCapture={(event) => {
-          if (isTextEntryTarget(event.target)) return;
-          canvasRef.current?.focus({ preventScroll: true });
-        }}
-        className="relative min-h-0 flex-1 outline-none"
-      >
-        <MindMapViewer
-          sheet={sheet}
-          theme={doc.theme}
-          layout={layout}
-          plugins={preview ? READ_ONLY_PLUGINS : EDITOR_PLUGINS}
-          readOnly={preview}
-          viewport={viewport}
-          onViewportChange={setViewport}
-          selection={selectionSet}
-          editingId={preview ? null : editingId}
-          ariaLabel={doc.title}
-          onSelectionChange={(ids) => store.getState().select(ids)}
-          onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
-          onBeginEdit={(id) => store.getState().setEditing(id)}
-          onCancelEdit={() => {
-            store.getState().setEditing(null);
+      <div className="flex min-h-0 flex-1">
+        <div
+          ref={canvasRef}
+          tabIndex={0}
+          onPointerDownCapture={(event) => {
+            if (isTextEntryTarget(event.target)) return;
             canvasRef.current?.focus({ preventScroll: true });
           }}
-          onCommitTitle={(id, title, options) => {
-            // 根主题的标题就是导图标题：走 changeTitleCommand 让两个字段一起变，
-            // 否则页头写着「未命名导图」而中心主题写着别的，看起来像保存串了。
-            store
-              .getState()
-              .dispatch(id === sheet.rootTopic.id ? changeTitleCommand(title) : renameTopicCommand(id, title));
-            store.getState().setEditing(null);
-            // 键盘提交后输入框卸载，焦点会掉到 body 上，键盘导航就断了。
-            // 失焦提交（点了别处）不能抢焦点，否则那次点击等于没生效。
-            if (options?.restoreFocus) canvasRef.current?.focus({ preventScroll: true });
-            // 编辑中按 Tab：先落字，再在这个节点下新建子主题并继续编辑。
-            if (options?.addChild) store.getState().dispatch(addChildCommand(id));
-          }}
-          onMoveTopics={(ids, parentId, index) => {
-            store.getState().dispatch(moveTopicsCommand(ids, parentId, index));
-          }}
-          onDetachTopics={(ids) => {
-            store.getState().dispatch(detachTopicsCommand(ids));
-          }}
-        />
+          className="relative min-h-0 flex-1 outline-none"
+        >
+          <MindMapViewer
+            sheet={sheet}
+            theme={doc.theme}
+            layout={layout}
+            plugins={preview ? READ_ONLY_PLUGINS : EDITOR_PLUGINS}
+            readOnly={preview}
+            viewport={viewport}
+            onViewportChange={setViewport}
+            selection={selectionSet}
+            editingId={preview ? null : editingId}
+            ariaLabel={doc.title}
+            onSelectionChange={(ids) => store.getState().select(ids)}
+            onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
+            onBeginEdit={(id) => store.getState().setEditing(id)}
+            onCancelEdit={() => {
+              store.getState().setEditing(null);
+              canvasRef.current?.focus({ preventScroll: true });
+            }}
+            onCommitTitle={(id, title, options) => {
+              // 根主题的标题就是导图标题：走 changeTitleCommand 让两个字段一起变，
+              // 否则页头写着「未命名导图」而中心主题写着别的，看起来像保存串了。
+              store
+                .getState()
+                .dispatch(id === sheet.rootTopic.id ? changeTitleCommand(title) : renameTopicCommand(id, title));
+              store.getState().setEditing(null);
+              // 键盘提交后输入框卸载，焦点会掉到 body 上，键盘导航就断了。
+              // 失焦提交（点了别处）不能抢焦点，否则那次点击等于没生效。
+              if (options?.restoreFocus) canvasRef.current?.focus({ preventScroll: true });
+              // 编辑中按 Tab：先落字，再在这个节点下新建子主题并继续编辑。
+              if (options?.addChild) store.getState().dispatch(addChildCommand(id));
+            }}
+            onMoveTopics={(ids, parentId, index) => {
+              store.getState().dispatch(moveTopicsCommand(ids, parentId, index));
+            }}
+            onDetachTopics={(ids) => {
+              store.getState().dispatch(detachTopicsCommand(ids));
+            }}
+          />
+        </div>
+
+        {/*
+          只读预览不挂面板：验收标准 8 要求页面上不存在可编辑元素，
+          面板里全是可编辑控件，留在 DOM 里就算视觉上藏起来也算存在。
+        */}
+        {!preview && panelOpen ? (
+          <CanvasPanel
+            tab={panelTab}
+            onTab={setPanelTab}
+            onClose={() => setPanelOpen(false)}
+            label={t('editor.panel.label')}
+            tabLabel={(key) => t(key)}
+          >
+            {panelTab === 'style' && panelStyle ? (
+              <StyleTab
+                targets={panelTargets}
+                style={panelStyle}
+                theme={doc.theme}
+                structure={sheet.structure}
+                onPatch={patchStyle}
+                onStructure={(next) => store.getState().dispatch(changeStructureCommand(next))}
+                onReset={() => store.getState().dispatch(resetStyleCommand(panelTargets))}
+              />
+            ) : null}
+            {panelTab === 'palette' ? <PaletteTab theme={doc.theme} onChange={applyTheme} /> : null}
+            {panelTab === 'speaker' ? (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-foreground">
+                  {t('editor.panel.speaker.title')}
+                </span>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {t('editor.panel.speaker.body')}
+                </p>
+              </div>
+            ) : null}
+          </CanvasPanel>
+        ) : null}
       </div>
 
       <footer className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-1.5 text-xs text-muted-foreground">
