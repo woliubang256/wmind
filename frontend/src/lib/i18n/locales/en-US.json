@@ -115,6 +115,7 @@
     "previewHint": "Read-only preview: no editing plugins are mounted",
     "readOnly": "Read-only",
     "loading": "Opening map…",
+    "loadingFonts": "Loading fonts…",
     "loadError.title": "Could not open this map",
     "loadError.body": "This is usually a network problem. Unsaved edits are kept locally and saved once the connection is back.",
     "loadError.retry": "Reload",

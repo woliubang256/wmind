@@ -111,6 +111,18 @@ export function setMeasureBackend(next: MeasureBackend | null): void {
   lineCache.clear();
 }
 
+/**
+ * 清空测量缓存。
+ *
+ * 缓存键里只有 `family|size|weight|italic`，**没有**「这族的字体文件到了没有」。
+ * 所以字体分片到齐后必须清一次：在此之前量到的宽度用的是回退字体，留着就会
+ * 让节点宽度永久偏几像素——这正是 ADR-016 要防的那类错误，只是从「首帧」挪到了
+ * 「中途换字体」。见 `features/editor/use-fonts-ready.ts`。
+ */
+export function clearMeasureCache(): void {
+  lineCache.clear();
+}
+
 // ---------------------------------------------------------------------------
 // 缓存
 // ---------------------------------------------------------------------------

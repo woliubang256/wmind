@@ -71,6 +71,10 @@ jobs:
       - name: Check palette contrast
         run: npm run check:palette
 
+      # 缺分片不报错、只显示方框，必须在构建期挡住（ADR-016）。
+      - name: Check font shards
+        run: npm run check:fonts
+
       - name: Verify dialect boundaries
         working-directory: backend
         run: go run ./cmd/dialectcheck .

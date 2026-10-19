@@ -20,6 +20,21 @@ export interface FontDefinition {
   stack: string;
   /** 是否随应用分发字体文件（决定首屏是否需要等 `document.fonts.load`）。 */
   bundled: boolean;
+  /**
+   * 该族的 `@font-face` 样式表地址；不随包分发的族为 null。
+   *
+   * 每族一份（`scripts/fetch-fonts.mjs` 生成），由 `ensureFonts()` 按需注入，
+   * 不在 index.html 里用 `<link>`——sans.css 是 514 KB（gzip 156 KB），
+   * 阻塞渲染等于首屏白屏。详见 `font-load.ts` 的注释。
+   */
+  cssPath: string | null;
+  /**
+   * 随包分发的字重。空数组表示该族没有分片（`bundled: false`）。
+   *
+   * 必须与 `scripts/fetch-fonts.mjs` 的 `FAMILIES[].weights` 一致——
+   * `scripts/check-fonts.mjs` 会解析本文件并逐项核对，改一处不改另一处会红。
+   */
+  weights: number[];
 }
 
 export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
@@ -28,24 +43,33 @@ export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
     label: '思源黑体',
     stack: "'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif",
     bundled: true,
+    cssPath: '/fonts/sans.css',
+    // 与样式面板的字重下拉对齐：300 细 / 400 常规 / 600 中粗 / 700 粗 / 800 特粗。
+    weights: [300, 400, 600, 700, 800],
   },
   system: {
     id: 'system',
     label: '跟随系统',
     stack: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
     bundled: false,
+    cssPath: null,
+    weights: [],
   },
   serif: {
     id: 'serif',
     label: '思源宋体',
     stack: "'Noto Serif SC', 'Songti SC', SimSun, Georgia, serif",
     bundled: true,
+    cssPath: '/fonts/serif.css',
+    weights: [400, 700],
   },
   mono: {
     id: 'mono',
     label: '等宽',
     stack: "'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
     bundled: true,
+    cssPath: '/fonts/mono.css',
+    weights: [400, 700],
   },
 };
 

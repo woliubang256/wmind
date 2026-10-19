@@ -30,6 +30,7 @@ import { countNodes, sheetById } from '@/editor/model/traverse';
 import { createEditorStore } from '@/editor/store/editor-store';
 import { EditorProvider, useEditor, useEditorStoreApi } from '@/editor/store/use-editor';
 import { layoutMindmap } from '@/editor/layout/mindmap';
+import type { LayoutResult } from '@/editor/layout/types';
 import { MIN_ZOOM, zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
 import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
@@ -63,6 +64,7 @@ import { useAutosave, pickDraftToRestore } from './persistence/use-autosave';
 import { clearDraft, pruneDrafts, type LocalDraft } from './persistence/local-draft';
 import { ConflictDialog, LeaveDialog } from './persistence/dialogs';
 import { SaveIndicator } from './persistence/save-indicator';
+import { useFontsReady } from './use-fonts-ready';
 
 export function EditorPage() {
   const { uid = '' } = useParams();
@@ -108,11 +110,8 @@ function RemoteEditor({ uid }: { uid: string }) {
 
   if (query.isPending) {
     return (
-      <div className="grid h-[calc(100svh-9.5rem)] min-h-[420px] place-items-center rounded-2xl border border-border/70 bg-card">
-        <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
-          <span className="size-6 animate-spin rounded-full border-2 border-border border-t-primary" />
-          {t('editor.loading')}
-        </div>
+      <div className="h-[calc(100svh-9.5rem)] min-h-[420px] overflow-hidden rounded-2xl border border-border/70">
+        <EditorSkeleton label={t('editor.loading')} />
       </div>
     );
   }
@@ -168,6 +167,38 @@ function LoadedEditor({ detail }: { detail: MapDetail }) {
   );
 }
 
+/**
+ * 等字体期间的占位布局。
+ *
+ * 不能「先按回退字体算一遍、字体到了再重算」：测量缓存以 `字体标识符+文本` 为键，
+ * 回退字体量出来的宽度会被永久缓存（`layout/measure.ts`），之后重排也拿不到正确
+ * 值。所以字体就绪前**根本不进布局**，先用一个空结果占位。
+ */
+const PENDING_LAYOUT: LayoutResult = {
+  boxes: new Map(),
+  edges: [],
+  sizes: new Map(),
+  styles: new Map(),
+  bounds: { x: 0, y: 0, width: 1, height: 1 },
+};
+
+/**
+ * 骨架屏：等文档、等字体共用。
+ *
+ * `flex-1` 是必需的：等字体时它是 `flex` 行的子元素，不拉伸就只有内容那么宽，
+ * 加载指示器会贴在画布左边缘而不是居中。
+ */
+function EditorSkeleton({ label }: { label: string }) {
+  return (
+    <div className="grid h-full min-h-0 flex-1 place-items-center bg-card">
+      <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
+        <span className="size-6 animate-spin rounded-full border-2 border-border border-t-primary" />
+        {label}
+      </div>
+    </div>
+  );
+}
+
 /** 工具栏里可选的结构。八种都有真实几何，不再有「选了会退回 mindmap」的坑。 */
 const STRUCTURES: StructureClass[] = [
   'mindmap',
@@ -218,7 +249,14 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   }, [autosave.conflict]);
 
   const sheet = useMemo(() => sheetById(doc, sheetId), [doc, sheetId]);
-  const layout = useMemo(() => layoutMindmap({ sheet, theme: doc.theme }), [sheet, doc.theme]);
+  // 字体就绪之前不进布局（见 PENDING_LAYOUT 的注释）。
+  const fonts = useFontsReady(doc);
+  const layout = useMemo(
+    () => (fonts.ready ? layoutMindmap({ sheet, theme: doc.theme }) : PENDING_LAYOUT),
+    // generation 参与依赖：换字体族后分片才到齐，得重算一次，否则一直用回退字体
+    // 量出来的宽度（见 use-fonts-ready.ts）。
+    [sheet, doc.theme, fonts.ready, fonts.generation],
+  );
   const selectionSet = useMemo(() => new Set(selection), [selection]);
 
   /**
@@ -265,6 +303,8 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   // 依赖数组——否则每敲一个字都会重新适配一次，用户手动缩放的位置会被抢走。
   const fitRef = useRef(fit);
   fitRef.current = fit;
+  // 依赖 fonts.ready：骨架屏期间 canvasRef 还是 null，只在挂载时跑一次的话，
+  // 字体就绪、画布真正挂上之后就没人观察容器尺寸了。
   useEffect(() => {
     const element = canvasRef.current;
     if (!element) return undefined;
@@ -272,7 +312,7 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
     const observer = new ResizeObserver(() => fitRef.current());
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [fonts.ready]);
 
   /**
    * 切换结构后重新适配视野。
@@ -373,9 +413,9 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
    * 只读模式不抢焦点：分享页里把焦点从链接上抢走会让屏幕阅读器丢失阅读位置。
    */
   useEffect(() => {
-    if (preview) return;
+    if (preview || !fonts.ready) return;
     canvasRef.current?.focus({ preventScroll: true });
-  }, [preview]);
+  }, [preview, fonts.ready]);
 
   const activeId = selection[0] ?? sheet.rootTopic.id;
 
@@ -551,93 +591,99 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
         元素上非常难看——替代的可视反馈是选中节点的描边。
       */}
       <div className="flex min-h-0 flex-1">
-        <div
-          ref={canvasRef}
-          tabIndex={0}
-          onPointerDownCapture={(event) => {
-            if (isTextEntryTarget(event.target)) return;
-            canvasRef.current?.focus({ preventScroll: true });
-          }}
-          className="relative min-h-0 flex-1 outline-none"
-        >
-          <MindMapViewer
-            sheet={sheet}
-            theme={doc.theme}
-            layout={layout}
-            plugins={preview ? READ_ONLY_PLUGINS : EDITOR_PLUGINS}
-            readOnly={preview}
-            viewport={viewport}
-            onViewportChange={setViewport}
-            selection={selectionSet}
-            editingId={preview ? null : editingId}
-            ariaLabel={doc.title}
-            onSelectionChange={(ids) => store.getState().select(ids)}
-            onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
-            onBeginEdit={(id) => store.getState().setEditing(id)}
-            onCancelEdit={() => {
-              store.getState().setEditing(null);
-              canvasRef.current?.focus({ preventScroll: true });
-            }}
-            onCommitTitle={(id, title, options) => {
-              // 根主题的标题就是导图标题：走 changeTitleCommand 让两个字段一起变，
-              // 否则页头写着「未命名导图」而中心主题写着别的，看起来像保存串了。
-              store
-                .getState()
-                .dispatch(id === sheet.rootTopic.id ? changeTitleCommand(title) : renameTopicCommand(id, title));
-              store.getState().setEditing(null);
-              // 键盘提交后输入框卸载，焦点会掉到 body 上，键盘导航就断了。
-              // 失焦提交（点了别处）不能抢焦点，否则那次点击等于没生效。
-              if (options?.restoreFocus) canvasRef.current?.focus({ preventScroll: true });
-              // 编辑中按 Tab：先落字，再在这个节点下新建子主题并继续编辑。
-              if (options?.addChild) store.getState().dispatch(addChildCommand(id));
-            }}
-            onMoveTopics={(ids, parentId, index) => {
-              store.getState().dispatch(moveTopicsCommand(ids, parentId, index));
-            }}
-            onDetachTopics={(ids) => {
-              store.getState().dispatch(detachTopicsCommand(ids));
-            }}
-          />
-        </div>
-
-        {/*
-          只读预览不挂面板：验收标准 8 要求页面上不存在可编辑元素，
-          面板里全是可编辑控件，留在 DOM 里就算视觉上藏起来也算存在。
-        */}
-        {!preview && panelOpen ? (
-          <CanvasPanel
-            tab={panelTab}
-            onTab={setPanelTab}
-            onClose={() => setPanelOpen(false)}
-            label={t('editor.panel.label')}
-            tabLabel={(key) => t(key)}
-          >
-            {panelTab === 'style' && panelStyle ? (
-              <StyleTab
-                targets={panelTargets}
-                style={panelStyle}
+        {fonts.ready ? (
+          <>
+            <div
+              ref={canvasRef}
+              tabIndex={0}
+              onPointerDownCapture={(event) => {
+                if (isTextEntryTarget(event.target)) return;
+                canvasRef.current?.focus({ preventScroll: true });
+              }}
+              className="relative min-h-0 flex-1 outline-none"
+            >
+              <MindMapViewer
+                sheet={sheet}
                 theme={doc.theme}
-                structure={sheet.structure}
-                onPatch={patchStyle}
-                onStructure={(next) => store.getState().dispatch(changeStructureCommand(next))}
-                onReset={() => store.getState().dispatch(resetStyleCommand(panelTargets))}
+                layout={layout}
+                plugins={preview ? READ_ONLY_PLUGINS : EDITOR_PLUGINS}
+                readOnly={preview}
+                viewport={viewport}
+                onViewportChange={setViewport}
+                selection={selectionSet}
+                editingId={preview ? null : editingId}
+                ariaLabel={doc.title}
+                onSelectionChange={(ids) => store.getState().select(ids)}
+                onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
+                onBeginEdit={(id) => store.getState().setEditing(id)}
+                onCancelEdit={() => {
+                  store.getState().setEditing(null);
+                  canvasRef.current?.focus({ preventScroll: true });
+                }}
+                onCommitTitle={(id, title, options) => {
+                  // 根主题的标题就是导图标题：走 changeTitleCommand 让两个字段一起变，
+                  // 否则页头写着「未命名导图」而中心主题写着别的，看起来像保存串了。
+                  store
+                    .getState()
+                    .dispatch(id === sheet.rootTopic.id ? changeTitleCommand(title) : renameTopicCommand(id, title));
+                  store.getState().setEditing(null);
+                  // 键盘提交后输入框卸载，焦点会掉到 body 上，键盘导航就断了。
+                  // 失焦提交（点了别处）不能抢焦点，否则那次点击等于没生效。
+                  if (options?.restoreFocus) canvasRef.current?.focus({ preventScroll: true });
+                  // 编辑中按 Tab：先落字，再在这个节点下新建子主题并继续编辑。
+                  if (options?.addChild) store.getState().dispatch(addChildCommand(id));
+                }}
+                onMoveTopics={(ids, parentId, index) => {
+                  store.getState().dispatch(moveTopicsCommand(ids, parentId, index));
+                }}
+                onDetachTopics={(ids) => {
+                  store.getState().dispatch(detachTopicsCommand(ids));
+                }}
               />
+            </div>
+
+            {/*
+              只读预览不挂面板：验收标准 8 要求页面上不存在可编辑元素，
+              面板里全是可编辑控件，留在 DOM 里就算视觉上藏起来也算存在。
+            */}
+            {!preview && panelOpen ? (
+              <CanvasPanel
+                tab={panelTab}
+                onTab={setPanelTab}
+                onClose={() => setPanelOpen(false)}
+                label={t('editor.panel.label')}
+                tabLabel={(key) => t(key)}
+              >
+                {panelTab === 'style' && panelStyle ? (
+                  <StyleTab
+                    targets={panelTargets}
+                    style={panelStyle}
+                    theme={doc.theme}
+                    structure={sheet.structure}
+                    onPatch={patchStyle}
+                    onStructure={(next) => store.getState().dispatch(changeStructureCommand(next))}
+                    onReset={() => store.getState().dispatch(resetStyleCommand(panelTargets))}
+                  />
+                ) : null}
+                {panelTab === 'palette' ? (
+                  <PaletteTab theme={doc.theme} onChange={applyTheme} canPersist={enabled} />
+                ) : null}
+                {panelTab === 'speaker' ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-semibold text-foreground">
+                      {t('editor.panel.speaker.title')}
+                    </span>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      {t('editor.panel.speaker.body')}
+                    </p>
+                  </div>
+                ) : null}
+              </CanvasPanel>
             ) : null}
-            {panelTab === 'palette' ? (
-              <PaletteTab theme={doc.theme} onChange={applyTheme} canPersist={enabled} />
-            ) : null}
-            {panelTab === 'speaker' ? (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-semibold text-foreground">
-                  {t('editor.panel.speaker.title')}
-                </span>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  {t('editor.panel.speaker.body')}
-                </p>
-              </div>
-            ) : null}
-          </CanvasPanel>
-        ) : null}
+          </>
+        ) : (
+          <EditorSkeleton label={t('editor.loadingFonts')} />
+        )}
       </div>
 
       <footer className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-1.5 text-xs text-muted-foreground">

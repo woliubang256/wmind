@@ -115,6 +115,7 @@
     "previewHint": "只读预览：没有编辑插件，页面上不存在可编辑元素",
     "readOnly": "只读",
     "loading": "正在打开导图…",
+    "loadingFonts": "正在加载字体…",
     "loadError.title": "导图打开失败",
     "loadError.body": "可能是网络问题。你的修改如果还没保存，会在恢复连接后自动补存。",
     "loadError.retry": "重新加载",

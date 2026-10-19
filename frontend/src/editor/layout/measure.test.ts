@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  clearMeasureCache,
   defaultBackend,
   measureText,
   measureTopic,
@@ -175,5 +176,28 @@ describe('后端选择', () => {
     setMeasureBackend(null);
     const impl = defaultBackend();
     expect(impl.widthOf('中', font)).toBeGreaterThan(impl.widthOf('a', font));
+  });
+});
+
+describe('clearMeasureCache', () => {
+  it('清空后重新量一遍（换字体族后必须作废旧宽度）', () => {
+    let calls = 0;
+    setMeasureBackend({
+      widthOf: (text, spec) => {
+        calls += 1;
+        return [...text].length * spec.size;
+      },
+    });
+
+    measureText('一二三', font, 1000);
+    const afterFirst = calls;
+    measureText('一二三', font, 1000);
+    // 同样的文本 + 同样的字体规格 → 命中缓存，不再调后端。
+    expect(calls).toBe(afterFirst);
+
+    // 字体分片到齐后调用：缓存里存的是回退字体的宽度，必须作废。
+    clearMeasureCache();
+    measureText('一二三', font, 1000);
+    expect(calls).toBeGreaterThan(afterFirst);
   });
 });

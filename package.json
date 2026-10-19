@@ -14,6 +14,8 @@
     "verify-archived": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/verify-archived-agent-notes.ts",
     "verify-notes": "npm run verify-agent-note-tree && npm run verify-agent-note-format && npm run verify-archived",
     "check:palette": "node scripts/check-palette-contrast.mjs",
+    "check:fonts": "node scripts/check-fonts.mjs",
+    "fonts:fetch": "node scripts/fetch-fonts.mjs",
     "archive-agent-note": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/archive-agent-note.ts",
     "check-anchors": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/check-note-anchors.ts",
     "init-board": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/build-board.ts --init board.html \"wmind 决策看板\""
