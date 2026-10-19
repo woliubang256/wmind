@@ -317,6 +317,20 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   // 导图再插手就会把用户的换行吞成「新建主题」。
   useHotkeys(canvasRef, actions, { enabled: !preview && editingId === null });
 
+  /**
+   * 挂载后把焦点放到画布上。
+   *
+   * 验收标准 1 要求「全程不碰鼠标」。焦点如果停在 body 上，第一颗 Tab 会去
+   * 页头按钮，用户得连按若干次才能开始编辑——键盘用户第一步就卡住了。
+   * 打开即聚焦，刷新之后 ⌘+Z 这类快捷键也立刻可用。
+   *
+   * 只读模式不抢焦点：分享页里把焦点从链接上抢走会让屏幕阅读器丢失阅读位置。
+   */
+  useEffect(() => {
+    if (preview) return;
+    canvasRef.current?.focus({ preventScroll: true });
+  }, [preview]);
+
   const activeId = selection[0] ?? sheet.rootTopic.id;
 
   const restoreDraft = () => {

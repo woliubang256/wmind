@@ -11,6 +11,13 @@ describe('resolveKey', () => {
     expect(resolveKey({ key: 'Backspace' })).toBe('topic.delete');
   });
 
+  it('折叠 / 展开用 ⌘+. ，空格留给「按住平移」', () => {
+    expect(resolveKey({ key: '.', ctrlKey: true })).toBe('topic.toggle-collapse');
+    expect(resolveKey({ key: '.', metaKey: true })).toBe('topic.toggle-collapse');
+    // 空格在 pan-zoom 插件里是「按住拖动平移」，不能被折叠抢走。
+    expect(resolveKey({ key: ' ' })).toBeNull();
+  });
+
   it('方向键是几何邻接', () => {
     expect(resolveKey({ key: 'ArrowLeft' })).toBe('nav.left');
     expect(resolveKey({ key: 'ArrowRight' })).toBe('nav.right');
@@ -48,6 +55,15 @@ describe('resolveKey', () => {
     expect(resolveKey({ key: '1', ctrlKey: true })).toBe('view.fit');
   });
 
+  it('加粗与循环变色', () => {
+    expect(resolveKey({ key: 'b', ctrlKey: true })).toBe('style.bold');
+    expect(resolveKey({ key: 'B', metaKey: true, shiftKey: true })).toBe('style.bold');
+    expect(resolveKey({ key: 'h', ctrlKey: true, shiftKey: true })).toBe('style.cycle-fill');
+    // ⌘+H 是 macOS 的「隐藏应用」，不带 Shift 一律不拦。
+    expect(resolveKey({ key: 'h', metaKey: true })).toBeNull();
+    expect(resolveKey({ key: 'h', ctrlKey: true })).toBeNull();
+  });
+
   it('Alt 组合一律不拦截（留给系统）', () => {
     expect(resolveKey({ key: 'ArrowLeft', altKey: true })).toBeNull();
     expect(resolveKey({ key: 'z', ctrlKey: true, altKey: true })).toBeNull();
@@ -56,7 +72,6 @@ describe('resolveKey', () => {
   it('不认识或不该抢的组合返回 null', () => {
     expect(resolveKey({ key: 'r', ctrlKey: true })).toBeNull(); // 浏览器刷新
     expect(resolveKey({ key: 'q' })).toBeNull();
-    expect(resolveKey({ key: ' ' })).toBeNull();
     expect(resolveKey({ key: 'Shift', shiftKey: true })).toBeNull();
   });
 });

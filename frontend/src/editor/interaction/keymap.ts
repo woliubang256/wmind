@@ -18,15 +18,23 @@
  * | F2 | 进入编辑 |
  * | Esc | 取消选中 |
  * | Delete / Backspace | 删除选中 |
+ * | Ctrl/⌘ + . | 折叠 / 展开选中节点 |
  * | ← ↑ ↓ → | 几何邻接 |
  * | Ctrl/⌘ + ← ↑ ↓ → | 父 / 上一个兄弟 / 下一个兄弟 / 第一个子节点 |
  * | Ctrl/⌘ + Z | 撤销 |
  * | Ctrl/⌘ + Shift + Z、Ctrl + Y | 重做 |
  * | Ctrl/⌘ + A | 选中同级全部 |
  * | Ctrl/⌘ + C / X / V | 复制 / 剪切 / 粘贴 |
+ * | Ctrl/⌘ + B | 加粗 / 取消加粗 |
+ * | Ctrl/⌘ + Shift + H | 循环填充色（走调色板，末位之后回到继承） |
  * | Ctrl/⌘ + S | 立即保存 |
  * | Ctrl/⌘ + 0 | 缩放复位 |
  * | Ctrl/⌘ + 1 | 缩放到适应 |
+ *
+ * 「变色」为什么是**循环**而不是取色器：M2 的验收要求「纯键盘完成加粗变色」，
+ * 而原生 `<input type="color">` 的取色面板只能点。调色板是封闭的六个颜色，
+ * 循环一遍既满足纯键盘，也顺带保住了「换主题整体生效」——写进 `topic.style`
+ * 的只是调色板里的某个色值，不改变其余字段的继承关系。
  *
  * 注意 Shift+Enter 不在这里：它只在编辑态有意义（主题内换行），由输入框
  * 自己处理。编辑态下整个表都不生效——见 `useHotkeys` 的 `enabled`。
@@ -37,6 +45,7 @@ export type EditorAction =
   | 'topic.add-sibling'
   | 'topic.edit'
   | 'topic.delete'
+  | 'topic.toggle-collapse'
   | 'select.all'
   | 'select.clear'
   | 'nav.up'
@@ -52,6 +61,8 @@ export type EditorAction =
   | 'clipboard.copy'
   | 'clipboard.cut'
   | 'clipboard.paste'
+  | 'style.bold'
+  | 'style.cycle-fill'
   | 'view.reset'
   | 'view.fit'
   | 'doc.save';
@@ -97,6 +108,14 @@ export function resolveKey(event: KeyLike): EditorAction | null {
         return 'clipboard.cut';
       case 'v':
         return 'clipboard.paste';
+      case 'b':
+        return 'style.bold';
+      // 只认带 Shift 的组合：⌘+H 在 macOS 上是「隐藏应用」，不能抢。
+      case 'h':
+        return shift ? 'style.cycle-fill' : null;
+      // 折叠 / 展开。⌘+. 在浏览器里没有任何默认行为，也不会和「按住空格平移」打架。
+      case '.':
+        return 'topic.toggle-collapse';
       case 's':
         return 'doc.save';
       case '0':
@@ -129,6 +148,9 @@ export function resolveKey(event: KeyLike): EditorAction | null {
     case 'Delete':
     case 'Backspace':
       return 'topic.delete';
+    // 折叠不用空格：空格已经被「按住空格拖动平移」占用（见 pan-zoom 插件），
+    // 一个键干两件事，用户按住空格准备平移时节点会莫名其妙收起来。
+    // 树形控件里 ←/→ 折叠展开的惯例在这里也不适用——方向键是几何导航。
     case 'ArrowLeft':
       return 'nav.left';
     case 'ArrowRight':
