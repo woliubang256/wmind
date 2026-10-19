@@ -38,6 +38,17 @@ const SHAPES: ShapeClass[] = [
 ];
 
 const FONT_SIZES = [10, 12, 13, 14, 16, 18, 20, 24, 28, 32, 40, 48];
+const STRUCTURES: StructureClass[] = [
+  'mindmap',
+  'logic-right',
+  'logic-left',
+  'tree-right',
+  'org-chart',
+  'timeline',
+  'fishbone',
+  'brace',
+  'tree-table',
+];
 const WEIGHTS = [
   { value: 300, label: '细 300' },
   { value: 400, label: '常规 400' },
@@ -97,9 +108,7 @@ export function StyleTab({
         <SelectField
           label={t('editor.panel.style.structure')}
           value={structure}
-          options={(['mindmap', 'logic-right', 'logic-left', 'tree-right', 'org-chart'] as StructureClass[]).map(
-            (value) => ({ value, label: t(`editor.structures.${value}`) }),
-          )}
+          options={STRUCTURES.map((value) => ({ value, label: t(`editor.structures.${value}`) }))}
           onChange={onStructure}
         />
       </Section>

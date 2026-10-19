@@ -10,6 +10,10 @@
 
 import type { EdgePath } from '../layout/types';
 
+/** 括号连线：横向伸出的长度与拐角半径。两个常量放在这里，渲染层自洽。 */
+const BRACE_TRUNK = 14;
+const BRACE_RADIUS = 8;
+
 /**
  * 连线路径。
  *
@@ -32,6 +36,26 @@ export function edgePath(edge: EdgePath): string {
         return `M ${from.x} ${from.y} V ${midY} H ${to.x} V ${to.y}`;
       }
       return `M ${from.x} ${from.y} H ${(from.x + to.x) / 2} V ${to.y} H ${to.x}`;
+    case 'axis':
+      // 时间轴：先沿主轴横走，再竖着落到节点上。多个子节点的横段叠起来
+      // 就是那条主轴，竖段就是每个节点的刻度。
+      if (orientation === 'v') return `M ${from.x} ${from.y} V ${to.y} H ${to.x}`;
+      return `M ${from.x} ${from.y} H ${to.x} V ${to.y}`;
+    case 'brace': {
+      // 括号：父节点先横出一小段，再在**同一个 x** 上竖直走，最后拐进子节点。
+      // 同一个父节点的所有子连线共用这个 x，合起来就是「}」。
+      const trunk = from.x + BRACE_TRUNK * (to.x >= from.x ? 1 : -1);
+      const r = Math.min(BRACE_RADIUS, Math.abs(to.y - from.y) / 2, Math.abs(to.x - from.x) / 2);
+      const up = to.y < from.y ? -1 : 1;
+      return [
+        `M ${from.x} ${from.y}`,
+        `H ${trunk - r * (to.x >= from.x ? 1 : -1)}`,
+        `Q ${trunk} ${from.y} ${trunk} ${from.y + r * up}`,
+        `V ${to.y - r * up}`,
+        `Q ${trunk} ${to.y} ${trunk + r * (to.x >= from.x ? 1 : -1)} ${to.y}`,
+        `H ${to.x}`,
+      ].join(' ');
+    }
     case 'curve':
     default:
       if (orientation === 'v') {

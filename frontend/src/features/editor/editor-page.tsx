@@ -168,11 +168,18 @@ function LoadedEditor({ detail }: { detail: MapDetail }) {
   );
 }
 
-/**
- * 工具栏里可选的结构。只列已经实现几何的四种：把 `timeline` / `fishbone`
- * 放进下拉框，用户选了会看到退回 `mindmap` 的样子，等于骗人。
- */
-const STRUCTURES: StructureClass[] = ['mindmap', 'logic-right', 'logic-left', 'tree-right', 'org-chart'];
+/** 工具栏里可选的结构。八种都有真实几何，不再有「选了会退回 mindmap」的坑。 */
+const STRUCTURES: StructureClass[] = [
+  'mindmap',
+  'logic-right',
+  'logic-left',
+  'tree-right',
+  'org-chart',
+  'timeline',
+  'fishbone',
+  'brace',
+  'tree-table',
+];
 
 interface WorkspaceProps {
   uid: string;

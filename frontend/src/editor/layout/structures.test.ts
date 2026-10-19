@@ -176,12 +176,149 @@ describe('org-chart', () => {
   });
 });
 
-describe('未实现的结构', () => {
-  it('退回 mindmap，而不是画不出来', () => {
-    const timeline = layout('timeline');
-    const mindmap = layout('mindmap');
-    for (const id of ['root', 'a', 'b']) {
-      expect(timeline.boxes.get(id)).toEqual(mindmap.boxes.get(id));
+/** 任意两个节点都不重叠。验收标准 4 的硬要求。 */
+function assertNoOverlap(result: Result): void {
+  const boxes = [...result.boxes.values()];
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const a = boxes[i]!;
+      const b = boxes[j]!;
+      const overlap =
+        a.x < b.x + b.width &&
+        b.x < a.x + a.width &&
+        a.y < b.y + b.height &&
+        b.y < a.y + a.height;
+      expect(overlap, `${a.id} 与 ${b.id} 重叠`).toBe(false);
     }
+  }
+}
+
+describe('timeline', () => {
+  it('一级分支全部在根节点右侧', () => {
+    const result = layout('timeline');
+    const root = box(result, 'root');
+    for (const id of ['a', 'b']) {
+      expect(box(result, id).x).toBeGreaterThan(root.x + root.width);
+    }
+  });
+
+  it('一级分支上下交替', () => {
+    const result = layout('timeline');
+    const rootCenter = center(box(result, 'root'));
+    expect(center(box(result, 'a')).y).toBeGreaterThan(rootCenter.y);
+    expect(center(box(result, 'b')).y).toBeLessThan(rootCenter.y);
+  });
+
+  it('根到分支的连线是 axis（横段叠成主轴、竖段当刻度）', () => {
+    const result = layout('timeline');
+    const spokes = result.edges.filter((edge) => edge.parentId === 'root');
+    expect(spokes).toHaveLength(2);
+    for (const edge of spokes) expect(edge.lineStyle).toBe('axis');
+  });
+
+  it('后代朝远离主轴的方向堆叠', () => {
+    const result = layout('timeline');
+    // a 在下方，它的子节点应该更靠下
+    expect(center(box(result, 'a1')).y).toBeGreaterThan(center(box(result, 'a')).y);
+    // b 在上方，它的子节点应该更靠上
+    expect(center(box(result, 'b1')).y).toBeLessThan(center(box(result, 'b')).y);
+  });
+
+  it('没有节点重叠', () => {
+    assertNoOverlap(layout('timeline'));
+  });
+});
+
+describe('fishbone', () => {
+  it('鱼头在右：一级分支都在根节点左侧', () => {
+    const result = layout('fishbone');
+    const root = box(result, 'root');
+    for (const id of ['a', 'b']) {
+      expect(box(result, id).x + box(result, id).width).toBeLessThan(root.x);
+    }
+  });
+
+  it('有一条合成的主轴边，从鱼头左边缘拉到最远附着点', () => {
+    const result = layout('fishbone');
+    const spine = result.edges.find((edge) => edge.id.startsWith('spine:'));
+    expect(spine).toBeDefined();
+    expect(spine!.to.x).toBeLessThan(spine!.from.x);
+    expect(spine!.from.y).toBe(spine!.to.y);
+  });
+
+  it('主骨上下交替且是斜线', () => {
+    const result = layout('fishbone');
+    const rootCenter = center(box(result, 'root'));
+    expect(center(box(result, 'a')).y).toBeLessThan(rootCenter.y);
+    expect(center(box(result, 'b')).y).toBeGreaterThan(rootCenter.y);
+    const bones = result.edges.filter((edge) => edge.parentId === 'root' && !edge.id.startsWith('spine:'));
+    for (const bone of bones) {
+      expect(bone.lineStyle).toBe('straight');
+      expect(bone.from.y).not.toBe(bone.to.y);
+    }
+  });
+
+  it('支骨向外排，且不与主骨重叠', () => {
+    const result = layout('fishbone');
+    expect(box(result, 'a1').x).toBeLessThan(box(result, 'a').x);
+    expect(center(box(result, 'a1')).y).toBeLessThan(center(box(result, 'a')).y);
+    assertNoOverlap(result);
+  });
+});
+
+describe('brace', () => {
+  it('所有分支在右侧，连线用括号形状', () => {
+    const result = layout('brace');
+    const root = box(result, 'root');
+    for (const id of ['a', 'b', 'a1', 'b1']) {
+      expect(box(result, id).x).toBeGreaterThan(root.x + root.width);
+    }
+    for (const edge of result.edges) expect(edge.lineStyle).toBe('brace');
+  });
+
+  it('兄弟不重叠，包围盒容得下所有节点', () => {
+    const result = layout('brace');
+    assertNoOverlap(result);
+    for (const b of result.boxes.values()) {
+      expect(b.x).toBeGreaterThanOrEqual(0);
+      expect(b.y).toBeGreaterThanOrEqual(0);
+      expect(b.x + b.width).toBeLessThanOrEqual(result.bounds.width);
+      expect(b.y + b.height).toBeLessThanOrEqual(result.bounds.height);
+    }
+  });
+});
+
+describe('tree-table', () => {
+  it('同深度节点落在同一列', () => {
+    const result = layout('tree-table');
+    const byDepth = new Map<number, Set<number>>();
+    for (const b of result.boxes.values()) {
+      if (b.id.startsWith('f')) continue; // 自由主题不参与表格
+      const set = byDepth.get(b.depth) ?? new Set<number>();
+      set.add(b.x);
+      byDepth.set(b.depth, set);
+    }
+    for (const [depth, xs] of byDepth) {
+      expect(xs.size, `深度 ${depth} 出现了 ${xs.size} 个不同的 x`).toBe(1);
+    }
+  });
+
+  it('父节点垂直居中于首末子节点之间', () => {
+    const result = layout('tree-table');
+    const a = box(result, 'a');
+    const first = center(box(result, 'a1'));
+    const last = center(box(result, 'a2'));
+    expect(center(a).y).toBeCloseTo((first.y + last.y) / 2, 5);
+  });
+
+  it('连线是折线', () => {
+    const result = layout('tree-table');
+    const treeEdges = result.edges.filter((edge) => !edge.parentId.startsWith('f'));
+    expect(treeEdges.length).toBeGreaterThan(0);
+    for (const edge of treeEdges) expect(edge.lineStyle).toBe('elbow');
+  });
+
+  it('没有节点重叠', () => {
+    assertNoOverlap(layout('tree-table'));
   });
 });

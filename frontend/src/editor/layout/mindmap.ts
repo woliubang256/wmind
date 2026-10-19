@@ -1,10 +1,13 @@
 /**
  * 结构布局：文档 + 主题 → 几何。
  *
- * 支持 `mindmap`（根居中、两侧交替）、`logic-right` / `logic-left`（单向横向树）、
- * `tree-right`（同 logic-right，连线改折线）、`org-chart`（自上而下）。
- * 其余结构（timeline / fishbone / brace / tree-table）在 M2 之后实现，暂时
- * 退回 `mindmap`——画得出来总比白屏好，而且退回是显式的、只有一处。
+ * 八种结构分成三族：
+ *
+ * - **横向树**（`mindmap` / `logic-right` / `logic-left` / `tree-right` / `brace`）：
+ *   共用 `layoutHorizontal`，差别只在分侧与连线形状；
+ * - **纵向树**（`org-chart`）：横向树的转置；
+ * - **专用几何**（`timeline` / `fishbone` / `tree-table`）：主轴、鱼骨、表格，
+ *   各有一套摆放规则，见文件后半部分。
  *
  * 算法不是 d3.tree 的 Reingold–Tilford 轮廓合并，而是更朴素的
  * 「每个子树占满一条带」：横向树按高度分带，纵向树按宽度分列。
@@ -12,8 +15,7 @@
  * 带式布局则永远不会重叠，也不会因为浮点误差出现「两个节点压在一起」。
  *
  * 选择带式布局的理由：它 O(n)、可预测、出错时是「空得多了点」而不是
- * 「重叠了」；后者在导图里是致命的，前者只是不够紧凑。等 M3 有真实数据
- * 对比再考虑换成轮廓合并。
+ * 「重叠了」；后者在导图里是致命的，前者只是不够紧凑。
  */
 
 import { resolveStyle, type StyleContext } from '../theme/resolve';
@@ -21,7 +23,16 @@ import { countDescendants } from '../model/traverse';
 import type { ComputedStyle, Sheet, StructureClass, Theme, Topic } from '../model/types';
 import { measureTopic } from './measure';
 import { spacingFor, type LayoutSpacing } from './constants';
-import type { EdgePath, LayoutResult, NodeBox, Side, TopicSize } from './types';
+import type { EdgePath, EdgeShape, LayoutResult, NodeBox, Side, TopicSize } from './types';
+
+/** 共用「一层一列」几何的结构。其余结构各有各的摆法。 */
+const HORIZONTAL_STRUCTURES = new Set<StructureClass>([
+  'mindmap',
+  'logic-right',
+  'logic-left',
+  'tree-right',
+  'brace',
+]);
 
 export type MeasureFn = (topic: Topic, style: ComputedStyle) => TopicSize;
 
@@ -129,14 +140,26 @@ export function layoutMindmap(input: LayoutInput): LayoutResult {
     spacing,
     structure,
     out,
-    // 纵向树是「每层一行」，对齐的是 y；列对齐只对横向树有意义。
-    columns: alignSiblings && structure !== 'org-chart' ? buildColumns(root, spacing) : null,
+    // 列对齐只对「一层一列」的横向树有意义；纵向树对齐的是行，其余三种
+    // 结构有自己的摆放规则。
+    columns: alignSiblings && HORIZONTAL_STRUCTURES.has(structure) ? buildColumns(root, spacing) : null,
   };
 
-  if (structure === 'org-chart') {
-    layoutVertical(root, ctx);
-  } else {
-    layoutHorizontal(root, autoBalance, ctx);
+  switch (structure) {
+    case 'org-chart':
+      layoutVertical(root, ctx);
+      break;
+    case 'timeline':
+      layoutTimeline(root, ctx);
+      break;
+    case 'fishbone':
+      layoutFishbone(root, ctx);
+      break;
+    case 'tree-table':
+      layoutTreeTable(root, ctx);
+      break;
+    default:
+      layoutHorizontal(root, autoBalance, ctx);
   }
 
   placeFloating(input.sheet, theme, measure, ctx);
@@ -256,7 +279,9 @@ interface Sides {
  */
 function splitSides(children: MeasuredNode[], autoBalance: boolean, structure: StructureClass): Sides {
   if (structure === 'logic-left') return { left: [...children], right: [] };
-  if (structure === 'logic-right' || structure === 'tree-right') return { left: [], right: [...children] };
+  if (structure === 'logic-right' || structure === 'tree-right' || structure === 'brace') {
+    return { left: [], right: [...children] };
+  }
   if (!autoBalance) return { left: [], right: [...children] };
 
   const left: MeasuredNode[] = [];
@@ -379,8 +404,10 @@ function makeEdgeH(parent: NodeBox, child: NodeBox, style: ComputedStyle, side: 
  * 在布局层覆盖而不是让渲染层判断结构：渲染层只认识 `EdgePath`，让它去读
  * `sheet.structure` 就等于把「结构」这个概念漏进渲染层。
  */
-function edgeLineStyle(style: ComputedStyle, ctx: Ctx): ComputedStyle['lineStyle'] {
-  return ctx.structure === 'tree-right' ? 'elbow' : style.lineStyle;
+function edgeLineStyle(style: ComputedStyle, ctx: Ctx): EdgeShape {
+  if (ctx.structure === 'brace') return 'brace';
+  if (ctx.structure === 'tree-right') return 'elbow';
+  return style.lineStyle;
 }
 
 // ---------------------------------------------------------------------------
@@ -453,6 +480,270 @@ function makeEdgeV(parent: NodeBox, child: NodeBox, style: ComputedStyle, ctx: C
     lineColor: style.lineColor,
     lineWidth: style.lineWidth,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 堆叠布局（timeline / fishbone 共用）
+// ---------------------------------------------------------------------------
+
+/**
+ * 堆叠布局里子树占的高度。
+ *
+ * 与横向树的 `subtreeHeightOf` 不同：那里是 `max(自身, 子树和)`（父节点在带里
+ * 居中，与子节点重叠是允许的），这里是 `自身 + 间距 + 子树和`——时间轴和鱼骨
+ * 里后代是**往一个方向排出去**的，不能和父节点重叠。
+ */
+function stackHeightOf(node: MeasuredNode, gap: number): number {
+  if (node.children.length === 0) return node.size.height;
+  let sum = 0;
+  for (const child of node.children) sum += stackHeightOf(child, gap);
+  return node.size.height + gap + sum + gap * (node.children.length - 1);
+}
+
+/** 堆叠布局里子树占的宽度：每往下一层缩进一个 `levelGap`。 */
+function stackWidthOf(node: MeasuredNode, levelGap: number): number {
+  if (node.children.length === 0) return node.size.width;
+  let widest = 0;
+  for (const child of node.children) widest = Math.max(widest, stackWidthOf(child, levelGap));
+  return Math.max(node.size.width, levelGap + widest);
+}
+
+interface StackOptions {
+  /** 子节点相对父节点的水平方向。时间轴向右、鱼骨向左。 */
+  dirX: 1 | -1;
+  /** 同带间距（比兄弟间距更紧：堆叠时上下是一家人）。 */
+  gap: number;
+  /** 父子间距。 */
+  levelGap: number;
+  /** `tree` 走横线，`bone` 走斜线。 */
+  edge: 'tree' | 'bone';
+}
+
+/**
+ * 把一个子树按「带」堆叠下去。
+ *
+ * `dirY = 1` 表示后代向下排（节点落在带的顶部），`-1` 表示向上排（节点落在
+ * 带的底部）——时间轴的上下两侧、鱼骨的上下两排都靠这个方向参数。
+ */
+function stackSubtree(
+  node: MeasuredNode,
+  x: number,
+  bandTop: number,
+  dirY: 1 | -1,
+  opts: StackOptions,
+  ctx: Ctx,
+): NodeBox {
+  const bandHeight = stackHeightOf(node, opts.gap);
+  const y = dirY === 1 ? bandTop : bandTop + bandHeight - node.size.height;
+  const box = placeNodeAt(node, x, y, 'bottom', ctx);
+  if (node.children.length === 0) return box;
+
+  let cursor = dirY === 1 ? y + node.size.height + opts.gap : y - opts.gap;
+  for (const child of node.children) {
+    const childHeight = stackHeightOf(child, opts.gap);
+    const childTop = dirY === 1 ? cursor : cursor - childHeight;
+    const childX = opts.dirX === 1
+      ? x + opts.levelGap
+      : x - opts.levelGap - stackWidthOf(child, opts.levelGap);
+    const childBox = stackSubtree(child, childX, childTop, dirY, opts, ctx);
+    const style = ctx.out.styles.get(childBox.id);
+    if (style) {
+      ctx.out.edges.push(
+        opts.edge === 'tree'
+          ? makeEdgeH(box, childBox, style, 'right', ctx)
+          : makeBone(box, childBox, style),
+      );
+    }
+    cursor = dirY === 1 ? cursor + childHeight + opts.gap : cursor - childHeight - opts.gap;
+  }
+  return box;
+}
+
+/** 鱼骨的斜线：从父节点中心拉到子节点中心，节点画在连线之上，视觉上就是一根骨。 */
+function makeBone(parent: NodeBox, child: NodeBox, style: ComputedStyle): EdgePath {
+  return {
+    id: `${parent.id}->${child.id}`,
+    parentId: parent.id,
+    childId: child.id,
+    from: { x: parent.x + parent.width / 2, y: parent.y + parent.height / 2 },
+    to: { x: child.x + child.width / 2, y: child.y + child.height / 2 },
+    orientation: 'h',
+    lineStyle: 'straight',
+    lineEnd: 'none',
+    lineColor: style.lineColor,
+    lineWidth: style.lineWidth,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 时间轴（timeline）
+// ---------------------------------------------------------------------------
+
+/**
+ * 时间轴：根在左，一条水平主轴向右，一级分支上下交替，后代朝外侧堆叠。
+ *
+ * 主轴不是单独画的元素，而是所有 `axis` 连线的横段叠出来的：每条连线都是
+ * 「从主轴高度横着走到节点的 x，再竖着落到节点上」。这样竖段天然成为刻度，
+ * 也不需要渲染层认识「主轴」这个概念。
+ */
+function layoutTimeline(root: MeasuredNode, ctx: Ctx): void {
+  const { siblingGap, levelGap } = ctx.spacing;
+  const gap = siblingGap * 0.75;
+  const spineY = 0;
+  const rootBox = placeNodeAt(root, 0, -root.size.height / 2, 'none', ctx);
+  const opts: StackOptions = { dirX: 1, gap, levelGap, edge: 'tree' };
+
+  let cursorX = root.size.width + levelGap * 1.5;
+  root.children.forEach((child, index) => {
+    const below = index % 2 === 0;
+    const bandHeight = stackHeightOf(child, gap);
+    const bandWidth = stackWidthOf(child, levelGap);
+    const offset = 36;
+    const top = below ? spineY + offset : spineY - offset - bandHeight;
+
+    const box = stackSubtree(child, cursorX, top, below ? 1 : -1, opts, ctx);
+    const style = ctx.out.styles.get(box.id);
+    if (style) {
+      ctx.out.edges.push({
+        id: `${rootBox.id}->${box.id}`,
+        parentId: rootBox.id,
+        childId: box.id,
+        from: { x: rootBox.x + rootBox.width, y: spineY },
+        to: { x: box.x + box.width / 2, y: below ? box.y : box.y + box.height },
+        orientation: 'h',
+        lineStyle: 'axis',
+        lineEnd: 'none',
+        lineColor: style.lineColor,
+        lineWidth: style.lineWidth,
+      });
+    }
+    cursorX += bandWidth + siblingGap * 1.5;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 鱼骨图（fishbone）
+// ---------------------------------------------------------------------------
+
+/**
+ * 鱼骨：鱼头（根）在右，主轴向左，主骨上下交替斜插，支骨沿主骨向外排。
+ *
+ * 主轴同样不是独立元素：`spine:<rootId>` 是一条从鱼头左边缘拉到最远附着点的
+ * 直线。它是**合成边**（`parentId` / `childId` 只是借位），`EdgePath` 本身不
+ * 要求两端真有父子关系，渲染层只负责画。
+ */
+function layoutFishbone(root: MeasuredNode, ctx: Ctx): void {
+  const { siblingGap, levelGap } = ctx.spacing;
+  const gap = siblingGap * 0.75;
+  const spineY = 0;
+  const rootBox = placeNodeAt(root, 0, -root.size.height / 2, 'none', ctx);
+  const opts: StackOptions = { dirX: -1, gap, levelGap, edge: 'bone' };
+
+  let cursorX = -levelGap * 1.5;
+  let furthest = cursorX;
+  root.children.forEach((child, index) => {
+    const above = index % 2 === 0;
+    const bandHeight = stackHeightOf(child, gap);
+    const bandWidth = stackWidthOf(child, levelGap);
+    const attachX = cursorX;
+    const offset = 40;
+    const top = above ? spineY - offset - bandHeight : spineY + offset;
+
+    const box = stackSubtree(child, cursorX - bandWidth, top, above ? -1 : 1, opts, ctx);
+    const style = ctx.out.styles.get(box.id);
+    if (style) {
+      ctx.out.edges.push({
+        id: `${rootBox.id}->${box.id}`,
+        parentId: rootBox.id,
+        childId: box.id,
+        from: { x: attachX, y: spineY },
+        to: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+        orientation: 'h',
+        lineStyle: 'straight',
+        lineEnd: 'none',
+        lineColor: style.lineColor,
+        lineWidth: style.lineWidth,
+      });
+    }
+    furthest = Math.min(furthest, cursorX - bandWidth);
+    cursorX -= bandWidth + siblingGap * 1.5;
+  });
+
+  // 主轴：从鱼头左边缘拉到最远的附着点。
+  const last = root.children[root.children.length - 1];
+  const rootStyle = ctx.out.styles.get(rootBox.id);
+  if (last && rootStyle) {
+    ctx.out.edges.push({
+      id: `spine:${rootBox.id}`,
+      parentId: rootBox.id,
+      childId: last.topic.id,
+      from: { x: rootBox.x, y: spineY },
+      to: { x: furthest, y: spineY },
+      orientation: 'h',
+      lineStyle: 'straight',
+      lineEnd: 'none',
+      lineColor: rootStyle.lineColor,
+      lineWidth: rootStyle.lineWidth,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 树型表格（tree-table）
+// ---------------------------------------------------------------------------
+
+/**
+ * 树型表格：一层一列、一叶一行，父节点居中于首末子节点之间。
+ *
+ * 行高取**所有节点的最大高度**再加一点间距。按每个叶子自己的高度排行会紧凑
+ * 一些，但父节点可能比它那一行还高，于是压到上一行去——表格里出现重叠比
+ * 浪费几像素难看得多。
+ */
+function layoutTreeTable(root: MeasuredNode, ctx: Ctx): void {
+  const { siblingGap, levelGap } = ctx.spacing;
+
+  const maxWidth = new Map<number, number>();
+  let maxHeight = 0;
+  let maxDepth = 0;
+  const walk = (node: MeasuredNode): void => {
+    maxWidth.set(node.depth, Math.max(maxWidth.get(node.depth) ?? 0, node.size.width));
+    maxHeight = Math.max(maxHeight, node.size.height);
+    maxDepth = Math.max(maxDepth, node.depth);
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+
+  const colX = new Map<number, number>([[0, 0]]);
+  for (let depth = 1; depth <= maxDepth; depth += 1) {
+    colX.set(depth, (colX.get(depth - 1) ?? 0) + (maxWidth.get(depth - 1) ?? 0) + levelGap);
+  }
+
+  const rowPitch = maxHeight + siblingGap * 0.6;
+  let row = 0;
+
+  const place = (node: MeasuredNode): number => {
+    const x = colX.get(node.depth) ?? 0;
+    if (node.children.length === 0) {
+      const centerY = row * rowPitch;
+      row += 1;
+      placeNodeAt(node, x, centerY - node.size.height / 2, 'right', ctx);
+      return centerY;
+    }
+
+    const centers = node.children.map(place);
+    const centerY = (centers[0]! + centers[centers.length - 1]!) / 2;
+    const box = placeNodeAt(node, x, centerY - node.size.height / 2, 'right', ctx);
+    for (const child of node.children) {
+      const childBox = ctx.out.boxes.get(child.topic.id);
+      const style = childBox ? ctx.out.styles.get(childBox.id) : undefined;
+      if (!childBox || !style) continue;
+      // 表格的连线一律折线：横向到层间空隙、竖直对齐、再横向进子节点。
+      ctx.out.edges.push({ ...makeEdgeH(box, childBox, style, 'right', ctx), lineStyle: 'elbow' });
+    }
+    return centerY;
+  };
+
+  place(root);
 }
 
 // ---------------------------------------------------------------------------

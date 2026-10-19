@@ -51,6 +51,22 @@ export interface Point {
  */
 export type EdgeOrientation = 'h' | 'v';
 
+/**
+ * 连线形状。
+ *
+ * 前四种是文档里的 `lineStyle`（用户可选）；后两种是**结构自带的画法**，
+ * 只出现在 `EdgePath` 里，不进文档：
+ *
+ * - `axis`：先横后竖的直角折线。时间轴的整条主轴由所有 `axis` 线段的横段
+ *   叠出来，每个节点分到一段竖线当刻度。
+ * - `brace`：从父节点引出一小段横线后在同一个 x 上竖直走，再拐进子节点。
+ *   多个子节点共用同一个 x，合起来就是括号图的「}」。
+ *
+ * 让布局层直接给出形状、而不是让渲染层看 `sheet.structure` 猜：渲染层只认识
+ * `EdgePath`，把「结构」这个概念漏进去，以后加结构就要改渲染。
+ */
+export type EdgeShape = LineStyle | 'axis' | 'brace';
+
 /** 一条父子连线。端点已经算在节点边缘上，渲染层不再做几何计算。 */
 export interface EdgePath {
   /** 稳定 key：`<parentId>-><childId>`。 */
@@ -60,7 +76,7 @@ export interface EdgePath {
   from: Point;
   to: Point;
   orientation: EdgeOrientation;
-  lineStyle: LineStyle;
+  lineStyle: EdgeShape;
   lineEnd: LineEnd;
   lineColor: string;
   lineWidth: number;
