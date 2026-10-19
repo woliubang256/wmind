@@ -28,7 +28,8 @@ import type {
 } from '../../model/types';
 import { sanitizeNotesHtml } from '../html';
 import type { ImportContext, ImportInput } from '../types';
-import { mapMarker, mapStructure } from './mapping';
+import { mapMarker } from '../markers';
+import { mapStructure } from './mapping';
 import { isRecord, read, type Properties } from './properties';
 import { toPartialStyle } from './style';
 import { toTheme } from './theme';

@@ -8,10 +8,16 @@
  */
 
 import { createImportRegistry, type ImportRegistry } from './registry';
+import { markdownAdapter, opmlAdapter } from './text-adapters';
 import type { ImportAdapter } from './types';
 import { xmindAdapter } from './xmind';
 
-export const BUILTIN_ADAPTERS: readonly ImportAdapter[] = [xmindAdapter];
+/**
+ * 顺序决定「分数并列时谁赢」（`detect` 取严格最大值）。XMind 只在 zip 上
+ * 得分，两个文本格式互斥，所以顺序实际上不影响结果——但保持「结构化格式
+ * 优先」的次序，将来加格式时不容易出错。
+ */
+export const BUILTIN_ADAPTERS: readonly ImportAdapter[] = [xmindAdapter, opmlAdapter, markdownAdapter];
 
 /** 界面用的注册表。测试一律自己 `createImportRegistry([...])`，避免相互污染。 */
 export const importRegistry: ImportRegistry = createImportRegistry(BUILTIN_ADAPTERS);

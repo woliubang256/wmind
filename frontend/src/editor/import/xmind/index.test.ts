@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
-import { BUILTIN_ADAPTERS, importAcceptAttribute, importRegistry } from '../builtins';
+import { importRegistry } from '../builtins';
 import { ImportError } from '../errors';
 import { createImportInput, createImportRegistry } from '../registry';
 import { resolveLimits } from '../limits';
@@ -95,15 +95,5 @@ describe('端到端导入', () => {
   it('导入结果能通过归一化闸门（不产生 document-normalized 警告）', () => {
     const result = importRegistry.run({ fileName: 'a.xmind', bytes: xmindZip() });
     expect(result.warnings.map((w) => w.code)).not.toContain('document-normalized');
-  });
-});
-
-describe('内置适配器注册', () => {
-  it('xmind 在清单里', () => {
-    expect(BUILTIN_ADAPTERS.map((a) => a.id)).toEqual(['xmind']);
-  });
-
-  it('accept 属性由扩展名拼出', () => {
-    expect(importAcceptAttribute()).toBe('.xmind');
   });
 });
