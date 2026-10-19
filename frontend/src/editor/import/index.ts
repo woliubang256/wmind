@@ -23,9 +23,11 @@ export type { MessageParams } from './format';
 export { IMPORT_LIMITS, resolveLimits } from './limits';
 export type { ImportLimits } from './limits';
 
-export { createImportRegistry, importRegistry, createImportInput } from './registry';
+export { BUILTIN_ADAPTERS, importAcceptAttribute, importRegistry } from './builtins';
+export { createImportRegistry, createImportInput } from './registry';
 export type { ImportRegistry } from './registry';
 
+export { sanitizeNotesHtml } from './html';
 export { summarizeImport } from './summary';
 export { isResourceEntryName, isSafeEntryName, looksLikeZip } from './zip';
 export type { ZipArchive } from './zip';

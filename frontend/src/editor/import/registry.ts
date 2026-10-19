@@ -184,11 +184,3 @@ export function createImportRegistry(initial: readonly ImportAdapter[] = []): Im
 
   return registry;
 }
-
-/**
- * 全局注册表。内置适配器在 `./index.ts` 里注册。
- *
- * 单独导出实例是为了让界面只依赖一个入口；测试一律用
- * `createImportRegistry()` 新建，避免相互污染。
- */
-export const importRegistry = createImportRegistry();
