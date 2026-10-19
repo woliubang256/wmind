@@ -623,7 +623,9 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
                 onReset={() => store.getState().dispatch(resetStyleCommand(panelTargets))}
               />
             ) : null}
-            {panelTab === 'palette' ? <PaletteTab theme={doc.theme} onChange={applyTheme} /> : null}
+            {panelTab === 'palette' ? (
+              <PaletteTab theme={doc.theme} onChange={applyTheme} canPersist={enabled} />
+            ) : null}
             {panelTab === 'speaker' ? (
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-semibold text-foreground">

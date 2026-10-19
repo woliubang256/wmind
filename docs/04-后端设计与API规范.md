@@ -501,10 +501,28 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/v1/themes` | 返回全部内置主题 + 当前用户自定义主题 |
+| `GET` | `/api/v1/themes` | 返回**当前用户的自定义主题**（不分页，上限 50 条） |
 | `POST` | `/api/v1/themes` | 创建自定义主题：`{ "name": "...", "config": { /* Theme */ } }` |
-| `PUT` | `/api/v1/themes/{uid}` | 更新自定义主题 |
+| `PUT` | `/api/v1/themes/{uid}` | 更新自定义主题（名字 + 配置全量覆盖） |
 | `DELETE` | `/api/v1/themes/{uid}` | 删除；内置主题返回 `THEME_BUILTIN_READONLY` |
+
+**内置的 10 套配色不走这个接口**（M3.5 的收敛，见 ADR-019）：
+
+- 它们是前端包内的静态资源 `frontend/src/editor/theme/palettes.json`。编辑器首帧就要
+  用 `resolveStyle` 算出每个节点的填充与字色，不能等一个请求回来——否则打开导图
+  会先白一帧再上色，离线打开则完全不可用。
+- 若同时往 `themes` 表里种一份，就出现两份「事实来源」：改配色要改两处，还要再
+  写一道一致性闸门；而服务端那份的 `config` 还得用 Go 重新装配 `themeFromPalette`
+  的逻辑，那是把前端样式体系抄一遍。
+
+因此 `themes` 表只放用户主题，`owner_id` 恒非空、`is_builtin` 恒为 false；两个字段
+保留是给二期「管理员维护内置主题」留的口子。响应里的 `config` 会被服务端规范化：
+`id` 改写成该主题的 `uid`、`name` 改写成主题名、`category` 改写为 `custom`——客户端
+发上来的通常是「当前画布的主题」，它的 `id` 很可能还是某个内置配色的 id。
+
+**校验**：`name` 去空白后 1~64 字符；`config` 必须是 JSON 对象、≤ 64 KiB、含非空
+`palette.colors`、所有颜色为 `#RRGGBB`、含非空 `global.fontFamily` 且 `fontSize > 0`。
+未知字段原样保留（前端给 `Theme` 加字段不该被服务端吃掉）。
 
 ### 5.6 文件接口
 
@@ -827,6 +845,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 403 | `SHARE_LIMIT_REACHED` | 单张导图的分享链接数量已达上限 |
 | 403 | `TEMPLATE_BUILTIN_READONLY` | 内置模板不可修改 |
 | 403 | `THEME_BUILTIN_READONLY` | 内置主题不可修改 |
+| 403 | `THEME_LIMIT_REACHED` | 自定义主题数量已达上限（50） |
 | 403 | `EXPORT_DISABLED` | 站点已关闭导出 |
 | 404 | `RESOURCE_NOT_FOUND` | 资源不存在 |
 | 404 | `MAP_NOT_FOUND` | 导图不存在或无权访问 |

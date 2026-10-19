@@ -48,6 +48,8 @@ type Deps struct {
 	Admin *handler.AdminHandler
 	// Maps 处理导图的增删改查与回收站。
 	Maps *handler.MapHandler
+	// Themes 处理用户自定义主题的增删改查。
+	Themes *handler.ThemeHandler
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -91,6 +93,7 @@ func NewRouter(deps Deps) http.Handler {
 	})
 	registerUsers(v1, deps)
 	registerMaps(v1, deps)
+	registerThemes(v1, deps)
 	registerAdmin(v1, deps)
 
 	// 头像等上传文件由 API 直接提供。生产部署里 Nginx 把 /uploads/ 也代理到
@@ -149,6 +152,21 @@ func registerMaps(v1 *gin.RouterGroup, deps Deps) {
 	trash.DELETE("", deps.Maps.EmptyTrash)
 	trash.POST("/:uid/restore", deps.Maps.Restore)
 	trash.DELETE("/:uid", deps.Maps.Purge)
+}
+
+// registerThemes 注册自定义主题接口，全部要求登录态。
+//
+// 内置的 10 套配色**不在这里**：它们是前端包内的静态资源，编辑器首帧就要
+// 解析样式，不能等一个请求回来。这张表只放用户自建的主题（docs/04 §5.5）。
+func registerThemes(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Themes == nil || deps.Sessions == nil {
+		return
+	}
+	g := v1.Group("/themes", middleware.RequireAuth(deps.Sessions))
+	g.GET("", deps.Themes.List)
+	g.POST("", deps.Themes.Create)
+	g.PUT("/:uid", deps.Themes.Update)
+	g.DELETE("/:uid", deps.Themes.Delete)
 }
 
 // registerAdmin 注册管理后台接口。

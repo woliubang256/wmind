@@ -23,6 +23,7 @@ export const errorMessages: Record<string, string> = {
   TEMPLATE_BUILTIN_READONLY: '内置模板不可修改。',
   THEME_NOT_FOUND: '主题不存在。',
   THEME_BUILTIN_READONLY: '内置主题不可修改。',
+  THEME_LIMIT_REACHED: '自定义主题数量已达上限。',
   FILE_NOT_FOUND: '文件不存在或已被移除。',
   FILE_TOO_LARGE: '文件超过大小限制。',
   FILE_TYPE_NOT_ALLOWED: '不支持此文件类型。',

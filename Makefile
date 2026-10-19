@@ -53,7 +53,8 @@ lint: ## 后端 go vet + gofmt 检查
 
 .PHONY: sqlc
 sqlc: ## 重新生成双 target 的 sqlc 代码（pgdb / sqlitedb）
-	cd $(BACKEND) && sqlc generate
+	# 必须在 db/ 下跑：sqlc 只在当前目录找 sqlc.yaml，不会向上递归。
+	cd $(BACKEND)/db && sqlc generate
 
 .PHONY: verify-parity
 verify-parity: ## 校验两套迁移集结构一致（CI 必过闸门）

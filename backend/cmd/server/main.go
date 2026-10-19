@@ -63,6 +63,7 @@ func run() error {
 		settingsRepo domain.SettingsRepo
 		auditRepo    domain.AuditRepo
 		mapRepo      domain.MapRepo
+		themeRepo    domain.ThemeRepo
 		txManager    domain.TxManager
 	)
 
@@ -86,6 +87,7 @@ func run() error {
 		settingsRepo = sqliterepo.NewSettingsRepository(db)
 		auditRepo = sqliterepo.NewAuditRepository(db)
 		mapRepo = sqliterepo.NewMapRepository(db)
+		themeRepo = sqliterepo.NewThemeRepository(db)
 		txManager = sqliterepo.NewTxManager(db)
 
 	case config.DriverPostgres:
@@ -116,6 +118,7 @@ func run() error {
 		settingsRepo = postgresrepo.NewSettingsRepository(pool)
 		auditRepo = postgresrepo.NewAuditRepository(pool)
 		mapRepo = postgresrepo.NewMapRepository(pool)
+		themeRepo = postgresrepo.NewThemeRepository(pool)
 		txManager = postgresrepo.NewTxManager(pool)
 
 	default:
@@ -186,6 +189,13 @@ func run() error {
 		return err
 	}
 
+	themeSvc, err := service.NewThemeService(service.ThemeServiceConfig{
+		Themes: themeRepo,
+	})
+	if err != nil {
+		return err
+	}
+
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(
 		authSvc,
@@ -201,6 +211,7 @@ func run() error {
 		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
 		Admin:         handler.NewAdminHandler(adminSvc),
 		Maps:          handler.NewMapHandler(mapSvc),
+		Themes:        handler.NewThemeHandler(themeSvc),
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

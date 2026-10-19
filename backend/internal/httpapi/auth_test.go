@@ -120,6 +120,13 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewMapService: %v", err)
 	}
 
+	themeSvc, err := service.NewThemeService(service.ThemeServiceConfig{
+		Themes: sqlite.NewThemeRepository(db),
+	})
+	if err != nil {
+		t.Fatalf("NewThemeService: %v", err)
+	}
+
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
@@ -137,6 +144,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
 		Admin:         handler.NewAdminHandler(adminSvc),
 		Maps:          handler.NewMapHandler(mapSvc),
+		Themes:        handler.NewThemeHandler(themeSvc),
 	})
 
 	server := httptest.NewServer(router)

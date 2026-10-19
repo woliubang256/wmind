@@ -27,6 +27,7 @@ const (
 	CodeShareLimitReached       Code = "SHARE_LIMIT_REACHED"
 	CodeTemplateBuiltinReadonly Code = "TEMPLATE_BUILTIN_READONLY"
 	CodeThemeBuiltinReadonly    Code = "THEME_BUILTIN_READONLY"
+	CodeThemeLimitReached       Code = "THEME_LIMIT_REACHED"
 	CodeExportDisabled          Code = "EXPORT_DISABLED"
 
 	CodeResourceNotFound Code = "RESOURCE_NOT_FOUND"
@@ -97,6 +98,7 @@ var registry = map[Code]spec{
 	CodeShareLimitReached:       {http.StatusForbidden, "该导图的分享链接数量已达上限"},
 	CodeTemplateBuiltinReadonly: {http.StatusForbidden, "内置模板不可修改"},
 	CodeThemeBuiltinReadonly:    {http.StatusForbidden, "内置主题不可修改"},
+	CodeThemeLimitReached:       {http.StatusForbidden, "自定义主题数量已达上限"},
 	CodeExportDisabled:          {http.StatusForbidden, "站点已关闭导出"},
 
 	CodeResourceNotFound: {http.StatusNotFound, "资源不存在"},
