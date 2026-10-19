@@ -82,7 +82,7 @@ export function createImportContext(options: CreateImportContextOptions): Import
       if (topics > limits.maxTopics) {
         // 这里必须**抛**而不是截断：截断会产出一份看似正常、实则少了一半
         // 内容的文档，用户保存后就永久丢了。
-        throw new ImportError('TOO_MANY_TOPICS', { limit: limits.maxTopics });
+        throw new ImportError('TOO_MANY_TOPICS', { max: limits.maxTopics });
       }
     },
 

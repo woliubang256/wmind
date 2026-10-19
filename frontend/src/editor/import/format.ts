@@ -18,8 +18,12 @@ export type MessageParams = Record<string, string | number>;
 /**
  * 以字节数为语义的参数名。
  *
- * 用**白名单**而不是「看着像数字就转」：`count` / `method` 也是数字，
+ * 用**白名单**而不是「看着像数字就转」：`count` / `max` 也是数字，
  * 转成 "3.0 B" 就闹笑话了。
+ *
+ * 所以「个」类的上限一律叫 `max`（`TOO_MANY_TOPICS` / `TOO_MANY_ENTRIES`），
+ * `limit` 专指字节数。混用的话「节点数超过上限（19.5 KB 个）」这种文案
+ * 迟早会出现——而且只在报错时才看得见。
  */
 const BYTE_PARAMS = ['size', 'limit'] as const;
 

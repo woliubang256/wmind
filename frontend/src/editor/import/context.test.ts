@@ -37,7 +37,8 @@ describe('topic 计数', () => {
       expect(error).toBeInstanceOf(ImportError);
       // 截断会产出一份「看起来正常、实际少一半」的文档，用户保存即永久丢失。
       expect((error as ImportError).code).toBe('TOO_MANY_TOPICS');
-      expect((error as ImportError).params.limit).toBe(2);
+      // 「个」类上限用 `max`，`limit` 专指字节数（见 format.ts 的白名单）。
+      expect((error as ImportError).params.max).toBe(2);
     }
   });
 });

@@ -122,7 +122,7 @@ export function openZip(bytes: Uint8Array, limits: ImportLimits): ZipArchive {
 
         if (enumerate) {
           if (names.length >= limits.maxEntries) {
-            throw new ImportError('TOO_MANY_ENTRIES', { limit: limits.maxEntries });
+            throw new ImportError('TOO_MANY_ENTRIES', { max: limits.maxEntries });
           }
           names.push(name);
         }

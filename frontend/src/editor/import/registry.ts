@@ -164,7 +164,7 @@ export function createImportRegistry(initial: readonly ImportAdapter[] = []): Im
       // 兜底闸门：万一某个适配器忘了调 `ctx.topic()`，节点上限就形同虚设。
       // 这里按最终文档再数一次，宁可晚一步也不能放过。
       if (summary.topics > limits.maxTopics) {
-        throw new ImportError('TOO_MANY_TOPICS', { limit: limits.maxTopics });
+        throw new ImportError('TOO_MANY_TOPICS', { max: limits.maxTopics });
       }
 
       const truncated = handle.truncatedTitles();
