@@ -105,6 +105,46 @@ describe('本地草稿', () => {
     expect(readDraft('m1', 2000)).toBeNull();
   });
 
+  it('缺字段的旧草稿被补全，而不是原样交给渲染层', () => {
+    const storage = installStorage();
+    // 形状闸门只认 format 与 sheets，这份能过；但渲染层要读
+    // `theme.global.fontFamily`，原样交出去就是整页白屏。
+    storage.setItem(
+      `${DRAFT_PREFIX}m1`,
+      JSON.stringify({
+        uid: 'm1',
+        savedAt: 1000,
+        document: {
+          format: 'wmind',
+          formatVersion: '1.0',
+          id: 'd1',
+          title: '旧草稿',
+          sheets: [{ id: 's1', rootTopic: { id: 'r', title: '中心' } }],
+        },
+      }),
+    );
+    const draft = readDraft('m1', 2000);
+    expect(draft).not.toBeNull();
+    expect(draft?.document.theme.global.fontFamily).toBeTruthy();
+    expect(draft?.document.sheets[0]?.rootTopic.children.attached).toEqual([]);
+  });
+
+  it('归一化都救不回来的草稿直接丢弃', () => {
+    const storage = installStorage();
+    storage.setItem(
+      `${DRAFT_PREFIX}m1`,
+      JSON.stringify({
+        uid: 'm1',
+        savedAt: 1000,
+        // formatVersion 的 major 高于本版本：属于「读不懂的未来格式」，
+        // 硬读下去只会让用户以为内容丢了。
+        document: { format: 'wmind', formatVersion: '9.0', sheets: [{ rootTopic: { id: 'r', title: 't' } }] },
+      }),
+    );
+    expect(readDraft('m1', 2000)).toBeNull();
+    expect(storage.getItem(`${DRAFT_PREFIX}m1`)).toBeNull();
+  });
+
   it('配额满时静默降级，不抛异常', () => {
     const storage = installStorage();
     storage.failNext = true;

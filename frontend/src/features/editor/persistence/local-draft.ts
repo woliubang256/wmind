@@ -15,6 +15,7 @@
  *    只会覆盖掉用户这周的正常工作。
  */
 
+import { parseDocument } from '@/editor/model/validate';
 import type { WmindDocument } from '@/editor/model/types';
 
 export const DRAFT_PREFIX = 'wmind:draft:';
@@ -63,7 +64,14 @@ function isValidDraft(value: unknown, uid: string): value is LocalDraft {
   return true;
 }
 
-/** 读草稿。不存在、已过期、形状不对都返回 null。 */
+/**
+ * 读草稿。不存在、已过期、形状不对都返回 null。
+ *
+ * 形状过关之后还要**过一遍归一化**：`isValidDraft` 只确认「format 对、有画布」，
+ * 而渲染层真正需要的是 `theme.global.fontFamily` 这类必填字段——缺一个就是整页
+ * 白屏。草稿可能是上一个版本的前端写的，补全这一步不能省。补全失败说明它已经
+ * 不是本版本能读的文档，直接丢弃（用户还有服务端那一份）。
+ */
 export function readDraft(uid: string, now: number = Date.now()): LocalDraft | null {
   const store = storage();
   if (!store) return null;
@@ -89,7 +97,13 @@ export function readDraft(uid: string, now: number = Date.now()): LocalDraft | n
     clearDraft(uid);
     return null;
   }
-  return parsed;
+
+  try {
+    return { ...parsed, document: parseDocument(parsed.document).document };
+  } catch {
+    clearDraft(uid);
+    return null;
+  }
 }
 
 export function clearDraft(uid: string): void {

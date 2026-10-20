@@ -27,6 +27,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { countNodes, sheetById } from '@/editor/model/traverse';
+import { parseDocument } from '@/editor/model/validate';
 import { createEditorStore } from '@/editor/store/editor-store';
 import { EditorProvider, useEditor, useEditorStoreApi } from '@/editor/store/use-editor';
 import { layoutMindmap } from '@/editor/layout/mindmap';
@@ -105,7 +106,15 @@ function RemoteEditor({ uid }: { uid: string }) {
   const { t } = useTranslation();
   const query = useQuery({
     queryKey: ['map', uid],
-    queryFn: () => mapApi.get(uid),
+    queryFn: async () => {
+      const detail = await mapApi.get(uid);
+      // 服务端只校验 `format` / `sheets` / `rootTopic` 三个字段，剩下的必填项
+      // 由这里补全。少了 `theme` 的文档会让字体扫描读 `undefined.global`，
+      // 整页变成「Unexpected Application Error」——而这份文档是导入侧归一化
+      // 出来的同一个东西，导入能开、重开就白屏，说明中间漏了一道闸门。
+      // 与导入共用 `parseDocument`：两处口径必须一致，否则差异迟早变成 bug。
+      return { ...detail, document: parseDocument(detail.document).document };
+    },
     // 打开失败重试没有意义：404 就是 404，网络断了重试三次也只是让用户多等。
     retry: false,
     // 编辑器里的文档是唯一权威，任何后台刷新都会把用户正在改的内容冲掉。
