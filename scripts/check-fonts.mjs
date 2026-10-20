@@ -31,11 +31,13 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { renderCoverage } from './gen-font-coverage.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FONT_DIR = join(ROOT, 'frontend/public/fonts');
 const MANIFEST_PATH = join(FONT_DIR, 'manifest.json');
 const FONT_REGISTRY = join(ROOT, 'frontend/src/editor/theme/fonts.ts');
+const COVERAGE_PATH = join(ROOT, 'frontend/src/editor/theme/font-coverage.json');
 
 const failures = [];
 const notes = [];
@@ -331,6 +333,23 @@ function main() {
             `manifest 是 [${family.weights.join(', ')}]`,
         );
       }
+    }
+  }
+
+  // ---- 7. 码位覆盖表与 manifest 一致 ----
+  //
+  // `font-coverage.json` 是导出时判「这个字有没有字形」的唯一依据。它过期不会
+  // 报错，只会让「N 个字符用了系统字体」这句提示说谎——说没缺字而实际缺，或者
+  // 反过来。用生成它的同一个函数比对，就不存在两套实现跑偏的可能。
+  let coverageOnDisk = '';
+  try {
+    coverageOnDisk = readFileSync(COVERAGE_PATH, 'utf8');
+  } catch {
+    fail('读不到 frontend/src/editor/theme/font-coverage.json（请跑 node scripts/gen-font-coverage.mjs）');
+  }
+  if (coverageOnDisk !== '') {
+    if (coverageOnDisk !== renderCoverage(manifest)) {
+      fail('font-coverage.json 与 manifest.json 不一致（请重跑 node scripts/gen-font-coverage.mjs）');
     }
   }
 

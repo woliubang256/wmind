@@ -34,6 +34,7 @@ import {
   loadImageSources,
 } from '@/editor/export/assets';
 import { downloadBlob, downloadSvg } from '@/editor/export/download';
+import { detectFallback } from '@/editor/export/fonts';
 import { checkRasterSize, rasterizeSvg } from '@/editor/export/raster';
 import { buildExportSvg, exportFileName, svgDataUrl } from '@/editor/export/svg';
 import { exportMarkdown, exportOpml } from '@/editor/export/text';
@@ -135,6 +136,17 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   // 会让用户以为导出是完整的——所以如实说出来。
   const missingImages = sourceList.filter((src) => !dataUrls.has(src)).length;
 
+  // 内置字体里没有字形的字符。文本格式不画字，跳过。
+  //
+  // 这条提示与「图片没内嵌」是同一类：不说的话，用户在别人的机器上打开才发现
+  // 某个字长得不一样，而且完全不知道为什么。取前 5 个字符做样本——只说个数
+  // 用户没法判断要不要处理。
+  const fallback = useMemo(
+    () => (text ? { chars: [] as string[], count: 0 } : detectFallback(ctx)),
+    [ctx, text],
+  );
+  const fallbackSample = fallback.chars.slice(0, 5).join(' ') + (fallback.chars.length > 5 ? ' …' : '');
+
   const multiSheet = doc.sheets.length > 1;
   const format = FORMATS.find((item) => item.id === options.format) ?? FORMATS[0]!;
 
@@ -214,6 +226,11 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             {missingImages > 0 ? (
               <span className="ml-2 text-amber-600 dark:text-amber-400">
                 {t('editor.export.imageFailed', { count: missingImages })}
+              </span>
+            ) : null}
+            {fallback.count > 0 ? (
+              <span className="ml-2 text-amber-600 dark:text-amber-400">
+                {t('editor.export.fontFallback', { count: fallback.count, chars: fallbackSample })}
               </span>
             ) : null}
           </div>

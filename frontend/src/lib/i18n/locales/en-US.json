@@ -289,7 +289,8 @@
     "export.descriptionOpml": "The preview is exactly what you get. OPML keeps text and hierarchy only.",
     "export.textWarning": "Markdown and OPML carry no styling: re-importing loses colours, shapes, lines and layout.",
     "export.textSingleSheet": "Text formats export the current sheet only.",
-    "export.textSize": "{{count}} characters"
+    "export.textSize": "{{count}} characters",
+    "export.fontFallback": "{{count}} character(s) have no glyph in the bundled font ({{chars}}); they will render with a system font"
   },
   "import": {
     "title": "Import",

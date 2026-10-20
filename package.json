@@ -18,6 +18,7 @@
     "fonts:fetch": "node scripts/fetch-fonts.mjs",
     "archive-agent-note": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/archive-agent-note.ts",
     "check-anchors": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/check-note-anchors.ts",
-    "init-board": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/build-board.ts --init board.html \"wmind 决策看板\""
+    "init-board": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/build-board.ts --init board.html \"wmind 决策看板\"",
+    "fonts:coverage": "node scripts/gen-font-coverage.mjs"
   }
 }

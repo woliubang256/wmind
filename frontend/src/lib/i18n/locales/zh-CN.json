@@ -289,7 +289,8 @@
     "export.descriptionOpml": "预览即最终结果，OPML 只保留文字与层级。",
     "export.textWarning": "Markdown 与 OPML 不承载样式信息，重新导入会丢失配色、形状、线条与布局。",
     "export.textSingleSheet": "文本格式只导出当前画布。",
-    "export.textSize": "{{count}} 字符"
+    "export.textSize": "{{count}} 字符",
+    "export.fontFallback": "{{count}} 个字符内置字体没有字形（{{chars}}），将用系统字体渲染"
   },
   "import": {
     "title": "导入",
