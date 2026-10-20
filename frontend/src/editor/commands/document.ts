@@ -9,10 +9,15 @@ import { defineCommand, type EditorCommand } from './types';
 /**
  * 改文档标题。
  *
- * 同时改当前画布的根主题标题——这两个字段在模型里是分开的（`doc.title` 是
- * 文件名/列表项，`rootTopic.title` 是画布上的中心主题），但对用户来说是
+ * 同时改**第一张画布**的根主题标题——这两个字段在模型里是分开的（`doc.title`
+ * 是文件名/列表项，`rootTopic.title` 是画布上的中心主题），但对用户来说是
  * **同一件事**：页头写着「产品规划」而中心主题写着「未命名导图」，看起来
  * 就像保存串了。XMind 的模型也是「根主题即文件名」。
+ *
+ * 为什么钉死第一张而不是「当前画布」：多画布之后，页头的输入框是**这张导图**
+ * 的名字，而第二张画布的中心主题只是那张画布的内容。跟着当前画布走的话，
+ * 用户在画布 2 上改一下图名，画布 1 的中心主题还是旧名字，而画布 2 的中心
+ * 主题被改成了导图名——两处都不对。
  *
  * 放在一条命令里而不是派发两次：两次派发会产生两条撤销记录，用户按一次
  * Ctrl+Z 只改回一半，另一半留在原地。
@@ -22,9 +27,9 @@ export function changeTitleCommand(title: string): EditorCommand {
     type: 'title.change',
     label: '修改标题',
     coalesceKey: 'title',
-    apply(draft, ctx): void {
+    apply(draft): void {
       draft.title = title;
-      const sheet = draft.sheets.find((s) => s.id === ctx.sheetId) ?? draft.sheets[0];
+      const sheet = draft.sheets[0];
       if (sheet) sheet.rootTopic.title = title;
     },
   });

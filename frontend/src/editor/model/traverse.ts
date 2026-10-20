@@ -171,6 +171,21 @@ export function countNodes(doc: WmindDocument): number {
   return total;
 }
 
+/**
+ * 单张画布的节点数（含自由主题及其后代）。
+ *
+ * 页脚显示的是**当前画布**的数量：多画布之后「整份文档 1200 个节点」既解释
+ * 不了当前视野里那 8 个框，也帮不上任何忙。要总数的地方（列表、配额）用
+ * `countNodes`。
+ */
+export function countSheetNodes(sheet: Sheet): number {
+  let total = 1 + countDescendants(sheet.rootTopic);
+  for (const floating of sheet.floatingTopics) {
+    total += 1 + countDescendants(floating);
+  }
+  return total;
+}
+
 export interface FlatTopic {
   id: string;
   title: string;

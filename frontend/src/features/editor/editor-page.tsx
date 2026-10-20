@@ -26,7 +26,8 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { countNodes, sheetById } from '@/editor/model/traverse';
+import { countSheetNodes, sheetById } from '@/editor/model/traverse';
+import { newSheetId } from '@/editor/model/ids';
 import { parseDocument } from '@/editor/model/validate';
 import { createEditorStore } from '@/editor/store/editor-store';
 import { EditorProvider, useEditor, useEditorStoreApi } from '@/editor/store/use-editor';
@@ -58,6 +59,14 @@ import {
   toggleCollapseCommand,
 } from '@/editor/commands/topic';
 import { changeStructureCommand, changeTitleCommand } from '@/editor/commands/document';
+import {
+  addSheetCommand,
+  moveSheetCommand,
+  removeSheetCommand,
+  renameSheetCommand,
+} from '@/editor/commands/sheet';
+import { SheetTabs } from './sheet-tabs';
+import { OutlineView, indentTarget, outdentTarget } from './outline-view';
 import { mapApi, type MapDetail } from '@/lib/api/maps';
 import { ApiError } from '@/lib/api/errors';
 import { createDemoDocument, createStressDocument } from './demo-document';
@@ -257,6 +266,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const version = useEditor((state) => state.version);
 
   const [preview, setPreview] = useState(false);
+  /** 画布 / 大纲两种视图。大纲是同一份文档的另一种投影，切换不丢任何东西。 */
+  const [view, setView] = useState<'canvas' | 'outline'>('canvas');
+  /** ZEN：只留画布，页头、面板、标签栏、页脚全部收起。 */
+  const [zen, setZen] = useState(false);
   const { config } = useSiteConfig();
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [draft, setDraft] = useState<LocalDraft | null>(initialDraft);
@@ -279,6 +292,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   }, [autosave.conflict]);
 
   const sheet = useMemo(() => sheetById(doc, sheetId), [doc, sheetId]);
+  const sheets = doc.sheets;
   // 字体就绪之前不进布局（见 PENDING_LAYOUT 的注释）。
   const fonts = useFontsReady(doc);
   const layout = useMemo(
@@ -347,6 +361,8 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   fitRef.current = fit;
   // 依赖 fonts.ready：骨架屏期间 canvasRef 还是 null，只在挂载时跑一次的话，
   // 字体就绪、画布真正挂上之后就没人观察容器尺寸了。
+  // 依赖 view：切到大纲再切回来，画布是**重新挂载**的，ref 换了新元素，
+  // 不重跑这里就既不会适配视野也没有 ResizeObserver。
   useEffect(() => {
     const element = canvasRef.current;
     if (!element) return undefined;
@@ -354,7 +370,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     const observer = new ResizeObserver(() => fitRef.current());
     observer.observe(element);
     return () => observer.disconnect();
-  }, [fonts.ready]);
+  }, [fonts.ready, view]);
 
   /**
    * 切换结构后重新适配视野。
@@ -373,6 +389,20 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     fittedStructure.current = structure;
     fitRef.current();
   }, [structure]);
+
+  /**
+   * 切换画布后重新适配视野。
+   *
+   * 每张画布的包围盒差别可以很大（一张三个节点、一张三百个），沿用上一张的
+   * 视口会让新画布要么小得看不清、要么整棵树都在屏幕外。这里与「换结构」
+   * 同一套逻辑，只是触发源换成 `sheetId`。
+   */
+  const fittedSheet = useRef(sheetId);
+  useEffect(() => {
+    if (fittedSheet.current === sheetId) return;
+    fittedSheet.current = sheetId;
+    fitRef.current();
+  }, [sheetId]);
 
   const zoomAtCenter = (factor: number) => {    const element = canvasRef.current;
     if (!element) return;
@@ -402,6 +432,94 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     onResetZoom: resetZoom,
     onSave: save,
   });
+
+  /**
+   * 多画布：新增、改名、删除、排序、切换。
+   *
+   * 全部走命令（切换除外，它是视图状态），所以每一步都能撤销。新增之后要
+   * 立刻切过去——建了一张画布却停在旧画布上，用户会以为没建成功。
+   */
+  const addSheet = useCallback(() => {
+    const id = newSheetId();
+    const state = store.getState();
+    const active = sheetById(state.doc, state.sheetId);
+    state.dispatch(
+      addSheetCommand({
+        id,
+        title: t('editor.sheets.defaultTitle', { index: state.doc.sheets.length + 1 }),
+        // 沿用当前画布的结构：「再加一张同样的图」是最常见的意图。
+        structure: active.structure,
+      }),
+    );
+    store.getState().setSheet(id);
+  }, [store, t]);
+
+  const renameSheet = useCallback(
+    (id: string, title: string) => {
+      store.getState().dispatch(renameSheetCommand(id, title));
+    },
+    [store],
+  );
+
+  const deleteSheet = useCallback(
+    (id: string) => {
+      const before = store.getState();
+      const index = before.doc.sheets.findIndex((item) => item.id === id);
+      before.dispatch(removeSheetCommand(id));
+
+      // 删的是当前画布时得挑一张接上：优先右边的（原来的下一张），
+      // 没有就左边。不切的话 `sheetById` 会静默回落到第一张，而 store 里的
+      // `sheetId` 还指着一张已经不存在的画布。
+      if (before.sheetId !== id) return;
+      const remaining = store.getState().doc.sheets;
+      const next = remaining[Math.min(Math.max(index, 0), remaining.length - 1)];
+      if (next) store.getState().setSheet(next.id);
+    },
+    [store],
+  );
+
+  const moveSheet = useCallback(
+    (id: string, toIndex: number) => {
+      store.getState().dispatch(moveSheetCommand(id, toIndex));
+    },
+    [store],
+  );
+
+  /**
+   * 改节点文字。画布与大纲共用一份，两处口径必须一致——否则同一个节点
+   * 从画布改和从大纲改，一个会顺带改导图名、另一个不会。
+   *
+   * 只有**第一张**画布的中心主题等于导图标题。第二张之后的中心主题只是
+   * 那张画布的内容，改它不该把整份导图改名——否则用户在画布 2 上给中心
+   * 主题起个名字，列表页里的导图名也跟着变了。
+   */
+  const commitTitle = useCallback(
+    (id: string, title: string) => {
+      const state = store.getState();
+      const current = sheetById(state.doc, state.sheetId);
+      const isCoverTopic = id === current.rootTopic.id && current.id === state.doc.sheets[0]?.id;
+      state.dispatch(isCoverTopic ? changeTitleCommand(title) : renameTopicCommand(id, title));
+    },
+    [store],
+  );
+
+  const indentTopic = useCallback(
+    (id: string) => {
+      const target = indentTarget(sheet, id);
+      if (!target) return;
+      store.getState().dispatch(moveTopicsCommand([id], target.parentId, target.index));
+    },
+    [sheet, store],
+  );
+
+  const outdentTopic = useCallback(
+    (id: string) => {
+      const target = outdentTarget(sheet, id);
+      if (!target) return;
+      store.getState().dispatch(moveTopicsCommand([id], target.parentId, target.index));
+    },
+    [sheet, store],
+  );
 
   /**
    * 进入编辑时把节点挪进视野。
@@ -456,8 +574,28 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
    */
   useEffect(() => {
     if (preview || !fonts.ready) return;
+    // 大纲视图没有画布可聚焦；从大纲切回画布时再抢一次焦点（依赖里有 view）。
+    if (view !== 'canvas') return;
     canvasRef.current?.focus({ preventScroll: true });
-  }, [preview, fonts.ready]);
+  }, [preview, fonts.ready, view]);
+
+  /**
+   * ZEN 的进出。
+   *
+   * Esc 监听挂在 `window` 上而不是编辑器根节点：进 ZEN 会把页头连同「进入
+   * ZEN」按钮一起卸掉，而它正是当时的焦点所在——元素一消失，焦点落到
+   * body，挂在根节点上的键盘监听就再也收不到事件，用户会被关在全屏里。
+   * 出来时把焦点交给画布，键盘操作不至于断在原地。
+   */
+  useEffect(() => {
+    if (!zen) return undefined;
+    canvasRef.current?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setZen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [zen]);
 
   const activeId = selection[0] ?? sheet.rootTopic.id;
 
@@ -478,8 +616,16 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   return (
     <div
       ref={rootRef}
-      className="flex h-[calc(100svh-9.5rem)] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card"
+      // ZEN 用 CSS 撑满视口而不是另挂一棵子树：画布一旦卸载再挂回来，
+      // ResizeObserver、字体测量缓存、焦点全都要重来一遍，切进切出会闪。
+      className={[
+        'relative flex flex-col overflow-hidden bg-card',
+        zen
+          ? 'fixed inset-0 z-50 h-svh min-h-0'
+          : 'h-[calc(100svh-9.5rem)] min-h-[420px] rounded-2xl border border-border/70',
+      ].join(' ')}
     >
+      {zen ? null : (
       <header className="flex flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2">
         <Link
           to="/"
@@ -620,6 +766,34 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           {t('editor.exportEntry')}
         </Button>
 
+        {/*
+          视图切换（画布 / 大纲）与 ZEN。三个都是「看同一份文档的不同方式」，
+          所以并排放在最右边，且都只在编辑态出现。
+        */}
+        {!preview ? (
+          <>
+            <Button
+              variant={view === 'outline' ? 'secondary' : 'ghost'}
+              size="icon"
+              aria-label={t('editor.outline.toggle')}
+              aria-pressed={view === 'outline'}
+              onClick={() => setView((value) => (value === 'outline' ? 'canvas' : 'outline'))}
+            >
+              <Icon name="list" className="size-4" />
+            </Button>
+            {view === 'canvas' ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t('editor.zen.enter')}
+                onClick={() => setZen(true)}
+              >
+                <Icon name="maximize" className="size-4" />
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+
         <Button
           variant={preview ? 'default' : 'outline'}
           size="sm"
@@ -629,6 +803,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           {preview ? t('editor.exitPreview') : t('editor.preview')}
         </Button>
       </header>
+      )}
 
       {draft ? (
         <div
@@ -653,7 +828,20 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         元素上非常难看——替代的可视反馈是选中节点的描边。
       */}
       <div className="flex min-h-0 flex-1">
-        {fonts.ready ? (
+        {view === 'outline' && !preview ? (
+          <OutlineView
+            doc={doc}
+            sheet={sheet}
+            selection={selection}
+            onSelect={(ids) => store.getState().select(ids)}
+            onCommitTitle={commitTitle}
+            onAddChild={(id) => store.getState().dispatch(addChildCommand(id))}
+            onDelete={(ids) => store.getState().dispatch(removeTopicsCommand(ids))}
+            onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
+            onIndent={indentTopic}
+            onOutdent={outdentTopic}
+          />
+        ) : fonts.ready ? (
           <>
             <div
               ref={canvasRef}
@@ -683,11 +871,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                   canvasRef.current?.focus({ preventScroll: true });
                 }}
                 onCommitTitle={(id, title, options) => {
-                  // 根主题的标题就是导图标题：走 changeTitleCommand 让两个字段一起变，
-                  // 否则页头写着「未命名导图」而中心主题写着别的，看起来像保存串了。
-                  store
-                    .getState()
-                    .dispatch(id === sheet.rootTopic.id ? changeTitleCommand(title) : renameTopicCommand(id, title));
+                  commitTitle(id, title);
                   store.getState().setEditing(null);
                   // 键盘提交后输入框卸载，焦点会掉到 body 上，键盘导航就断了。
                   // 失焦提交（点了别处）不能抢焦点，否则那次点击等于没生效。
@@ -708,7 +892,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               只读预览不挂面板：验收标准 8 要求页面上不存在可编辑元素，
               面板里全是可编辑控件，留在 DOM 里就算视觉上藏起来也算存在。
             */}
-            {!preview && panelOpen ? (
+            {!preview && panelOpen && !zen ? (
               <CanvasPanel
                 tab={panelTab}
                 onTab={setPanelTab}
@@ -748,8 +932,26 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         )}
       </div>
 
+      {/*
+        画布标签栏：只在编辑态出现。只读预览是「导出会长什么样」的预览，
+        多一个切画布的入口会让它看起来像可编辑的。ZEN 里也收起——「全屏
+        编辑」的全部意思就是除了画布什么都不剩。
+      */}
+      {!preview && !zen ? (
+        <SheetTabs
+          sheets={sheets}
+          activeId={sheet.id}
+          onSwitch={(id) => store.getState().setSheet(id)}
+          onAdd={addSheet}
+          onRename={renameSheet}
+          onDelete={deleteSheet}
+          onMove={moveSheet}
+        />
+      ) : null}
+
+      {zen ? null : (
       <footer className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-1.5 text-xs text-muted-foreground">
-        <span>{t('editor.nodeCount', { count: countNodes(doc) })}</span>
+        <span>{t('editor.nodeCount', { count: countSheetNodes(sheet) })}</span>
         <span>{t('editor.zoomLevel', { percent: Math.round(viewport.zoom * 100) })}</span>
         {enabled ? (
           <SaveIndicator
@@ -761,6 +963,24 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           <span>{t('editor.save.localOnly')}</span>
         )}
       </footer>
+      )}
+
+      {/*
+        ZEN 里唯一留下的界面元素：退出按钮。没有它，用户只能靠 Esc 或刷新
+        页面出来——而「只能靠 Esc」这件事没有任何提示。
+      */}
+      {zen ? (
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={t('editor.zen.exit')}
+          onClick={() => setZen(false)}
+          className="absolute right-3 top-3 shadow-sm"
+        >
+          <Icon name="minimize" className="mr-1.5 size-4" />
+          {t('editor.zen.exit')}
+        </Button>
+      ) : null}
 
       <ConflictDialog
         open={conflictOpen && autosave.conflict !== null}

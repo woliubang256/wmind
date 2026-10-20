@@ -73,6 +73,17 @@ export interface EditorState {
   clearSelection(): void;
   setEditing(id: string | null): void;
 
+  /**
+   * 切换当前画布。
+   *
+   * 不是命令、不进历史：它不改文档，只是「现在看哪一张」。切过去必须清空
+   * 选中与编辑态——选中记的是节点 id，属于上一张画布，留着会让下一张画布
+   * 上同 id 的节点莫名其妙高亮（导入的文档里跨画布同 id 完全可能）。
+   * 撤销 / 重做会把 `sheetId` 一起还原（见 HistoryEntry），所以切画布之后
+   * 按 ⌘Z 撤销的仍是画布上的编辑，而不是「切回来」这一步。
+   */
+  setSheet(sheetId: string): void;
+
   setViewport(viewport: Viewport): void;
   setSave(patch: Partial<SaveState>): void;
 
@@ -269,6 +280,15 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
 
     setEditing(id: string | null): void {
       set({ editingId: id });
+    },
+
+    setSheet(sheetId: string): void {
+      const state = get();
+      if (state.sheetId === sheetId) return;
+      // 不存在的 id 直接忽略：删掉当前画布之后调用方可能拿着旧 id 再切一次，
+      // 那时静默失败比抛错合适——界面已经渲染出第一张画布了。
+      if (!state.doc.sheets.some((sheet) => sheet.id === sheetId)) return;
+      set({ sheetId, selection: [], editingId: null });
     },
 
     setViewport(viewport: Viewport): void {
