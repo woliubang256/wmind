@@ -32,6 +32,7 @@ import { mapKeys } from './queries';
 import { MapCard, MapCardSkeleton } from './map-card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ShareDialog } from '@/features/share/share-dialog';
+import { TemplatePicker } from '@/features/templates/template-picker';
 
 /**
  * 导入模块按需加载。
@@ -57,6 +58,7 @@ export function RecentPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<MapSort>('updated');
   const [creating, setCreating] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [dropping, setDropping] = useState(false);
@@ -212,7 +214,7 @@ export function RecentPage() {
                 {t('import.dialog.title')}
               </Button>
             ) : null}
-            <Button onClick={() => void createMap()} disabled={creating}>
+            <Button onClick={() => setPickerOpen(true)} disabled={creating}>
               <Icon name="file-plus" className="size-4" />
               {t('maps.create')}
             </Button>
@@ -280,7 +282,7 @@ export function RecentPage() {
           title={t('maps.empty.title')}
           description={t('maps.empty.body')}
           action={
-            <Button size="sm" onClick={() => void createMap()} disabled={creating}>
+            <Button size="sm" onClick={() => setPickerOpen(true)} disabled={creating}>
               <Icon name="file-plus" className="size-4" />
               {t('maps.create')}
             </Button>
@@ -370,6 +372,15 @@ export function RecentPage() {
           }}
         />
       </Modal>
+
+      <TemplatePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onCreateBlank={() => {
+          setPickerOpen(false);
+          void createMap();
+        }}
+      />
 
       {sharing ? (
         <ShareDialog

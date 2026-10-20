@@ -498,5 +498,83 @@
       "anonymous": "someone",
       "expiresAt": "Expires {{time}}"
     }
+  },
+  "templates": {
+    "title": "Templates",
+    "subtitle": "Starting from a template beats starting from a blank page. Built-in templates are read-only — one click and you have a new map.",
+    "tab": {
+      "all": "All",
+      "basic": "Basic",
+      "user": "Mine"
+    },
+    "section": {
+      "basic": "Built-in templates",
+      "basicHint": "{{count}} starting points",
+      "mine": "My templates",
+      "mineHint": "{{count}} saved"
+    },
+    "picker": {
+      "title": "Choose a template",
+      "subtitle": "Pick a starting point — you can edit it right away.",
+      "category": "Template category",
+      "search": "Search templates",
+      "hint": "Selecting creates the map and opens the editor",
+      "blank": "Start with a blank map",
+      "emptyMine": "No templates of your own yet",
+      "emptyMineHint": "Open a map and click the template icon in the header to save it as a template.",
+      "noMatch": "No matching templates",
+      "disabled": "User templates are turned off on this site; only built-in templates are available."
+    },
+    "saveAs": "Save as template",
+    "saveAsHint": "Save the current map as a starting point. The document and thumbnail are copied; later edits to this map will not affect the template.",
+    "saved": "Saved as template",
+    "renamed": "Renamed",
+    "deleted": "Deleted",
+    "error": "Something went wrong, please try again",
+    "rename": {
+      "title": "Rename template",
+      "label": "Template name"
+    },
+    "actions": {
+      "rename": "Rename",
+      "delete": "Delete"
+    },
+    "deleteConfirm": {
+      "title": "Delete this template?",
+      "body": "This cannot be undone. Maps already created from it are not affected."
+    },
+    "empty": {
+      "title": "No templates of your own yet",
+      "body": "In the editor, click the template icon in the header to save the current map as a template."
+    },
+    "disabled": {
+      "title": "User templates are turned off",
+      "body": "An administrator disabled \"Save as template\". Built-in templates still work."
+    },
+    "builtin": {
+      "mindmap": "Mind map",
+      "logic": "Logic chart",
+      "brace": "Brace map",
+      "org": "Org chart",
+      "tree": "Tree chart",
+      "timeline": "Timeline",
+      "fishbone": "Fishbone",
+      "treetable": "Tree table"
+    },
+    "sample": {
+      "topic": "Topic",
+      "branch": "Branch {{n}}",
+      "point": "Point {{n}}",
+      "detail": "Detail {{n}}",
+      "stage": "Stage {{n}}",
+      "milestone": "Milestone {{n}}",
+      "cause": "Cause {{n}}",
+      "category": "Category {{n}}",
+      "item": "Item {{n}}",
+      "dept": "Department {{n}}",
+      "team": "Team {{n}}",
+      "part": "Part {{n}}",
+      "subitem": "Sub-item {{n}}"
+    }
   }
 }

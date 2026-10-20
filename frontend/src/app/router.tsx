@@ -3,7 +3,7 @@ import { AuthLayout, PublicLayout, RequireAdmin, RequireAuth } from './layouts';
 import { LoginPage } from '@/features/auth/login-page';
 import { RegisterPage } from '@/features/auth/register-page';
 import { AccountPage } from '@/features/account/account-page';
-import { PlaceholderPage } from '@/features/dashboard/pages';
+import { TemplatesPage } from '@/features/templates/templates-page';
 import { RecentPage } from '@/features/maps/recent-page';
 import { TrashPage } from '@/features/maps/trash-page';
 import { PublicSharePage } from '@/features/share/public-share-page';
@@ -55,7 +55,7 @@ export const router = createBrowserRouter([
         },
         children: [
           { path: '/', element: <RecentPage /> },
-          { path: '/templates', element: <PlaceholderPage page="templates" /> },
+          { path: '/templates', element: <TemplatesPage /> },
           { path: '/shares', element: <SharesPage /> },
           { path: '/trash', element: <TrashPage /> },
           { path: '/account', element: <AccountPage /> },

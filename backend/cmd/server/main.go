@@ -64,6 +64,7 @@ func run() error {
 		auditRepo    domain.AuditRepo
 		mapRepo      domain.MapRepo
 		themeRepo    domain.ThemeRepo
+		templateRepo domain.TemplateRepo
 		shareRepo    domain.ShareRepo
 		txManager    domain.TxManager
 	)
@@ -89,6 +90,7 @@ func run() error {
 		auditRepo = sqliterepo.NewAuditRepository(db)
 		mapRepo = sqliterepo.NewMapRepository(db)
 		themeRepo = sqliterepo.NewThemeRepository(db)
+		templateRepo = sqliterepo.NewTemplateRepository(db)
 		shareRepo = sqliterepo.NewShareRepository(db)
 		txManager = sqliterepo.NewTxManager(db)
 
@@ -121,6 +123,7 @@ func run() error {
 		auditRepo = postgresrepo.NewAuditRepository(pool)
 		mapRepo = postgresrepo.NewMapRepository(pool)
 		themeRepo = postgresrepo.NewThemeRepository(pool)
+		templateRepo = postgresrepo.NewTemplateRepository(pool)
 		shareRepo = postgresrepo.NewShareRepository(pool)
 		txManager = postgresrepo.NewTxManager(pool)
 
@@ -206,6 +209,14 @@ func run() error {
 		return err
 	}
 
+	// 模板服务同时需要导图仓储：「另存为模板」要把源导图的文档复制过来。
+	templateSvc, err := service.NewTemplateService(service.TemplateServiceConfig{
+		Templates: templateRepo, Maps: mapRepo, Policy: settingsSvc,
+	})
+	if err != nil {
+		return err
+	}
+
 	// 分享访问凭证与登录令牌共用同一个密钥，但 iss 不同（见 auth.ShareTokenIssuer），
 	// 所以两种令牌在 JWT 校验层就互相拒绝，不会被拿去互换。
 	shareTokens, err := auth.NewShareTokenIssuer(cfg.Auth.JWTSecret, auth.DefaultShareAccessTTL)
@@ -237,6 +248,7 @@ func run() error {
 		Admin:         handler.NewAdminHandler(adminSvc),
 		Maps:          handler.NewMapHandler(mapSvc),
 		Themes:        handler.NewThemeHandler(themeSvc),
+		Templates:     handler.NewTemplateHandler(templateSvc),
 		Files:         handler.NewFileHandler(fileSvc),
 		Shares:        handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})

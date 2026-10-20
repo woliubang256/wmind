@@ -50,6 +50,9 @@ type Deps struct {
 	Maps *handler.MapHandler
 	// Themes 处理用户自定义主题的增删改查。
 	Themes *handler.ThemeHandler
+	// Templates 处理用户模板（从导图另存为、列表、改名、删除）。
+	// 内置的 8 个模板在前端包里，不经过这里。
+	Templates *handler.TemplateHandler
 	// Files 处理通用图片上传（导入时的图片还原）。
 	Files *handler.FileHandler
 	// Shares 处理分享链接的增删改查与两个公开访问接口。
@@ -99,6 +102,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerMaps(v1, deps)
 	registerShares(v1, deps)
 	registerThemes(v1, deps)
+	registerTemplates(v1, deps)
 	registerFiles(v1, deps)
 	registerAdmin(v1, deps)
 
@@ -209,6 +213,22 @@ func registerThemes(v1 *gin.RouterGroup, deps Deps) {
 	g.POST("", deps.Themes.Create)
 	g.PUT("/:uid", deps.Themes.Update)
 	g.DELETE("/:uid", deps.Themes.Delete)
+}
+
+// registerTemplates 注册用户模板接口，全部要求登录态。
+//
+// 内置的 8 个模板不在这里：它们编译进前端包，选择对话框直接本地渲染。
+// 这里只管「用户把自己的导图另存为模板」这一半。
+func registerTemplates(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Templates == nil || deps.Sessions == nil {
+		return
+	}
+	g := v1.Group("/templates", middleware.RequireAuth(deps.Sessions))
+	g.GET("", deps.Templates.List)
+	g.GET("/:uid", deps.Templates.Get)
+	g.POST("", deps.Templates.Create)
+	g.PATCH("/:uid", deps.Templates.Rename)
+	g.DELETE("/:uid", deps.Templates.Delete)
 }
 
 // registerFiles 注册通用图片上传，要求登录态。

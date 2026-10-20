@@ -526,12 +526,58 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 ### 5.4 模板接口
 
+**内置的 8 个模板不经过这里**：它们编译进前端包
+（`frontend/src/features/templates/builtin.ts`）。三条理由：
+
+1. 选择对话框要渲染**实时预览**，预览需要文档，所以文档必须在请求回来之前就存在；
+2. 模板名是 i18n 键，一个 TEXT 列存不下一份在 zh-CN 与 en-US 里都成立的文案；
+3. 骨架由 `createDocument` / `createTopic` 构造，文档模型新增必填字段时自动跟上，
+   而不是在仓库里躺一份会静默失效的 JSON。
+
+这与 10 套内置配色走前端静态资源是同一个决定（见 §5.5 与 ADR-019）。
+`templates` 表的 `is_builtin` 与可空 `owner_id` 保留为二期「管理员维护内置模板」
+的钩子。
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/v1/templates` | 参数 `category`（`basic` / `user` / 空=全部）。内置模板对所有用户可见；用户模板仅本人可见 |
+| `GET` | `/api/v1/templates` | 当前用户的模板列表。**不含 `document`** |
+| `GET` | `/api/v1/templates/{uid}` | 单条读取，**含 `document`**（用它建图时调一次） |
 | `POST` | `/api/v1/templates` | 从导图创建用户模板：`{ "name": "...", "mapUid": "..." }` |
-| `PATCH` | `/api/v1/templates/{uid}` | 重命名 |
+| `PATCH` | `/api/v1/templates/{uid}` | 重命名：`{ "name": "..." }` |
 | `DELETE` | `/api/v1/templates/{uid}` | 删除用户模板；内置模板返回 `TEMPLATE_BUILTIN_READONLY` |
+
+```json
+// GET /api/v1/templates 的一项
+{
+  "uid": "01JFB2M4K6P8R1T3V5W7X9Y0Z2",
+  "name": "我的起点",
+  "category": "user",
+  "structure": "org-chart",
+  "thumbnailUrl": "/uploads/01JFA8.png",
+  "isBuiltin": false,
+  "createdAt": "2026-10-21T02:30:00Z",
+  "updatedAt": "2026-10-21T02:30:00Z"
+}
+```
+
+**为什么列表不带 `document`**：一份模板文档的上限与导图一样是 8 MiB，50 个模板
+就是 400 MB 的列表响应。列表只需要名字、结构、缩略图；真要用某个模板建图时，
+`GET /templates/{uid}` 单独取一次。
+
+**其余约束**：
+
+- `name` 去空白后 1~64 字符。
+- `category` 服务端恒写 `user`；`is_builtin` 恒写 `false`；`sort_order` 恒写 `0`
+  ——由请求决定这三个字段会让调用方伪造出「改不掉的内置模板」，或把自己挤到别人
+  列表的顶部。
+- `thumbnail_url` 由服务端从**源导图**复制，不接受请求传入：否则模板列表会变成
+  一个加载任意地址的图片代理。
+- `structure` 从源文档的 `sheets[0].structure` 读出；缺失或空白兜底成 `mindmap`。
+- `feature.user_template_enabled = false` → 403 `TEMPLATE_DISABLED`（五个接口全部）。
+  内置模板不受影响。
+- 每个用户上限 50 条 → 403 `TEMPLATE_LIMIT_REACHED`。
+- 文档原样复制，模板与源导图从此解耦（FR-TPL-06）：改导图不影响模板，改模板不影响
+  已经建出来的导图。
 
 ### 5.5 主题接口
 
@@ -887,18 +933,20 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 | 分组 | 数量 | 说明 |
 | --- | --- | --- |
-| 公开 | 3 | health ×2、site config |
-| 认证与个人 | 7 | register / login / refresh / logout / me / password / avatar |
+| 公开 | 3 | `health/live`、`health/ready`、`site/config` |
+| 认证与个人 | 8 | register / login / refresh / logout / me / `PATCH users/me` / password / avatar |
 | 导图 | 12 | 列表、创建、读取、保存、重命名、删除、复制、缩略图、回收站 ×4 |
-| 模板 | 4 | 列表、创建、改名、删除 |
+| 模板 | 5 | 列表、单条（含 `document`）、创建（从导图另存为）、改名、删除 |
 | 主题 | 4 | 列表、创建、更新、删除 |
-| 文件 | 1 | 上传（读取走 `/uploads` 静态目录，删除随 M5 落地） |
-| **分享** | **6** | 创建、导图维度列表、我的分享、修改、撤销、公开读取、密码校验（含公开接口共 6 个） |
-| 导出 | 1 | 服务端兜底导出 |
-| 管理 | 10 | 用户 ×5、设置 ×2、统计、日志、重置密码 |
-| **合计** | **48** | 相比 v1.1 的 55 减少 7 个（`forgot-password` / `reset-password` / `verify-email` / `resend-verification` / `admin/mail/test` / `GET files/{uid}` / `DELETE files/{uid}`） |
+| 文件 | 1 | 上传（读取走 `/uploads` 静态目录；**没有删除接口**，`DELETE files/{uid}` 已从一期移除） |
+| **分享** | **7** | 登录态 5（创建、导图维度列表、我的分享、修改、撤销）+ 公开 2（读取、密码校验） |
+| 导出 | 0（设计 1） | `GET /maps/{uid}/export` 设计已定但**尚未注册**，现在访问返回 404（M6 落地） |
+| 管理 | 9 | 用户 ×5（含重置密码）、设置 ×2、统计、审计日志 |
+| **合计** | **49** | 逐条核对 `router.go` 的实际注册数 |
 
-> 二期接入邮件后恢复为 55 个。`POST /admin/users/{uid}/reset-password` 一期即为正式接口（非占位），二期也不会移除——它与邮件重置是并存的两条找回路径。
+> 合计按**已注册**的路由数统计，不按设计条目数：导出那条只有设计、没有路由，算进去会变成 50。相比 v1.1 的 55 个减少 6 个——移除 7 个（`forgot-password` / `reset-password` / `verify-email` / `resend-verification` / `admin/mail/test` / `GET files/{uid}` / `DELETE files/{uid}`），分享的「公开读取」与「密码校验」由一条拆成两条（+1）。
+>
+> 二期接入邮件后，注册数与设计条目数同步回到 55。`POST /admin/users/{uid}/reset-password` 一期即为正式接口（非占位），二期也不会移除——它与邮件重置是并存的两条找回路径。
 
 ---
 
@@ -920,6 +968,8 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 403 | `SHARE_DISABLED` | 站点已关闭分享功能 |
 | 403 | `SHARE_LIMIT_REACHED` | 单张导图的分享链接数量已达上限 |
 | 403 | `TEMPLATE_BUILTIN_READONLY` | 内置模板不可修改 |
+| 403 | `TEMPLATE_DISABLED` | 站点已关闭用户模板（`feature.user_template_enabled = false`） |
+| 403 | `TEMPLATE_LIMIT_REACHED` | 用户模板数量已达上限（50） |
 | 403 | `THEME_BUILTIN_READONLY` | 内置主题不可修改 |
 | 403 | `THEME_LIMIT_REACHED` | 自定义主题数量已达上限（50） |
 | 403 | `EXPORT_DISABLED` | 站点已关闭导出 |

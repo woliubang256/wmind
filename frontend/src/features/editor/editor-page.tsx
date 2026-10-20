@@ -68,6 +68,8 @@ import { SaveIndicator } from './persistence/save-indicator';
 import { useFontsReady } from './use-fonts-ready';
 import { useThumbnailUpload } from './use-thumbnail-upload';
 import { ShareDialog } from '@/features/share/share-dialog';
+import { SaveTemplateDialog } from '@/features/templates/save-template-dialog';
+import { useSiteConfig } from '@/features/site/use-site-config';
 
 // 导出对话框是懒加载的：它把 `react-dom/server` 带进包里（序列化 SVG 要用），
 // 而绝大多数编辑会话里用户根本不会点「导出」。不点就不下载。
@@ -255,6 +257,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const version = useEditor((state) => state.version);
 
   const [preview, setPreview] = useState(false);
+  const { config } = useSiteConfig();
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [draft, setDraft] = useState<LocalDraft | null>(initialDraft);
   const [conflictOpen, setConflictOpen] = useState(false);
@@ -262,6 +265,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const [panelTab, setPanelTab] = useState<PanelTab>('style');
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   /** 快捷键监听挂在这里：包含画布与面板，但排除侧栏与页头之外的一切。 */
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -596,6 +600,16 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </Button>
         ) : null}
 
+        {/*
+          「另存为模板」只在允许用户模板时出现。它是把当前导图复制一份存起来，
+          属于写操作；站点关掉用户模板后还留一个必然 403 的按钮没有意义。
+        */}
+        {!preview && config.userTemplateEnabled ? (
+          <Button variant="ghost" size="icon" aria-label={t('templates.saveAs')} onClick={() => setSaveTemplateOpen(true)}>
+            <Icon name="waypoints" className="size-4" />
+          </Button>
+        ) : null}
+
         <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
           <Icon name="link" className="mr-1.5 size-4" />
           {t('share.action')}
@@ -765,6 +779,12 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         往返还轻。导出对话框不同，它带着字体分片与栅格化，必须懒加载。
       */}
       <ShareDialog open={shareOpen} mapUid={uid} mapTitle={doc.title} onClose={() => setShareOpen(false)} />
+      <SaveTemplateDialog
+        open={saveTemplateOpen}
+        mapUid={uid}
+        defaultName={doc.title}
+        onClose={() => setSaveTemplateOpen(false)}
+      />
 
       {exportOpen ? (
         <Suspense fallback={null}>

@@ -498,5 +498,83 @@
       "anonymous": "某人",
       "expiresAt": "{{time}} 后失效"
     }
+  },
+  "templates": {
+    "title": "模板",
+    "subtitle": "从模板开始，比从空白开始快。内置模板只读，点一下就能建出一张新导图。",
+    "tab": {
+      "all": "全部",
+      "basic": "基本",
+      "user": "我的模板"
+    },
+    "section": {
+      "basic": "基本模板",
+      "basicHint": "{{count}} 个内置起点",
+      "mine": "我的模板",
+      "mineHint": "{{count}} 个"
+    },
+    "picker": {
+      "title": "选择模板",
+      "subtitle": "选一个起点，建好就能直接改。",
+      "category": "模板分类",
+      "search": "搜索模板",
+      "hint": "选中即创建并进入编辑器",
+      "blank": "直接建空白导图",
+      "emptyMine": "还没有自己的模板",
+      "emptyMineHint": "打开一张导图，点顶部的模板图标就能把它存成模板。",
+      "noMatch": "没有匹配的模板",
+      "disabled": "站点已关闭用户模板，只能使用内置模板。"
+    },
+    "saveAs": "另存为模板",
+    "saveAsHint": "把当前导图存成一个起点。文档与缩略图会一起复制，之后再改这张导图不会影响模板。",
+    "saved": "已存为模板",
+    "renamed": "已重命名",
+    "deleted": "已删除",
+    "error": "操作失败，请重试",
+    "rename": {
+      "title": "重命名模板",
+      "label": "模板名称"
+    },
+    "actions": {
+      "rename": "重命名",
+      "delete": "删除"
+    },
+    "deleteConfirm": {
+      "title": "删除这个模板？",
+      "body": "删除后不能恢复。已经用这个模板建出来的导图不受影响。"
+    },
+    "empty": {
+      "title": "还没有自己的模板",
+      "body": "在编辑器里点顶部的模板图标，就能把当前导图存成模板。"
+    },
+    "disabled": {
+      "title": "站点已关闭用户模板",
+      "body": "管理员关闭了「另存为模板」。内置模板仍然可用。"
+    },
+    "builtin": {
+      "mindmap": "思维导图",
+      "logic": "逻辑图",
+      "brace": "括号图",
+      "org": "组织架构图",
+      "tree": "树状图",
+      "timeline": "时间轴",
+      "fishbone": "鱼骨图",
+      "treetable": "树型表格"
+    },
+    "sample": {
+      "topic": "主题",
+      "branch": "分支 {{n}}",
+      "point": "要点 {{n}}",
+      "detail": "细节 {{n}}",
+      "stage": "阶段 {{n}}",
+      "milestone": "里程碑 {{n}}",
+      "cause": "原因 {{n}}",
+      "category": "分类 {{n}}",
+      "item": "条目 {{n}}",
+      "dept": "部门 {{n}}",
+      "team": "小组 {{n}}",
+      "part": "组成部分 {{n}}",
+      "subitem": "子项 {{n}}"
+    }
   }
 }

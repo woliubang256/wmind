@@ -26,6 +26,8 @@ const (
 	CodeShareDisabled           Code = "SHARE_DISABLED"
 	CodeShareLimitReached       Code = "SHARE_LIMIT_REACHED"
 	CodeTemplateBuiltinReadonly Code = "TEMPLATE_BUILTIN_READONLY"
+	CodeTemplateLimitReached    Code = "TEMPLATE_LIMIT_REACHED"
+	CodeTemplateDisabled        Code = "TEMPLATE_DISABLED"
 	CodeThemeBuiltinReadonly    Code = "THEME_BUILTIN_READONLY"
 	CodeThemeLimitReached       Code = "THEME_LIMIT_REACHED"
 	CodeExportDisabled          Code = "EXPORT_DISABLED"
@@ -97,6 +99,8 @@ var registry = map[Code]spec{
 	CodeShareDisabled:           {http.StatusForbidden, "站点已关闭分享功能"},
 	CodeShareLimitReached:       {http.StatusForbidden, "该导图的分享链接数量已达上限"},
 	CodeTemplateBuiltinReadonly: {http.StatusForbidden, "内置模板不可修改"},
+	CodeTemplateLimitReached:    {http.StatusForbidden, "模板数量已达上限"},
+	CodeTemplateDisabled:        {http.StatusForbidden, "站点已关闭用户模板"},
 	CodeThemeBuiltinReadonly:    {http.StatusForbidden, "内置主题不可修改"},
 	CodeThemeLimitReached:       {http.StatusForbidden, "自定义主题数量已达上限"},
 	CodeExportDisabled:          {http.StatusForbidden, "站点已关闭导出"},

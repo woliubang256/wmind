@@ -22,13 +22,14 @@ import (
 // 用结构体而不是六个位置参数：仓储会随里程碑增加，位置参数每次都要改所有
 // 调用点，而且调用点漏传一个时编译错误只提示「参数不够」。
 type Repos struct {
-	Users    domain.UserRepo
-	Maps     domain.MapRepo
-	Tokens   domain.RefreshTokenRepo
-	Settings domain.SettingsRepo
-	Audit    domain.AuditRepo
-	Shares   domain.ShareRepo
-	Tx       domain.TxManager
+	Users     domain.UserRepo
+	Maps      domain.MapRepo
+	Tokens    domain.RefreshTokenRepo
+	Settings  domain.SettingsRepo
+	Audit     domain.AuditRepo
+	Shares    domain.ShareRepo
+	Templates domain.TemplateRepo
+	Tx        domain.TxManager
 }
 
 func Run(t *testing.T, r Repos) {
@@ -767,6 +768,106 @@ func Run(t *testing.T, r Repos) {
 		}
 		if !trashed.MapDeleted {
 			t.Fatal("map deleted but MapDeleted is false")
+		}
+	})
+
+	t.Run("user template lifecycle, document round-trip, and owner isolation", func(t *testing.T) {
+		templates := r.Templates
+		owner := mustCreateUser(t, ctx, users, now)
+		other := mustCreateUser(t, ctx, users, now)
+
+		// A document with a number large enough to lose precision if anything
+		// along the way decodes it as float64 (2^24 + 1).
+		doc := []byte(`{"format":"wmind","formatVersion":"1.0","id":"d1","title":"模板源",` +
+			`"sheets":[{"id":"s1","structure":"org-chart","rootTopic":{"id":"r1","title":"中心","width":16777217}}]}`)
+
+		created, err := templates.Create(ctx, domain.CreateTemplateInput{
+			UID: ulid.Make().String(), OwnerID: owner.ID, Name: "组织架构模板",
+			Category: domain.TemplateCategoryUser, Structure: "org-chart",
+			Document: doc, ThumbnailURL: "/uploads/t1.png", Now: now,
+		})
+		if err != nil {
+			t.Fatalf("create template: %v", err)
+		}
+		if created.IsBuiltin {
+			t.Fatal("API-created template reported as built-in")
+		}
+		if created.SortOrder != 0 {
+			t.Fatalf("sort_order = %d, want 0", created.SortOrder)
+		}
+		if created.ThumbnailURL != "/uploads/t1.png" {
+			t.Fatalf("thumbnail_url = %q", created.ThumbnailURL)
+		}
+		if !created.CreatedAt.Equal(now) {
+			t.Fatalf("created_at mismatch: %v, want %v", created.CreatedAt, now)
+		}
+		if !sameJSON(t, string(created.Document), string(doc)) {
+			t.Fatalf("document round-trip mismatch: %s", created.Document)
+		}
+
+		// GetByUID returns the full document; the list must NOT.
+		got, err := templates.GetByUID(ctx, created.UID, owner.ID)
+		if err != nil {
+			t.Fatalf("GetByUID: %v", err)
+		}
+		if !sameJSON(t, string(got.Document), string(doc)) {
+			t.Fatalf("GetByUID document mismatch: %s", got.Document)
+		}
+		if _, err := templates.GetByUID(ctx, created.UID, other.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("cross-owner GetByUID = %v; want ErrNotFound", err)
+		}
+
+		listed, err := templates.ListByOwner(ctx, owner.ID)
+		if err != nil {
+			t.Fatalf("ListByOwner: %v", err)
+		}
+		if len(listed) != 1 || listed[0].UID != created.UID {
+			t.Fatalf("ListByOwner = %#v", listed)
+		}
+		if len(listed[0].Document) != 0 {
+			t.Fatalf("list carried the document (%d bytes); it must not", len(listed[0].Document))
+		}
+		if listed[0].Structure != "org-chart" {
+			t.Fatalf("list structure = %q, want org-chart", listed[0].Structure)
+		}
+		if others, err := templates.ListByOwner(ctx, other.ID); err != nil || len(others) != 0 {
+			t.Fatalf("other owner list = %#v, %v; want empty", others, err)
+		}
+
+		if n, err := templates.CountByOwner(ctx, owner.ID); err != nil || n != 1 {
+			t.Fatalf("CountByOwner = %d, %v; want 1", n, err)
+		}
+
+		renamed, err := templates.Rename(ctx, domain.RenameTemplateInput{
+			UID: created.UID, OwnerID: owner.ID, Name: "改名后", Now: now.Add(time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("Rename: %v", err)
+		}
+		if renamed.Name != "改名后" {
+			t.Fatalf("name = %q", renamed.Name)
+		}
+		// Renaming must not touch the document.
+		if !sameJSON(t, string(renamed.Document), string(doc)) {
+			t.Fatalf("rename changed the document: %s", renamed.Document)
+		}
+		if _, err := templates.Rename(ctx, domain.RenameTemplateInput{
+			UID: created.UID, OwnerID: other.ID, Name: "抢", Now: now,
+		}); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("cross-owner Rename = %v; want ErrNotFound", err)
+		}
+
+		if err := templates.Delete(ctx, created.UID, other.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("cross-owner Delete = %v; want ErrNotFound", err)
+		}
+		if err := templates.Delete(ctx, created.UID, owner.ID); err != nil {
+			t.Fatalf("Delete: %v", err)
+		}
+		if err := templates.Delete(ctx, created.UID, owner.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("second Delete = %v; want ErrNotFound", err)
+		}
+		if _, err := templates.GetByUID(ctx, created.UID, owner.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("GetByUID after delete = %v; want ErrNotFound", err)
 		}
 	})
 }

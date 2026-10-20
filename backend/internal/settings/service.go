@@ -296,6 +296,19 @@ func (s *Service) ShareDefaultAllowDownload() bool {
 // 所以宁可让前端补，也不在这里猜。
 func (s *Service) SiteBaseURL() string { return s.Snapshot().String("site.base_url") }
 
+// UserTemplateEnabled 报告站点是否允许用户自建模板。
+//
+// 关掉它不影响内置的 8 个模板：那些编译进前端包，不经过服务端，所以
+// 「关闭用户模板」的意思精确地是「不能再把自己的导图存成模板」。
+func (s *Service) UserTemplateEnabled() bool {
+	return s.Snapshot().Bool("feature.user_template_enabled")
+}
+
+// 编译期确认 Service 满足模板服务需要的站点策略接口（service.TemplatePolicy）。
+var _ interface {
+	UserTemplateEnabled() bool
+} = (*Service)(nil)
+
 // 编译期确认 Service 满足分享服务需要的站点策略接口（service.SharePolicy）。
 var _ interface {
 	ShareEnabled() bool

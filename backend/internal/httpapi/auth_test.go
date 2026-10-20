@@ -127,6 +127,14 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewThemeService: %v", err)
 	}
 
+	templateSvc, err := service.NewTemplateService(service.TemplateServiceConfig{
+		Templates: sqlite.NewTemplateRepository(db), Maps: sqlite.NewMapRepository(db),
+		Policy: settingsSvc,
+	})
+	if err != nil {
+		t.Fatalf("NewTemplateService: %v", err)
+	}
+
 	fileSvc, err := service.NewFileService(service.FileServiceConfig{Store: avatarStore})
 	if err != nil {
 		t.Fatalf("NewFileService: %v", err)
@@ -165,6 +173,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Admin:         handler.NewAdminHandler(adminSvc),
 		Maps:          handler.NewMapHandler(mapSvc),
 		Themes:        handler.NewThemeHandler(themeSvc),
+		Templates:     handler.NewTemplateHandler(templateSvc),
 		Files:         handler.NewFileHandler(fileSvc),
 		Shares:        handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
