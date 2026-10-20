@@ -42,6 +42,7 @@ import {
 import { downloadBlob, downloadSvg } from '@/editor/export/download';
 import { detectFallback } from '@/editor/export/fonts';
 import { checkRasterSize, rasterizeSvg } from '@/editor/export/raster';
+import { exportBranches, planBranches, svgEncoder } from '@/editor/export/split';
 import { buildExportSvg, exportFileName, svgDataUrl } from '@/editor/export/svg';
 import { exportMarkdown, exportOpml } from '@/editor/export/text';
 import type { WmindDocument } from '@/editor/model/types';
@@ -194,6 +195,10 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   // 模式与数值必须分开记。
   const [customScale, setCustomScale] = useState(false);
 
+  // 「按主分支拆分」也只是界面状态：它不改变导出上下文，只改变**产出几个文件**。
+  const [split, setSplit] = useState(false);
+  const branches = useMemo(() => (text ? [] : planBranches(doc, sheetId)), [doc, sheetId, text]);
+
   const download = async () => {
     if (textContent !== null) {
       // 文本是同步生成的字符串，没有异步失败路径，所以不必包 try/catch。
@@ -203,6 +208,41 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       onClose();
       return;
     }
+
+    if (split && branches.length > 1) {
+      setBusy(true);
+      try {
+        const rasterFormat = options.format === 'jpeg' ? 'jpeg' : 'png';
+        const result = await exportBranches(doc, sheetId, options, format.ext, {
+          // 图片内嵌对拆分同样有效：每张分支图也要把 `/uploads/…` 换成 data URL，
+          // 否则打出来的 zip 里全是指回本机的死链。
+          prepare: (raw) => applyImageSources(raw, dataUrls),
+          encode:
+            options.format === 'svg'
+              ? svgEncoder
+              : async (raw, svg) => {
+                  const blob = await rasterizeSvg(svg, {
+                    width: Math.round(raw.width * raw.scale),
+                    height: Math.round(raw.height * raw.scale),
+                    format: rasterFormat,
+                    background: raw.background,
+                  });
+                  return new Uint8Array(await blob.arrayBuffer());
+                },
+        });
+        downloadBlob(
+          new Blob([result.bytes as BlobPart], { type: 'application/zip' }),
+          exportFileName(ctx.title, 'zip'),
+        );
+        onClose();
+      } catch {
+        toast.error(t('editor.export.failed'));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     if (options.format === 'svg') {
       downloadSvg(markup, exportFileName(ctx.title, 'svg'));
       onClose();
@@ -239,9 +279,12 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 text-xs text-muted-foreground">
             <span>
-              {textContent === null
-                ? t('editor.export.size', { width: outputWidth, height: outputHeight })
-                : t('editor.export.textSize', { count: textContent.length })}
+              {textContent !== null
+                ? t('editor.export.textSize', { count: textContent.length })
+                : split && branches.length > 1
+                  // 拆分时逐张尺寸不同，报一个数只会误导；报文件数才有用。
+                  ? t('editor.export.splitFiles', { count: branches.length })
+                  : t('editor.export.size', { width: outputWidth, height: outputHeight })}
             </span>
             {rasterVerdict.kind === 'too-large' ? (
               <span className="ml-2 text-destructive">
@@ -279,7 +322,9 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             >
               {busy
                 ? t('editor.export.generating')
-                : t('editor.export.downloadAs', { format: t(format.labelKey) })}
+                : split && branches.length > 1
+                  ? t('editor.export.downloadZip')
+                  : t('editor.export.downloadAs', { format: t(format.labelKey) })}
             </Button>
           </div>
         </div>
@@ -489,6 +534,17 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                   <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
                     {t('editor.export.jpegOpaque')}
                   </p>
+                ) : null}
+                {/* 只有一个分支时拆分没有意义：拆出来就是整张图。 */}
+                {branches.length > 1 ? (
+                  <label className="flex items-center gap-2 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={split}
+                      onChange={(event) => setSplit(event.target.checked)}
+                    />
+                    {t('editor.export.split', { count: branches.length })}
+                  </label>
                 ) : null}
               </div>
             </>

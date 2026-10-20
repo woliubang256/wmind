@@ -304,7 +304,10 @@
     "export.aspect16x9": "16:9",
     "export.aspect4x3": "4:3",
     "export.aspect1x1": "1:1",
-    "export.aspect9x16": "9:16（竖屏）"
+    "export.aspect9x16": "9:16（竖屏）",
+    "export.split": "按主分支拆分（{{count}} 个文件，zip）",
+    "export.splitFiles": "{{count}} 个文件（zip）",
+    "export.downloadZip": "下载 ZIP"
   },
   "import": {
     "title": "导入",
