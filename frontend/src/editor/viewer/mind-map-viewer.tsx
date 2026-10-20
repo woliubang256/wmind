@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { layoutMindmap } from '../layout/mindmap';
 import type { LayoutResult, NodeBox } from '../layout/types';
 import type { ComputedStyle, Sheet, Theme } from '../model/types';
+import { walkSheet } from '../model/traverse';
 import { fontStack } from '../theme/fonts';
 import { ViewerContext } from './viewer-context';
 import type { CommitTitleOptions, ViewerContextValue, ViewerPlugin, Viewport } from './viewer-types';
@@ -95,6 +96,21 @@ export function MindMapViewer({
   );
 
   const effectiveTheme = sheet.themeOverride ?? theme;
+
+  /*
+    读屏标签用的 `id → 原始标题` 表。
+
+    必须用原始标题而不是 `layout.sizes` 里的 `lines`：后者是按盒子宽度折过行
+    的，拿它当 `aria-label` 会读出「分支\nA」——读屏把换行当停顿，名字听起来
+    像两截。这张表只在 `sheet` 变化时重建，一次 O(n) 遍历。
+  */
+  const titles = useMemo(() => {
+    const map = new Map<string, string>();
+    walkSheet(sheet, (topic) => {
+      map.set(topic.id, topic.title);
+    });
+    return map;
+  }, [sheet]);
 
   const toWorld = useCallback<ViewerContextValue['toWorld']>(
     (clientX, clientY) => {
@@ -220,8 +236,15 @@ export function MindMapViewer({
         <svg
           ref={svgRef}
           className="block h-full w-full touch-none select-none"
-          role={readOnly ? 'img' : 'application'}
-          aria-label={ariaLabel ?? sheet.title}
+          /*
+            只读态：整张图是一个 `img`，名字由页面给。
+            编辑态：`role="none"`——树的角色由外层那个可聚焦容器声明（见
+            editor-page），这里让出角色，避免 SVG 默认的 `graphics-document`
+            在树与 treeitem 之间插进一个没有意义的中间节点。子元素的
+            `treeitem` 不受影响：`role="none"` 只移除元素自身。
+          */
+          role={readOnly ? 'img' : 'none'}
+          aria-label={readOnly ? (ariaLabel ?? sheet.title) : undefined}
           data-read-only={readOnly ? 'true' : 'false'}
         >
           <g
@@ -238,6 +261,8 @@ export function MindMapViewer({
               layout={layout}
               selection={selection}
               editingId={editingId}
+              titles={titles}
+              treeItems={!readOnly}
             />
 
             <g className="layer-overlay">

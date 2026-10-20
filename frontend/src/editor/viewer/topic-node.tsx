@@ -12,12 +12,20 @@ import type { ComputedStyle } from '../model/types';
 import type { ImageSize, NodeBox } from '../layout/types';
 import { NODE_METRICS } from '../layout/constants';
 import { fontStack } from '../theme/fonts';
+import { topicElementId } from './a11y-ids';
 import { TopicShape } from './shapes';
 
 export interface TopicNodeProps {
   box: NodeBox;
   style: ComputedStyle;
   lines: string[];
+  /**
+   * 未折行的原始标题。
+   *
+   * `lines` 是**测量产物**（按盒子宽度折过行），拿它当读屏标签会读出
+   * 「分支\nA」这种带断行的名字，而读屏会把换行当停顿。所以标题单独传一份。
+   */
+  title: string;
   /** 节点内的图片（含地址与显示尺寸）；没有图片为 null。 */
   image?: ImageSize | null;
   selected: boolean;
@@ -29,6 +37,13 @@ export interface TopicNodeProps {
    * 出现在导出的图片里等于把「这里可以点」印在成品上。
    */
   showBadges?: boolean;
+  /**
+   * 是否作为 `role="tree"` 的子项参与读屏。
+   *
+   * 只有可编辑的画布传 `true`；只读预览与导出都不传——那两种场景下整张图
+   * 是一个 `img`，里面再挂 treeitem 会让读屏报出一棵无名树。
+   */
+  treeItem?: boolean;
 }
 
 const SELECTION_INSET = 3;
@@ -38,10 +53,12 @@ export const TopicNode = memo(function TopicNode({
   box,
   style,
   lines,
+  title,
   image = null,
   selected,
   editing,
   showBadges = true,
+  treeItem = false,
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
   const textHeight = lines.length * lineHeight;
@@ -67,9 +84,31 @@ export const TopicNode = memo(function TopicNode({
   const badgeX = box.side === 'left' ? box.x : box.side === 'bottom' ? box.x + box.width / 2 : box.x + box.width;
   const badgeY = box.side === 'bottom' ? box.y + box.height : box.y + box.height / 2;
   const showBadge = showBadges && box.collapsed && box.hiddenChildren > 0;
+  const hasChildren = box.childCount > 0;
 
   return (
-    <g className="wmind-topic" data-topic-id={box.id} data-topic-side={box.side}>
+    <g
+      className="wmind-topic"
+      id={treeItem ? topicElementId(box.id) : undefined}
+      data-topic-id={box.id}
+      data-topic-side={box.side}
+      /*
+        画布在编辑态是一棵 `role="tree"`，每个主题就是一个 treeitem。层级用
+        `depth + 1`：ARIA 的 aria-level 从 1 开始，而布局的 depth 从 0 开始
+        （根节点 depth=0）。
+
+        `aria-expanded` 只在**有子节点**时给：给叶子节点加 aria-expanded="false"
+        会让读屏念「已折叠」，而它根本没有可展开的东西。
+
+        只读预览与导出传 `treeItem=false`，这些属性整体不出现——那里整张图
+        是一个 `img`，不属于任何树。
+      */
+      role={treeItem ? 'treeitem' : undefined}
+      aria-level={treeItem ? box.depth + 1 : undefined}
+      aria-selected={treeItem ? selected : undefined}
+      aria-expanded={treeItem && hasChildren ? !box.collapsed : undefined}
+      aria-label={treeItem && title !== '' ? title : undefined}
+    >
       <TopicShape box={box} style={style} />
 
       {showImage ? (
@@ -85,6 +124,8 @@ export const TopicNode = memo(function TopicNode({
           // 点击要落到节点形状上（选中、拖拽、双击编辑都由形状接管），
           // 图片自己不该成为命中目标。
           pointerEvents="none"
+          // 名字已经由外层 treeitem 的 aria-label 提供，图再念一遍是重复。
+          aria-hidden="true"
         />
       ) : null}
 
@@ -94,6 +135,7 @@ export const TopicNode = memo(function TopicNode({
         textAnchor={anchor}
         dominantBaseline="central"
         pointerEvents="none"
+        aria-hidden="true"
         style={{
           // 与 Canvas 测量用同一串字体栈，否则测出来的宽度与实际渲染对不上。
           fontFamily: fontStack(style.fontFamily),
@@ -112,7 +154,7 @@ export const TopicNode = memo(function TopicNode({
       </text>
 
       {showBadge ? (
-        <g data-collapse-toggle={box.id} style={{ cursor: 'pointer' }}>
+        <g data-collapse-toggle={box.id} aria-hidden="true" style={{ cursor: 'pointer' }}>
           <circle
             cx={badgeX}
             cy={badgeY}
@@ -137,7 +179,7 @@ export const TopicNode = memo(function TopicNode({
       {/* 展开态且有子节点：悬停时浮现「折叠」按钮（减号）。
           折叠态那个带数字的徽标本身就是展开按钮，两者语义相同、位置相同。 */}
       {showBadges && !box.collapsed && box.childCount > 0 ? (
-        <g className="wmind-collapse-toggle" data-collapse-toggle={box.id} style={{ cursor: 'pointer' }}>
+        <g className="wmind-collapse-toggle" data-collapse-toggle={box.id} aria-hidden="true" style={{ cursor: 'pointer' }}>
           <circle
             cx={badgeX}
             cy={badgeY}
@@ -179,9 +221,11 @@ function areEqual(prev: TopicNodeProps, next: TopicNodeProps): boolean {
     prev.box === next.box &&
     prev.style === next.style &&
     prev.lines === next.lines &&
+    prev.title === next.title &&
     prev.image === next.image &&
     prev.showBadges === next.showBadges &&
     prev.selected === next.selected &&
-    prev.editing === next.editing
+    prev.editing === next.editing &&
+    prev.treeItem === next.treeItem
   );
 }

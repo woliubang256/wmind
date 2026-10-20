@@ -26,7 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { countSheetNodes, sheetById } from '@/editor/model/traverse';
+import { countSheetNodes, findTopicInSheet, sheetById } from '@/editor/model/traverse';
 import { newSheetId } from '@/editor/model/ids';
 import { parseDocument } from '@/editor/model/validate';
 import { createEditorStore } from '@/editor/store/editor-store';
@@ -36,6 +36,7 @@ import type { LayoutResult } from '@/editor/layout/types';
 import { MIN_ZOOM, zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
 import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
+import { topicElementId } from '@/editor/viewer/a11y-ids';
 import type { Viewport } from '@/editor/viewer/viewer-types';
 import type { StructureClass } from '@/editor/model/types';
 import type { Style, Theme } from '@/editor/model/types';
@@ -67,6 +68,7 @@ import {
 } from '@/editor/commands/sheet';
 import { SheetTabs } from './sheet-tabs';
 import { OutlineView, indentTarget, outdentTarget } from './outline-view';
+import { canvasLabel, selectionAnnouncement, type SelectedTopicInfo } from './canvas-a11y';
 import { mapApi, type MapDetail } from '@/lib/api/maps';
 import { ApiError } from '@/lib/api/errors';
 import { createDemoDocument, createStressDocument } from './demo-document';
@@ -314,6 +316,50 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   });
 
   const selectionSet = useMemo(() => new Set(selection), [selection]);
+
+  /*
+    画布的读屏描述。
+
+    画布在编辑态是一个 `role="tree"`，但它的内容是 SVG——读屏用户进到画布里
+    如果只听到「树」而不知道里面是什么，等于什么也没得到。所以容器的
+    `aria-label` 要带上标题与主题数，`aria-describedby` 指向一段只给读屏看的
+    键位说明（见下面的 `editor-canvas-hint`）。
+
+    `aria-activedescendant` 是这套做法的关键：焦点落在画布容器上（`<g>` 在
+    SVG 里拿不到真正的焦点），活动项靠 id 指过去，方向键一动读屏就念出新节点。
+  */
+  const nodeCount = useMemo(() => countSheetNodes(sheet), [sheet]);
+  const canvasMessage = canvasLabel({ title: doc.title, nodeCount });
+  const canvasSummary = t(canvasMessage.key, canvasMessage.params);
+  const activeDescendant = selection.length === 1 ? topicElementId(selection[0]!) : undefined;
+
+  /*
+    选中变化的播报。首次挂载跳过：一进页面就读「未选中任何主题」纯属噪音，
+    读屏用户会以为发生了什么。
+  */
+  const [announcement, setAnnouncement] = useState('');
+  const announcedKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = selection.join('\u0000');
+    if (announcedKey.current === key) return;
+    const isFirstRun = announcedKey.current === null;
+    announcedKey.current = key;
+    if (isFirstRun) return;
+
+    const infos: SelectedTopicInfo[] = [];
+    for (const id of selection) {
+      const found = findTopicInSheet(sheet, id);
+      if (!found) continue; // 已删除但还没从选中里清掉的 id
+      infos.push({
+        title: found.topic.title.trim() || t('editor.a11y.untitled'),
+        level: found.depth + 1,
+        childCount: found.topic.children.attached.length,
+        collapsed: found.topic.collapsed,
+      });
+    }
+    const message = selectionAnnouncement(infos);
+    setAnnouncement(t(message.key, message.params));
+  }, [selection, sheet, t]);
 
   /**
    * 面板作用对象：有选中就用选中，没有就编辑中心主题。
@@ -824,9 +870,16 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
       {/*
         画布容器是键盘焦点的落点：`tabIndex={0}` + 点击即聚焦。
         快捷键只在这个容器有焦点时生效，所以用户在标题输入框里按 Tab
-        不会被导图截走。`outline-none` 是因为焦点环画在一个铺满屏幕的
-        元素上非常难看——替代的可视反馈是选中节点的描边。
+        不会被导图截走。
+
+        焦点环只在**键盘**聚焦时出现（`focus-visible`）。鼠标点一下画布也会
+        让它聚焦，若用 `focus:` 就会在每次点击后闪一圈框；而纯 `outline-none`
+        又会让键盘用户完全看不出焦点在哪——导图里没有原生控件，没有焦点环
+        就等于没有位置感。
       */}
+      <p id="editor-canvas-hint" className="sr-only">
+        {t('editor.a11y.canvasHint')}
+      </p>
       <div className="flex min-h-0 flex-1">
         {view === 'outline' && !preview ? (
           <OutlineView
@@ -845,12 +898,24 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           <>
             <div
               ref={canvasRef}
-              tabIndex={0}
+              /* 预览态没有快捷键可用，把整个画布移出 Tab 序列：一个没有角色、
+                 没有名字的可聚焦元素只会让键盘用户多按一次 Tab。 */
+              tabIndex={preview ? -1 : 0}
+              /*
+                只读预览里不声明树：那时整张图是一个 `img`（见 MindMapViewer），
+                外面再套一层空的 `role="tree"` 会让读屏报出一棵没有子项的树。
+                键位说明同理——预览态没有任何快捷键可用。
+              */
+              role={preview ? undefined : 'tree'}
+              aria-label={preview ? undefined : canvasSummary}
+              aria-multiselectable={preview ? undefined : true}
+              aria-activedescendant={preview ? undefined : activeDescendant}
+              aria-describedby={preview ? undefined : 'editor-canvas-hint'}
               onPointerDownCapture={(event) => {
                 if (isTextEntryTarget(event.target)) return;
                 canvasRef.current?.focus({ preventScroll: true });
               }}
-              className="relative min-h-0 flex-1 outline-none"
+              className="relative min-h-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
               <MindMapViewer
                 sheet={sheet}
@@ -1016,6 +1081,20 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           />
         </Suspense>
       ) : null}
+
+      {/*
+        选中播报的落点。
+
+        为什么不把播报直接写进画布的 `aria-label`：`aria-label` 变化不会主动
+        触发读屏发声，只有**焦点变化**才会。而方向键导航时焦点一直留在画布
+        容器上，所以必须靠一个 `aria-live` 区域把「现在选中了谁」推出去。
+
+        `polite` 而不是 `assertive`：用户连按三下方向键时，assertive 会把每一句
+        都插进来互相打断，polite 只念最后一句——这恰好是想要的行为。
+      */}
+      <div aria-live="polite" role="status" data-canvas-announcer className="sr-only">
+        {announcement}
+      </div>
     </div>
   );
 }

@@ -131,7 +131,32 @@ export function OutlineView({
       onOutdent(row.id);
       return;
     }
+    // 折叠 / 展开：与画布同一个键位。行内的折叠按钮是 `tabIndex={-1}`（整棵树
+    // 只留一个 Tab 停靠点），所以键盘必须另有一条路能用上它。
+    if (mod && event.key === '.') {
+      event.preventDefault();
+      onToggleCollapse(row.id);
+      return;
+    }
+    // ⌘/Ctrl + Enter = 新建子主题。裸 Enter 是「改名」，而裸 Tab 必须留给
+    // 浏览器（离开控件），所以加子主题只能挂在组合键上。
+    if (mod && event.key === 'Enter') {
+      event.preventDefault();
+      onAddChild(row.id);
+      return;
+    }
     if (mod) return;
+
+    // Tab 交给浏览器，只阻止冒泡到编辑器的全局快捷键。
+    //
+    // 不 stopPropagation 的话，裸 Tab 会被 keymap 解析成「新建子主题」——而
+    // `Tab` 是键盘用户离开这个列表的唯一出路（缩进是 Ctrl/Cmd + ]）。焦点在
+    // 树里出不去是标准的键盘陷阱（WCAG 2.1.2），docs/05 §4.6.2 也是这么定的。
+    // 不 preventDefault，所以浏览器的焦点移动照常发生。
+    if (event.key === 'Tab') {
+      event.stopPropagation();
+      return;
+    }
 
     switch (event.key) {
       case 'ArrowDown':
@@ -214,6 +239,13 @@ export function OutlineView({
                       type="button"
                       aria-label={t('editor.collapse')}
                       aria-expanded={!row.collapsed}
+                      /*
+                        `tabIndex={-1}`：整棵树只留「活动行」一个 Tab 停靠点。
+                        每行都挂一个可 Tab 的按钮，意味着 50 行的导图要按 50 次
+                        Tab 才能离开——那和键盘陷阱只差一步。折叠由 ⌘+. 承担，
+                        读屏的浏览模式照样能找到这个按钮。
+                      */
+                      tabIndex={-1}
                       onClick={() => onToggleCollapse(row.id)}
                       className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted"
                     >
@@ -276,6 +308,8 @@ export function OutlineView({
                   <button
                     type="button"
                     aria-label={t('editor.addChild')}
+                    // 同折叠按钮：不参与 Tab 序列，键盘用 ⌘/Ctrl + Enter。
+                    tabIndex={-1}
                     onClick={() => onAddChild(row.id)}
                     className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground opacity-0 hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
                   >

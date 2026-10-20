@@ -14,6 +14,7 @@
  * | 按键 | 动作 |
  * | --- | --- |
  * | Tab | 新建子主题并进入编辑 |
+ * | Shift + Tab | **不拦**：反向离开画布（见下面 `case 'Tab'` 的注释） |
  * | Enter | 新建同级主题并进入编辑 |
  * | F2 | 进入编辑 |
  * | Esc | 取消选中 |
@@ -138,7 +139,13 @@ export function resolveKey(event: KeyLike): EditorAction | null {
 
   switch (key) {
     case 'Tab':
-      return 'topic.add-child';
+      // Shift+Tab 不拦：它是键盘用户**反向离开画布的唯一出路**。
+      //
+      // 这里踩过一次：初版只判 `key === 'Tab'`，于是 Shift+Tab 也被当成
+      // 「新建子主题」。用户按 Tab 进来（加了个节点），再按 Shift+Tab 想退回去
+      // （又加了个节点）——焦点永远出不去，是个标准的键盘陷阱（WCAG 2.1.2）。
+      // 裸 Tab 仍然要拦：那时用户想在当前节点下新建子主题，放行的话焦点就跳走了。
+      return event.shiftKey ? null : 'topic.add-child';
     case 'Enter':
       return 'topic.add-sibling';
     case 'F2':

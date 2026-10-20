@@ -74,4 +74,12 @@ describe('resolveKey', () => {
     expect(resolveKey({ key: 'q' })).toBeNull();
     expect(resolveKey({ key: 'Shift', shiftKey: true })).toBeNull();
   });
+
+  it('Shift+Tab 必须放行，否则键盘用户出不去画布', () => {
+    // 这是键盘陷阱（WCAG 2.1.2）：Shift+Tab 是反向离开画布的唯一出路，
+    // 被当成「新建子主题」的话焦点永远留在画布里。
+    expect(resolveKey({ key: 'Tab', shiftKey: true })).toBeNull();
+    // 正向的裸 Tab 仍然要拦——那时用户就是想加子主题。
+    expect(resolveKey({ key: 'Tab' })).toBe('topic.add-child');
+  });
 });

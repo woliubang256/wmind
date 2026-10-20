@@ -40,6 +40,20 @@ export interface TopicsLayerProps {
   editingId?: string | null;
   /** 导出传 `false`：折叠徽标是交互产物，不该出现在成品里。 */
   showBadges?: boolean;
+  /**
+   * `id → 原始标题`。只用于 `aria-label`（`lines` 是折行后的，不能当名字）。
+   *
+   * 导出路径不传：导出的 SVG 里没有读屏可言，少建一张表也就少一次遍历。
+   */
+  titles?: ReadonlyMap<string, string>;
+  /**
+   * 是否把每个主题渲染成 `treeitem`。
+   *
+   * 只有**可编辑**的画布才需要：那时画布是一个 `role="tree"`，节点是它的
+   * 子项。只读预览整张图是一个 `img`，里面再冒出 4 个 treeitem 会让读屏
+   * 报出一棵「没有名字的树」，比不报还糟。导出同理（`false`）。
+   */
+  treeItems?: boolean;
 }
 
 export const TopicsLayer = memo(function TopicsLayer({
@@ -47,6 +61,8 @@ export const TopicsLayer = memo(function TopicsLayer({
   selection = EMPTY_SELECTION,
   editingId = null,
   showBadges = true,
+  titles,
+  treeItems = false,
 }: TopicsLayerProps) {
   return (
     <g className="layer-topics">
@@ -58,10 +74,12 @@ export const TopicsLayer = memo(function TopicsLayer({
             box={box}
             style={layout.styles.get(box.id) ?? fallbackStyle(box)}
             lines={size?.lines ?? ['']}
+            title={titles?.get(box.id) ?? ''}
             image={size?.image ?? null}
             selected={selection.has(box.id)}
             editing={editingId === box.id}
             showBadges={showBadges}
+            treeItem={treeItems}
           />
         );
       })}
