@@ -13,12 +13,30 @@
 --      are serialised instead by BEGIN IMMEDIATE plus a single writer
 --      connection (SetMaxOpenConns(1)). See docs/04 section 7.9.3 item 4.
 
+-- The three ORDER BY variants mirror queries/shared/maps.sql#ListMapsByOwner
+-- exactly; see the comment there for why sorting is not parameterised.
 -- name: SearchMapsByTitle :many
 SELECT * FROM maps
 WHERE owner_id = sqlc.arg(owner_id)
   AND deleted_at IS NULL
   AND title LIKE sqlc.arg(pattern)
-ORDER BY updated_at DESC
+ORDER BY updated_at DESC, id DESC
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
+
+-- name: SearchMapsByTitleName :many
+SELECT * FROM maps
+WHERE owner_id = sqlc.arg(owner_id)
+  AND deleted_at IS NULL
+  AND title LIKE sqlc.arg(pattern)
+ORDER BY title ASC, id DESC
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
+
+-- name: SearchMapsByTitleCreated :many
+SELECT * FROM maps
+WHERE owner_id = sqlc.arg(owner_id)
+  AND deleted_at IS NULL
+  AND title LIKE sqlc.arg(pattern)
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
 
 -- name: CountMapsByTitle :one

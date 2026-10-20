@@ -42,9 +42,9 @@ type UploadedFile struct {
 
 // FileServiceConfig 是 FileService 的依赖。
 type FileServiceConfig struct {
-	Store         storage.Store
-	MaxBytes      int64
-	MaxPixels     int
+	Store     storage.Store
+	MaxBytes  int64
+	MaxPixels int
 }
 
 // FileService 处理通用图片上传（导入时的图片还原、后续的缩略图）。

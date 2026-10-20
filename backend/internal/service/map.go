@@ -162,12 +162,15 @@ func NewMapService(cfg MapServiceConfig) (*MapService, error) {
 //
 // 仓储返回的是完整行（含 document），这里不清空它：列表接口的 DTO 本来
 // 就不带 document 字段，让 SQL 少查一列的收益远小于多一条查询路径的维护成本。
-func (s *MapService) List(ctx context.Context, ownerID int64, keyword string, page, pageSize int) ([]*domain.Map, int64, error) {
+//
+// sort 是已经解析过的枚举，不是原始字符串：解析放在 handler 边界上做一次，
+// 服务层拿到的值必然合法，仓储层就不需要再防御一遍。
+func (s *MapService) List(ctx context.Context, ownerID int64, keyword string, sort domain.MapSort, page, pageSize int) ([]*domain.Map, int64, error) {
 	p := domain.NewPage(page, pageSize)
 	keyword = strings.TrimSpace(keyword)
 
 	if keyword == "" {
-		maps, err := s.maps.ListByOwner(ctx, ownerID, p)
+		maps, err := s.maps.ListByOwner(ctx, ownerID, sort, p)
 		if err != nil {
 			return nil, 0, mapMapError(err)
 		}
@@ -179,7 +182,7 @@ func (s *MapService) List(ctx context.Context, ownerID int64, keyword string, pa
 	}
 
 	pattern := "%" + escapeLike(keyword) + "%"
-	maps, err := s.maps.SearchByTitle(ctx, ownerID, pattern, p)
+	maps, err := s.maps.SearchByTitle(ctx, ownerID, pattern, sort, p)
 	if err != nil {
 		return nil, 0, mapMapError(err)
 	}
@@ -300,6 +303,36 @@ func (s *MapService) Rename(ctx context.Context, uid string, ownerID int64, titl
 		return nil, mapMapError(err)
 	}
 	return updated, nil
+}
+
+// maxThumbnailURLRunes 是缩略图 URL 的长度上限。
+//
+// 缩略图是 `/uploads/<uid>.png` 这种形态，正常不超过 60 字符。上限存在的
+// 意义是别让这一列变成第二个可以存任意文本的地方。
+const maxThumbnailURLRunes = 512
+
+// UpdateThumbnail 写入缩略图地址。传空串表示清除。
+//
+// 只接受**站内相对路径**（以单个 `/` 开头），拒绝任何带 scheme 的值。
+// 缩略图最终会进 `<img src>`，而 `javascript:` 之类的伪协议虽然现代浏览器
+// 不会在 img 里执行，但这个字段是用户可控的、会被所有列表页渲染的——
+// 让它只能指向本站，是成本最低的一条防线。`//evil.com/x.png` 这种协议相对
+// URL 一并拒掉，它同样会指到站外。
+func (s *MapService) UpdateThumbnail(ctx context.Context, uid string, ownerID int64, thumbnailURL string) error {
+	thumbnailURL = strings.TrimSpace(thumbnailURL)
+	if thumbnailURL != "" {
+		if !strings.HasPrefix(thumbnailURL, "/") || strings.HasPrefix(thumbnailURL, "//") {
+			return apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
+				"thumbnailUrl": "必须是站内相对路径",
+			})
+		}
+		if len([]rune(thumbnailURL)) > maxThumbnailURLRunes {
+			return apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
+				"thumbnailUrl": "地址过长",
+			})
+		}
+	}
+	return mapMapError(s.maps.UpdateThumbnail(ctx, uid, ownerID, thumbnailURL, s.now()))
 }
 
 // Delete 软删除（进回收站）。

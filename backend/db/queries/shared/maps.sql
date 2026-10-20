@@ -28,10 +28,35 @@ WHERE uid = sqlc.arg(uid)
   AND owner_id = sqlc.arg(owner_id)
   AND deleted_at IS NULL;
 
+-- Sorting gets one query per order rather than a single parameterised ORDER BY.
+--
+-- sqlc's SQLite engine does not rewrite named arguments that appear inside an
+-- ORDER BY expression: `CASE WHEN sqlc.arg(sort) = 'title' THEN ...` comes out
+-- in the generated Go with the literal text `sqlc.arg(sort)` still in the SQL,
+-- which then fails at prepare time. Parameterised ordering also defeats every
+-- index, so three plain queries are both the working option and the faster one.
+--
+-- `id DESC` is not decoration. updated_at only has millisecond resolution, so a
+-- bulk import (dozens of maps written in the same millisecond) produces ties and
+-- LIMIT/OFFSET pagination then silently repeats or skips rows between pages.
+-- A unique tiebreaker makes the order total.
+--
 -- name: ListMapsByOwner :many
 SELECT * FROM maps
 WHERE owner_id = sqlc.arg(owner_id) AND deleted_at IS NULL
-ORDER BY updated_at DESC
+ORDER BY updated_at DESC, id DESC
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
+
+-- name: ListMapsByOwnerName :many
+SELECT * FROM maps
+WHERE owner_id = sqlc.arg(owner_id) AND deleted_at IS NULL
+ORDER BY title ASC, id DESC
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
+
+-- name: ListMapsByOwnerCreated :many
+SELECT * FROM maps
+WHERE owner_id = sqlc.arg(owner_id) AND deleted_at IS NULL
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
 
 -- name: CountMapsByOwner :one
@@ -42,11 +67,15 @@ WHERE owner_id = sqlc.arg(owner_id) AND deleted_at IS NULL;
 -- bumps the version in the same statement.
 -- On mismatch the :one query returns sql.ErrNoRows; the repository layer
 -- then decides between "map not found" and "version conflict".
+--
+-- thumbnail_url is deliberately NOT in the SET list. The editor's autosave has
+-- no thumbnail to send, so including the column meant every save silently wiped
+-- whatever the thumbnail pipeline had written moments earlier. Thumbnails get
+-- their own statement (UpdateMapThumbnail) and their own endpoint.
 -- name: UpdateMapWithVersion :one
 UPDATE maps
 SET title = sqlc.arg(title),
     document = sqlc.arg(document),
-    thumbnail_url = sqlc.arg(thumbnail_url),
     node_count = sqlc.arg(node_count),
     size_bytes = sqlc.arg(size_bytes),
     version = version + 1,

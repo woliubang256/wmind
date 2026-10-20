@@ -147,6 +147,7 @@ func registerMaps(v1 *gin.RouterGroup, deps Deps) {
 	g.GET("/:uid", deps.Maps.Get)
 	g.PUT("/:uid", deps.Maps.Save)
 	g.PATCH("/:uid", deps.Maps.Rename)
+	g.PUT("/:uid/thumbnail", deps.Maps.UpdateThumbnail)
 	g.DELETE("/:uid", deps.Maps.Delete)
 	g.POST("/:uid/duplicate", deps.Maps.Duplicate)
 

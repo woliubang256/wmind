@@ -52,16 +52,47 @@ type CreateMapInput struct {
 //
 // ExpectedVersion 是客户端持有的版本号：只有它与库中一致才写入。
 // 这是跨请求并发的主要防线；SQLite 侧额外靠 BEGIN IMMEDIATE 兜住同瞬间的并发。
+//
+// 这里**没有** ThumbnailURL：缩略图由独立方法写入。放进保存入参意味着每次
+// 自动保存都要带上它，而自动保存手里根本没有缩略图——传空串就把刚生成的
+// 缩略图擦掉了。这条路径曾经真的这么干过。
 type UpdateMapInput struct {
 	UID             string
 	OwnerID         int64
 	Title           string
 	Document        []byte
-	ThumbnailURL    string
 	NodeCount       int
 	SizeBytes       int64
 	ExpectedVersion int
 	Now             time.Time
+}
+
+// MapSort 是列表的排序方式。
+//
+// 只有三种，且是**枚举而不是列名**：排序值最终会挑一条固定的 SQL 语句，
+// 绝不能被拼进语句里。前端传来未知值时由服务层回落到默认排序，不是报错——
+// 排序是展示偏好，为它返回 422 只会让用户看到一整页空白。
+type MapSort string
+
+const (
+	// MapSortUpdated 最近修改优先（默认）。
+	MapSortUpdated MapSort = "updated"
+	// MapSortTitle 按标题升序。
+	MapSortTitle MapSort = "title"
+	// MapSortCreated 最近创建优先。
+	MapSortCreated MapSort = "created"
+)
+
+// ParseMapSort 解析排序参数，未知值回落到默认排序。
+func ParseMapSort(raw string) MapSort {
+	switch MapSort(raw) {
+	case MapSortTitle:
+		return MapSortTitle
+	case MapSortCreated:
+		return MapSortCreated
+	default:
+		return MapSortUpdated
+	}
 }
 
 // MapRepo 是导图仓储接口。
@@ -80,14 +111,14 @@ type MapRepo interface {
 	// 改由 BEGIN IMMEDIATE + 单写连接保证串行。方法名保持不变，调用方无感。
 	GetForUpdate(ctx context.Context, uid string, ownerID int64) (*Map, error)
 
-	ListByOwner(ctx context.Context, ownerID int64, page Page) ([]*Map, error)
+	ListByOwner(ctx context.Context, ownerID int64, sort MapSort, page Page) ([]*Map, error)
 	CountByOwner(ctx context.Context, ownerID int64) (int64, error)
 
 	// SearchByTitle 按标题模糊搜索。pattern 由调用方拼好通配符（如 %关键词%）。
 	//
 	// 方言差异：PostgreSQL 用 ILIKE（英文大小写不敏感），SQLite 用 LIKE
 	// （只对 ASCII 折叠，中文精确匹配）。这是 ADR-015 记录的已知差异。
-	SearchByTitle(ctx context.Context, ownerID int64, pattern string, page Page) ([]*Map, error)
+	SearchByTitle(ctx context.Context, ownerID int64, pattern string, sort MapSort, page Page) ([]*Map, error)
 	CountByTitle(ctx context.Context, ownerID int64, pattern string) (int64, error)
 
 	// UpdateWithVersion 带乐观锁保存。版本不匹配返回 ErrVersionConflict，

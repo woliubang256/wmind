@@ -64,6 +64,7 @@ func TestMapRoutesRequireAuth(t *testing.T) {
 		{http.MethodGet, "/api/v1/maps/some-uid"},
 		{http.MethodPut, "/api/v1/maps/some-uid"},
 		{http.MethodPatch, "/api/v1/maps/some-uid"},
+		{http.MethodPut, "/api/v1/maps/some-uid/thumbnail"},
 		{http.MethodDelete, "/api/v1/maps/some-uid"},
 		{http.MethodPost, "/api/v1/maps/some-uid/duplicate"},
 		{http.MethodGet, "/api/v1/trash"},
@@ -494,5 +495,85 @@ func TestMapUnknownUIDReturnsNotFound(t *testing.T) {
 	})
 	if status != http.StatusNotFound || body.Error.Code != "MAP_NOT_FOUND" {
 		t.Fatalf("保存未知 uid = %d %#v", status, body.Error)
+	}
+}
+
+func TestMapListSort(t *testing.T) {
+	s := newAuthTestServer(t)
+	token := s.registerUser("alice")
+
+	// 创建顺序与标题顺序刻意相反：只按 updated_at 排的实现会让 title 断言红。
+	s.createMap(token, "banana")
+	s.createMap(token, "apple")
+
+	titles := func(query string) []string {
+		t.Helper()
+		status, body := s.do(http.MethodGet, "/api/v1/maps"+query, token, nil)
+		if status != http.StatusOK {
+			t.Fatalf("列表 %q = %d %#v", query, status, body.Error)
+		}
+		out := make([]string, 0, len(body.Items))
+		for _, row := range body.Items {
+			title, _ := row["title"].(string)
+			out = append(out, title)
+		}
+		return out
+	}
+
+	if got := titles("?sort=title"); len(got) != 2 || got[0] != "apple" || got[1] != "banana" {
+		t.Fatalf("sort=title = %v; 期望 [apple banana]", got)
+	}
+	// 未知取值回落到默认排序，而不是 422：排序是展示偏好，不值得让整页失败。
+	if got := titles("?sort=nonsense"); len(got) != 2 || got[0] != "apple" {
+		t.Fatalf("未知 sort 应回落到最近修改 = %v", got)
+	}
+}
+
+func TestMapThumbnailRoundTrip(t *testing.T) {
+	s := newAuthTestServer(t)
+	token := s.registerUser("alice")
+	uid := s.createMap(token, "产品规划", "调研")
+
+	// 只接受站内相对路径：这个字段会被所有列表页渲染进 <img src>。
+	for _, bad := range []string{"https://evil.example/x.png", "//evil.example/x.png", "javascript:alert(1)"} {
+		status, body := s.do(http.MethodPut, "/api/v1/maps/"+uid+"/thumbnail", token, map[string]any{
+			"thumbnailUrl": bad,
+		})
+		fields, _ := body.Error.Details["fields"].(map[string]any)
+		if status != http.StatusUnprocessableEntity || fields["thumbnailUrl"] == nil {
+			t.Fatalf("缩略图 %q = %d %#v; 期望 422 + fields.thumbnailUrl", bad, status, body.Error)
+		}
+	}
+
+	status, body := s.do(http.MethodPut, "/api/v1/maps/"+uid+"/thumbnail", token, map[string]any{
+		"thumbnailUrl": "/uploads/thumb.png",
+	})
+	if status != http.StatusNoContent {
+		t.Fatalf("设置缩略图 = %d %#v", status, body.Error)
+	}
+
+	// 自动保存不带缩略图。保存之后缩略图必须还在——它曾经在这里被擦成空串。
+	status, body = s.do(http.MethodPut, "/api/v1/maps/"+uid, token, map[string]any{
+		"version": 1, "title": "产品规划", "document": mapDoc("产品规划", "调研", "设计"),
+	})
+	if status != http.StatusOK {
+		t.Fatalf("保存 = %d %#v", status, body.Error)
+	}
+	status, body = s.do(http.MethodGet, "/api/v1/maps/"+uid, token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取 = %d %#v", status, body.Error)
+	}
+	if got, _ := body.Data["thumbnailUrl"].(string); got != "/uploads/thumb.png" {
+		t.Fatalf("保存后缩略图 = %q; 期望原样保留", got)
+	}
+
+	// 空串是合法的：表示清除。
+	status, _ = s.do(http.MethodPut, "/api/v1/maps/"+uid+"/thumbnail", token, map[string]any{"thumbnailUrl": ""})
+	if status != http.StatusNoContent {
+		t.Fatalf("清除缩略图 = %d", status)
+	}
+	_, body = s.do(http.MethodGet, "/api/v1/maps/"+uid, token, nil)
+	if got, _ := body.Data["thumbnailUrl"].(string); got != "" {
+		t.Fatalf("清除后缩略图 = %q; 期望空串", got)
 	}
 }

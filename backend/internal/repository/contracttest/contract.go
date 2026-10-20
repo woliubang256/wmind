@@ -142,11 +142,11 @@ func Run(t *testing.T, r Repos) {
 		if count, err := maps.CountByOwner(ctx, owner.ID); err != nil || count != 1 {
 			t.Fatalf("CountByOwner = %d, %v; want 1", count, err)
 		}
-		listed, err := maps.ListByOwner(ctx, owner.ID, domain.Page{Limit: 5})
+		listed, err := maps.ListByOwner(ctx, owner.ID, domain.MapSortUpdated, domain.Page{Limit: 5})
 		if err != nil || len(listed) != 1 || listed[0].UID != mapUID {
 			t.Fatalf("ListByOwner = %#v, %v", listed, err)
 		}
-		searched, err := maps.SearchByTitle(ctx, owner.ID, "%plan%", domain.Page{Limit: 5})
+		searched, err := maps.SearchByTitle(ctx, owner.ID, "%plan%", domain.MapSortUpdated, domain.Page{Limit: 5})
 		if err != nil || len(searched) != 1 || searched[0].UID != mapUID {
 			t.Fatalf("SearchByTitle = %#v, %v", searched, err)
 		}
@@ -156,7 +156,7 @@ func Run(t *testing.T, r Repos) {
 
 		updated, err := maps.UpdateWithVersion(ctx, domain.UpdateMapInput{
 			UID: mapUID, OwnerID: owner.ID, Title: "Quarterly Plan v2", Document: doc,
-			ThumbnailURL: "/thumb.svg", NodeCount: 8, SizeBytes: int64(len(doc)),
+			NodeCount: 8, SizeBytes: int64(len(doc)),
 			ExpectedVersion: 1, Now: now.Add(time.Minute),
 		})
 		if err != nil || updated.Version != 2 || updated.Title != "Quarterly Plan v2" {
@@ -209,6 +209,103 @@ func Run(t *testing.T, r Repos) {
 		}
 		if _, err := maps.GetByUID(ctx, mapUID, owner.ID); !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("read hard-deleted map = %v; want not found", err)
+		}
+	})
+
+	t.Run("map list sorting and thumbnail survives a save", func(t *testing.T) {
+		// A dedicated owner: the assertions below count on knowing exactly which
+		// three maps exist, and reusing the owner above would couple this test to
+		// every future addition in that subtest.
+		sortUID := ulid.Make().String()
+		owner, err := users.Create(ctx, domain.CreateUserInput{
+			UID: sortUID, Username: "sort_" + sortUID, Email: sortUID + "@example.test",
+			PasswordHash: "hash", Role: domain.RoleUser,
+			Status: domain.UserStatusActive, Now: now,
+		})
+		if err != nil {
+			t.Fatalf("Create sort owner: %v", err)
+		}
+
+		// The three orders are deliberately all different, so a bug that ignores
+		// the sort argument cannot pass by accident:
+		//   created  -> C, B, A     (newest first; A was created first)
+		//   updated  -> A, C, B     (A is touched again at +9m)
+		//   title    -> B, A, C     (a-first < b-middle < c-last)
+		doc := []byte(`{"formatVersion":1,"sheets":[]}`)
+		mk := func(title string, at time.Time) *domain.Map {
+			t.Helper()
+			created, err := maps.Create(ctx, domain.CreateMapInput{
+				UID: ulid.Make().String(), OwnerID: owner.ID, Title: title, Document: doc,
+				NodeCount: 1, SizeBytes: int64(len(doc)), Now: at,
+			})
+			if err != nil {
+				t.Fatalf("Create %q: %v", title, err)
+			}
+			return created
+		}
+		a := mk("b-middle", now.Add(time.Minute))
+		mk("a-first", now.Add(2*time.Minute))
+		mk("c-last", now.Add(3*time.Minute))
+		if _, err := maps.UpdateMeta(ctx, a.UID, owner.ID, a.Title, now.Add(9*time.Minute)); err != nil {
+			t.Fatalf("UpdateMeta: %v", err)
+		}
+
+		order := func(list []*domain.Map) []string {
+			out := make([]string, 0, len(list))
+			for _, m := range list {
+				out = append(out, m.Title)
+			}
+			return out
+		}
+		expectOrder := func(name string, got []string, want ...string) {
+			t.Helper()
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("%s = %v; want %v", name, got, want)
+			}
+		}
+
+		page := domain.Page{Limit: 10}
+		for _, tc := range []struct {
+			sort domain.MapSort
+			want []string
+		}{
+			{domain.MapSortUpdated, []string{"b-middle", "c-last", "a-first"}},
+			{domain.MapSortCreated, []string{"c-last", "a-first", "b-middle"}},
+			{domain.MapSortTitle, []string{"a-first", "b-middle", "c-last"}},
+		} {
+			listed, err := maps.ListByOwner(ctx, owner.ID, tc.sort, page)
+			if err != nil {
+				t.Fatalf("ListByOwner(%s): %v", tc.sort, err)
+			}
+			expectOrder("ListByOwner("+string(tc.sort)+")", order(listed), tc.want...)
+
+			// Search must honour the same sort. Pattern "-" matches all three
+			// titles, so the ordering is directly comparable with the list above.
+			found, err := maps.SearchByTitle(ctx, owner.ID, "%-%", tc.sort, page)
+			if err != nil {
+				t.Fatalf("SearchByTitle(%s): %v", tc.sort, err)
+			}
+			expectOrder("SearchByTitle("+string(tc.sort)+")", order(found), tc.want...)
+		}
+
+		// Regression: saving used to write thumbnail_url from the save input, and
+		// autosave has no thumbnail to send -- so every save erased it.
+		if err := maps.UpdateThumbnail(ctx, a.UID, owner.ID, "/uploads/thumb.png", now.Add(10*time.Minute)); err != nil {
+			t.Fatalf("UpdateThumbnail: %v", err)
+		}
+		if _, err := maps.UpdateWithVersion(ctx, domain.UpdateMapInput{
+			UID: a.UID, OwnerID: owner.ID, Title: "b-middle renamed", Document: doc,
+			NodeCount: 2, SizeBytes: int64(len(doc)), ExpectedVersion: a.Version,
+			Now: now.Add(11 * time.Minute),
+		}); err != nil {
+			t.Fatalf("UpdateWithVersion: %v", err)
+		}
+		reloaded, err := maps.GetByUID(ctx, a.UID, owner.ID)
+		if err != nil {
+			t.Fatalf("GetByUID after save: %v", err)
+		}
+		if reloaded.ThumbnailURL != "/uploads/thumb.png" {
+			t.Fatalf("thumbnail after save = %q; want it preserved", reloaded.ThumbnailURL)
 		}
 	})
 

@@ -41,7 +41,16 @@ export interface MapListQuery {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  sort?: MapSort;
 }
+
+/**
+ * 列表排序。
+ *
+ * 与后端 `domain.MapSort` 一一对应。**故意不提供「相关度」**：搜索走的是
+ * 标题子串匹配，没有打分可言，排一个「相关度」出来只是按长度蒙人。
+ */
+export type MapSort = 'updated' | 'title' | 'created';
 
 /** 服务端在 409 里带回来的信息：前端据此显示「你的 v3 / 服务器 v5」。 */
 export interface MapConflictDetails {
@@ -50,8 +59,8 @@ export interface MapConflictDetails {
 }
 
 export const mapApi = {
-  list: ({ page, pageSize, keyword }: MapListQuery = {}): Promise<Paged<MapSummary>> =>
-    api.list<MapSummary>(`/maps${query({ page, page_size: pageSize, q: keyword })}`),
+  list: ({ page, pageSize, keyword, sort }: MapListQuery = {}): Promise<Paged<MapSummary>> =>
+    api.list<MapSummary>(`/maps${query({ page, page_size: pageSize, q: keyword, sort })}`),
 
   create: (input: { title: string; document: WmindDocument }): Promise<MapDetail> =>
     api.post<MapDetail>('/maps', input),
@@ -68,6 +77,15 @@ export const mapApi = {
 
   duplicate: (uid: string): Promise<MapDetail> =>
     api.post<MapDetail>(`/maps/${encodeURIComponent(uid)}/duplicate`),
+
+  /**
+   * 写入缩略图地址。传空串表示清除。
+   *
+   * 与 `save` 分开：自动保存手里没有缩略图，合进保存路径的话两边会互相覆盖。
+   * 服务端只接受站内相对路径（以单个 `/` 开头）。
+   */
+  setThumbnail: (uid: string, thumbnailUrl: string): Promise<void> =>
+    api.put<void>(`/maps/${encodeURIComponent(uid)}/thumbnail`, { thumbnailUrl }),
 
   listTrash: ({ page, pageSize }: MapListQuery = {}): Promise<Paged<MapSummary>> =>
     api.list<MapSummary>(`/trash${query({ page, page_size: pageSize })}`),

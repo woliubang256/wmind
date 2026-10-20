@@ -29,6 +29,7 @@ export type IconName =
   | 'layout-dashboard'
   | 'chevron-left'
   | 'chevron-right'
+  | 'chevron-down'
   | 'undo'
   | 'redo'
   | 'zoom-in'
@@ -67,6 +68,7 @@ const paths: Record<IconName, ReactNode> = {
   'layout-dashboard': <><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></>,
   'chevron-left': <><path d="m15 18-6-6 6-6"/></>,
   'chevron-right': <><path d="m9 18 6-6-6-6"/></>,
+  'chevron-down': <><path d="m6 9 6 6 6-6"/></>,
   undo: <><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H8"/></>,
   redo: <><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H16"/></>,
   'zoom-in': <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/></>,

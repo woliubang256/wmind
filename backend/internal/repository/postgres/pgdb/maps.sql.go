@@ -258,7 +258,7 @@ func (q *Queries) ListAllMapsByOwnerIncludingDeleted(ctx context.Context, ownerI
 const listMapsByOwner = `-- name: ListMapsByOwner :many
 SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
 WHERE owner_id = $1 AND deleted_at IS NULL
-ORDER BY updated_at DESC
+ORDER BY updated_at DESC, id DESC
 LIMIT $3 OFFSET $2
 `
 
@@ -268,8 +268,112 @@ type ListMapsByOwnerParams struct {
 	PageSize  int32
 }
 
+// Sorting gets one query per order rather than a single parameterised ORDER BY.
+//
+// sqlc's SQLite engine does not rewrite named arguments that appear inside an
+// ORDER BY expression: `CASE WHEN sqlc.arg(sort) = 'title' THEN ...` comes out
+// in the generated Go with the literal text `sqlc.arg(sort)` still in the SQL,
+// which then fails at prepare time. Parameterised ordering also defeats every
+// index, so three plain queries are both the working option and the faster one.
+//
+// `id DESC` is not decoration. updated_at only has millisecond resolution, so a
+// bulk import (dozens of maps written in the same millisecond) produces ties and
+// LIMIT/OFFSET pagination then silently repeats or skips rows between pages.
+// A unique tiebreaker makes the order total.
 func (q *Queries) ListMapsByOwner(ctx context.Context, arg ListMapsByOwnerParams) ([]Map, error) {
 	rows, err := q.db.Query(ctx, listMapsByOwner, arg.OwnerID, arg.RowOffset, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Map{}
+	for rows.Next() {
+		var i Map
+		if err := rows.Scan(
+			&i.ID,
+			&i.Uid,
+			&i.OwnerID,
+			&i.Title,
+			&i.Document,
+			&i.Version,
+			&i.ThumbnailUrl,
+			&i.NodeCount,
+			&i.SizeBytes,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMapsByOwnerCreated = `-- name: ListMapsByOwnerCreated :many
+SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
+WHERE owner_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListMapsByOwnerCreatedParams struct {
+	OwnerID   int64
+	RowOffset int32
+	PageSize  int32
+}
+
+func (q *Queries) ListMapsByOwnerCreated(ctx context.Context, arg ListMapsByOwnerCreatedParams) ([]Map, error) {
+	rows, err := q.db.Query(ctx, listMapsByOwnerCreated, arg.OwnerID, arg.RowOffset, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Map{}
+	for rows.Next() {
+		var i Map
+		if err := rows.Scan(
+			&i.ID,
+			&i.Uid,
+			&i.OwnerID,
+			&i.Title,
+			&i.Document,
+			&i.Version,
+			&i.ThumbnailUrl,
+			&i.NodeCount,
+			&i.SizeBytes,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMapsByOwnerName = `-- name: ListMapsByOwnerName :many
+SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
+WHERE owner_id = $1 AND deleted_at IS NULL
+ORDER BY title ASC, id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListMapsByOwnerNameParams struct {
+	OwnerID   int64
+	RowOffset int32
+	PageSize  int32
+}
+
+func (q *Queries) ListMapsByOwnerName(ctx context.Context, arg ListMapsByOwnerNameParams) ([]Map, error) {
+	rows, err := q.db.Query(ctx, listMapsByOwnerName, arg.OwnerID, arg.RowOffset, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +490,7 @@ SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, s
 WHERE owner_id = $1
   AND deleted_at IS NULL
   AND title ILIKE $2
-ORDER BY updated_at DESC
+ORDER BY updated_at DESC, id DESC
 LIMIT $4 OFFSET $3
 `
 
@@ -412,8 +516,118 @@ type SearchMapsByTitleParams struct {
 // both dialects behave identically (exact match). The pg_trgm GIN index
 // (idx_maps_title_trgm) lets the '%kw%' pattern use an index instead of a
 // full scan.
+// The three ORDER BY variants mirror queries/shared/maps.sql#ListMapsByOwner
+// exactly; see the comment there for why sorting is not parameterised.
 func (q *Queries) SearchMapsByTitle(ctx context.Context, arg SearchMapsByTitleParams) ([]Map, error) {
 	rows, err := q.db.Query(ctx, searchMapsByTitle,
+		arg.OwnerID,
+		arg.Pattern,
+		arg.RowOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Map{}
+	for rows.Next() {
+		var i Map
+		if err := rows.Scan(
+			&i.ID,
+			&i.Uid,
+			&i.OwnerID,
+			&i.Title,
+			&i.Document,
+			&i.Version,
+			&i.ThumbnailUrl,
+			&i.NodeCount,
+			&i.SizeBytes,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchMapsByTitleCreated = `-- name: SearchMapsByTitleCreated :many
+SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
+WHERE owner_id = $1
+  AND deleted_at IS NULL
+  AND title ILIKE $2
+ORDER BY created_at DESC, id DESC
+LIMIT $4 OFFSET $3
+`
+
+type SearchMapsByTitleCreatedParams struct {
+	OwnerID   int64
+	Pattern   string
+	RowOffset int32
+	PageSize  int32
+}
+
+func (q *Queries) SearchMapsByTitleCreated(ctx context.Context, arg SearchMapsByTitleCreatedParams) ([]Map, error) {
+	rows, err := q.db.Query(ctx, searchMapsByTitleCreated,
+		arg.OwnerID,
+		arg.Pattern,
+		arg.RowOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Map{}
+	for rows.Next() {
+		var i Map
+		if err := rows.Scan(
+			&i.ID,
+			&i.Uid,
+			&i.OwnerID,
+			&i.Title,
+			&i.Document,
+			&i.Version,
+			&i.ThumbnailUrl,
+			&i.NodeCount,
+			&i.SizeBytes,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchMapsByTitleName = `-- name: SearchMapsByTitleName :many
+SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
+WHERE owner_id = $1
+  AND deleted_at IS NULL
+  AND title ILIKE $2
+ORDER BY title ASC, id DESC
+LIMIT $4 OFFSET $3
+`
+
+type SearchMapsByTitleNameParams struct {
+	OwnerID   int64
+	Pattern   string
+	RowOffset int32
+	PageSize  int32
+}
+
+func (q *Queries) SearchMapsByTitleName(ctx context.Context, arg SearchMapsByTitleNameParams) ([]Map, error) {
+	rows, err := q.db.Query(ctx, searchMapsByTitleName,
 		arg.OwnerID,
 		arg.Pattern,
 		arg.RowOffset,
@@ -547,14 +761,13 @@ const updateMapWithVersion = `-- name: UpdateMapWithVersion :one
 UPDATE maps
 SET title = $1,
     document = $2,
-    thumbnail_url = $3,
-    node_count = $4,
-    size_bytes = $5,
+    node_count = $3,
+    size_bytes = $4,
     version = version + 1,
-    updated_at = $6
-WHERE uid = $7
-  AND owner_id = $8
-  AND version = $9
+    updated_at = $5
+WHERE uid = $6
+  AND owner_id = $7
+  AND version = $8
   AND deleted_at IS NULL
 RETURNING id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at
 `
@@ -562,7 +775,6 @@ RETURNING id, uid, owner_id, title, document, version, thumbnail_url, node_count
 type UpdateMapWithVersionParams struct {
 	Title           string
 	Document        []byte
-	ThumbnailUrl    string
 	NodeCount       int32
 	SizeBytes       int64
 	UpdatedAt       pgtype.Timestamptz
@@ -575,11 +787,15 @@ type UpdateMapWithVersionParams struct {
 // bumps the version in the same statement.
 // On mismatch the :one query returns sql.ErrNoRows; the repository layer
 // then decides between "map not found" and "version conflict".
+//
+// thumbnail_url is deliberately NOT in the SET list. The editor's autosave has
+// no thumbnail to send, so including the column meant every save silently wiped
+// whatever the thumbnail pipeline had written moments earlier. Thumbnails get
+// their own statement (UpdateMapThumbnail) and their own endpoint.
 func (q *Queries) UpdateMapWithVersion(ctx context.Context, arg UpdateMapWithVersionParams) (Map, error) {
 	row := q.db.QueryRow(ctx, updateMapWithVersion,
 		arg.Title,
 		arg.Document,
-		arg.ThumbnailUrl,
 		arg.NodeCount,
 		arg.SizeBytes,
 		arg.UpdatedAt,

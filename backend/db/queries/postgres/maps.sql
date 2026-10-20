@@ -14,12 +14,30 @@
 -- both dialects behave identically (exact match). The pg_trgm GIN index
 -- (idx_maps_title_trgm) lets the '%kw%' pattern use an index instead of a
 -- full scan.
+-- The three ORDER BY variants mirror queries/shared/maps.sql#ListMapsByOwner
+-- exactly; see the comment there for why sorting is not parameterised.
 -- name: SearchMapsByTitle :many
 SELECT * FROM maps
 WHERE owner_id = sqlc.arg(owner_id)
   AND deleted_at IS NULL
   AND title ILIKE sqlc.arg(pattern)
-ORDER BY updated_at DESC
+ORDER BY updated_at DESC, id DESC
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
+
+-- name: SearchMapsByTitleName :many
+SELECT * FROM maps
+WHERE owner_id = sqlc.arg(owner_id)
+  AND deleted_at IS NULL
+  AND title ILIKE sqlc.arg(pattern)
+ORDER BY title ASC, id DESC
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
+
+-- name: SearchMapsByTitleCreated :many
+SELECT * FROM maps
+WHERE owner_id = sqlc.arg(owner_id)
+  AND deleted_at IS NULL
+  AND title ILIKE sqlc.arg(pattern)
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(row_offset);
 
 -- name: CountMapsByTitle :one

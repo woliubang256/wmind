@@ -3,7 +3,9 @@ import { AuthLayout, PublicLayout, RequireAdmin, RequireAuth } from './layouts';
 import { LoginPage } from '@/features/auth/login-page';
 import { RegisterPage } from '@/features/auth/register-page';
 import { AccountPage } from '@/features/account/account-page';
-import { PlaceholderPage, PublicSharePage, RecentPage } from '@/features/dashboard/pages';
+import { PlaceholderPage, PublicSharePage } from '@/features/dashboard/pages';
+import { RecentPage } from '@/features/maps/recent-page';
+import { TrashPage } from '@/features/maps/trash-page';
 
 /**
  * 管理后台三个页面按需加载。
@@ -51,7 +53,7 @@ export const router = createBrowserRouter([
           { path: '/', element: <RecentPage /> },
           { path: '/templates', element: <PlaceholderPage page="templates" /> },
           { path: '/shares', element: <PlaceholderPage page="shares" /> },
-          { path: '/trash', element: <PlaceholderPage page="trash" /> },
+          { path: '/trash', element: <TrashPage /> },
           { path: '/account', element: <AccountPage /> },
           {element: <RequireAdmin />, children: adminRoutes},
           {

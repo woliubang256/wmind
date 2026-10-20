@@ -66,6 +66,7 @@ import { clearDraft, pruneDrafts, type LocalDraft } from './persistence/local-dr
 import { ConflictDialog, LeaveDialog } from './persistence/dialogs';
 import { SaveIndicator } from './persistence/save-indicator';
 import { useFontsReady } from './use-fonts-ready';
+import { useThumbnailUpload } from './use-thumbnail-upload';
 
 // 导出对话框是懒加载的：它把 `react-dom/server` 带进包里（序列化 SVG 要用），
 // 而绝大多数编辑会话里用户根本不会点「导出」。不点就不下载。
@@ -97,7 +98,7 @@ function LocalEditor({ uid, kind }: { uid: string; kind: 'demo' | 'stress' }) {
   );
   return (
     <EditorProvider store={store}>
-      <Workspace uid={uid} enabled={false} initialDraft={null} />
+      <Workspace uid={uid} enabled={false} initialDraft={null} initialThumbnailUrl="" />
     </EditorProvider>
   );
 }
@@ -177,7 +178,12 @@ function LoadedEditor({ detail }: { detail: MapDetail }) {
 
   return (
     <EditorProvider store={store}>
-      <Workspace uid={detail.uid} enabled initialDraft={draft} />
+      <Workspace
+        uid={detail.uid}
+        enabled
+        initialDraft={draft}
+        initialThumbnailUrl={detail.thumbnailUrl}
+      />
     </EditorProvider>
   );
 }
@@ -231,9 +237,11 @@ interface WorkspaceProps {
   uid: string;
   enabled: boolean;
   initialDraft: LocalDraft | null;
+  /** 打开时服务端的缩略图地址；空串表示还没有，需要在首帧后生成。 */
+  initialThumbnailUrl: string;
 }
 
-function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
+function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: WorkspaceProps) {
   const { t } = useTranslation();
   const store = useEditorStoreApi();
   const doc = useEditor((state) => state.doc);
@@ -273,6 +281,18 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
     // 量出来的宽度（见 use-fonts-ready.ts）。
     [sheet, doc.theme, fonts.ready, fonts.generation],
   );
+  // 缩略图：首帧后生成一次，之后每次保存成功且距上次超过 3 分钟再生成。
+  // 判定逻辑在 `features/maps/thumbnail-plan.ts`，这里只传事实。
+  useThumbnailUpload({
+    uid,
+    enabled,
+    document: doc,
+    sheetId,
+    initialThumbnailUrl,
+    version,
+    ready: fonts.ready,
+  });
+
   const selectionSet = useMemo(() => new Set(selection), [selection]);
 
   /**

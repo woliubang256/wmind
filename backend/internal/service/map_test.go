@@ -116,7 +116,7 @@ func (r *fakeMapRepo) CountByOwner(_ context.Context, ownerID int64) (int64, err
 	return count, nil
 }
 
-func (r *fakeMapRepo) ListByOwner(_ context.Context, ownerID int64, _ domain.Page) ([]*domain.Map, error) {
+func (r *fakeMapRepo) ListByOwner(_ context.Context, ownerID int64, _ domain.MapSort, _ domain.Page) ([]*domain.Map, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make([]*domain.Map, 0)
@@ -128,7 +128,7 @@ func (r *fakeMapRepo) ListByOwner(_ context.Context, ownerID int64, _ domain.Pag
 	return out, nil
 }
 
-func (r *fakeMapRepo) SearchByTitle(_ context.Context, ownerID int64, pattern string, _ domain.Page) ([]*domain.Map, error) {
+func (r *fakeMapRepo) SearchByTitle(_ context.Context, ownerID int64, pattern string, _ domain.MapSort, _ domain.Page) ([]*domain.Map, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lastPattern = pattern
@@ -415,7 +415,7 @@ func TestDuplicateAppendsSuffixAndClampsTitle(t *testing.T) {
 
 func TestListEscapesLikeWildcards(t *testing.T) {
 	svc, repo := newMapService(t, nil)
-	if _, _, err := svc.List(context.Background(), 1, "100%_a\\b", 1, 20); err != nil {
+	if _, _, err := svc.List(context.Background(), 1, "100%_a\\b", domain.MapSortUpdated, 1, 20); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	want := `%100\%\_a\\b%`

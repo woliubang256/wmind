@@ -391,8 +391,19 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | `page` | int | 默认 1 |
 | `page_size` | int | 默认 20，最大 100 |
 | `q` | string | 标题模糊搜索 |
-| `sort` | string | `-updated_at`（默认）\| `-created_at` \| `title` |
+| `sort` | string | `updated`（默认）\| `created` \| `title`。未知值回落到默认 |
 | `updated_since` | string | RFC 3339。**客户端增量同步预留**，返回该时间后更新的导图（含已删除标记） |
+
+> **`sort` 与初版设计的差异**：初版写的是 `-updated_at` / `-created_at`（JSON:API
+> 风格的方向前缀 + 列名）。实现时改成 `updated` / `created` / `title` 三个语义名，
+> 理由是这里没有升序变体，方向前缀没有信息量，而把列名暴露给前端会让「以后改
+> 索引名」变成一次接口变更。
+>
+> 排序不是参数化 ORDER BY：sqlc 的 SQLite 引擎不重写 ORDER BY 表达式里的命名
+> 参数（生成的 SQL 里会留着字面量 `sqlc.arg(sort)`），而 `ORDER BY CASE` 还会让
+> 索引全部失效。实际实现是**每个顺序一条固定查询**，由 `domain.MapSort` 枚举
+> 挑选。附带收益：三条查询都以 `id DESC` 收尾，保证 `updated_at` 毫秒并列时
+> 分页不会重复或跳行。
 
 ```json
 {
@@ -400,8 +411,9 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
     {
       "uid": "01JFA8...",
       "title": "产品规划",
-      "thumbnailUrl": "/api/v1/files/01JFA9...",
+      "thumbnailUrl": "/uploads/file_9f3c....png",
       "nodeCount": 42,
+      "sizeBytes": 18342,
       "version": 12,
       "createdAt": "2026-10-01T08:00:00Z",
       "updatedAt": "2026-10-16T02:30:00Z",
@@ -413,6 +425,8 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 ```
 
 > 列表接口**不返回** `document` 字段，避免响应体过大。
+>
+> `thumbnailUrl` 为空串表示这张图还没有缩略图（前端显示占位图标）。
 
 #### `POST /api/v1/maps`
 
@@ -470,7 +484,25 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 #### `PUT /api/v1/maps/{uid}/thumbnail`
 
-`multipart/form-data`，字段 `file`（PNG/WebP，≤ 512KB）。前端渲染首屏后上传。
+```json
+{ "thumbnailUrl": "/uploads/file_9f3c....png" }
+```
+
+返回 `204`。空串表示清除缩略图。
+
+> **与初版设计的差异**：初版是 `multipart/form-data` 直接传图片（一张请求搞定）。
+> 实现改成「先 `POST /files` 传图、再把返回的 URL 写回来」，理由是复用已有的
+> 上传与静态目录两条通路，不必为缩略图再写一遍解码、校验、存储、回放。
+>
+> 代价有两个，都记在这里：多一次往返（缩略图是后台生成的一次性动作，无所谓），
+> 以及彻底删除导图时**不会**连带删掉 `/uploads` 下的缩略图文件——`files` 表
+> 目前没有删除通路，这是既有缺口，不是缩略图引入的。
+>
+> 只接受**站内相对路径**（以单个 `/` 开头且不是 `//`）。这个字段会被所有列表页
+> 渲染进 `<img src>`，让它只能指向本站是成本最低的一条防线。
+>
+> 缩略图**不在保存接口里**：`PUT /maps/{uid}` 不碰 `thumbnail_url`。合在一起的话，
+> 自动保存（手里没有缩略图）每次都会把它擦成空串。
 
 #### `GET /api/v1/trash`
 

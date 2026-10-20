@@ -303,10 +303,27 @@ func (r *MapRepository) GetForUpdate(ctx context.Context, uid string, ownerID in
 	return mapPGMap(v), nil
 }
 
-func (r *MapRepository) ListByOwner(ctx context.Context, ownerID int64, page domain.Page) ([]*domain.Map, error) {
-	rows, err := r.queries(ctx).ListMapsByOwner(ctx, pgdb.ListMapsByOwnerParams{
-		OwnerID: ownerID, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
-	})
+// ListByOwner 按排序方式挑一条固定语句；见 sqlite 实现里同一条注释。
+func (r *MapRepository) ListByOwner(ctx context.Context, ownerID int64, sort domain.MapSort, page domain.Page) ([]*domain.Map, error) {
+	q := r.queries(ctx)
+	var (
+		rows []pgdb.Map
+		err  error
+	)
+	switch sort {
+	case domain.MapSortTitle:
+		rows, err = q.ListMapsByOwnerName(ctx, pgdb.ListMapsByOwnerNameParams{
+			OwnerID: ownerID, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
+		})
+	case domain.MapSortCreated:
+		rows, err = q.ListMapsByOwnerCreated(ctx, pgdb.ListMapsByOwnerCreatedParams{
+			OwnerID: ownerID, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
+		})
+	default:
+		rows, err = q.ListMapsByOwner(ctx, pgdb.ListMapsByOwnerParams{
+			OwnerID: ownerID, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
+		})
+	}
 	if err != nil {
 		return nil, mapPGError(err)
 	}
@@ -318,10 +335,26 @@ func (r *MapRepository) CountByOwner(ctx context.Context, ownerID int64) (int64,
 	return v, mapPGError(err)
 }
 
-func (r *MapRepository) SearchByTitle(ctx context.Context, ownerID int64, pattern string, page domain.Page) ([]*domain.Map, error) {
-	rows, err := r.queries(ctx).SearchMapsByTitle(ctx, pgdb.SearchMapsByTitleParams{
-		OwnerID: ownerID, Pattern: pattern, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
-	})
+func (r *MapRepository) SearchByTitle(ctx context.Context, ownerID int64, pattern string, sort domain.MapSort, page domain.Page) ([]*domain.Map, error) {
+	q := r.queries(ctx)
+	var (
+		rows []pgdb.Map
+		err  error
+	)
+	switch sort {
+	case domain.MapSortTitle:
+		rows, err = q.SearchMapsByTitleName(ctx, pgdb.SearchMapsByTitleNameParams{
+			OwnerID: ownerID, Pattern: pattern, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
+		})
+	case domain.MapSortCreated:
+		rows, err = q.SearchMapsByTitleCreated(ctx, pgdb.SearchMapsByTitleCreatedParams{
+			OwnerID: ownerID, Pattern: pattern, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
+		})
+	default:
+		rows, err = q.SearchMapsByTitle(ctx, pgdb.SearchMapsByTitleParams{
+			OwnerID: ownerID, Pattern: pattern, RowOffset: int32(page.Offset), PageSize: int32(page.Limit),
+		})
+	}
 	if err != nil {
 		return nil, mapPGError(err)
 	}
@@ -335,7 +368,7 @@ func (r *MapRepository) CountByTitle(ctx context.Context, ownerID int64, pattern
 
 func (r *MapRepository) UpdateWithVersion(ctx context.Context, in domain.UpdateMapInput) (*domain.Map, error) {
 	v, err := r.queries(ctx).UpdateMapWithVersion(ctx, pgdb.UpdateMapWithVersionParams{
-		Title: in.Title, Document: in.Document, ThumbnailUrl: in.ThumbnailURL,
+		Title: in.Title, Document: in.Document,
 		NodeCount: int32(in.NodeCount), SizeBytes: in.SizeBytes, UpdatedAt: pgTime(in.Now),
 		Uid: in.UID, OwnerID: in.OwnerID, ExpectedVersion: int32(in.ExpectedVersion),
 	})

@@ -82,13 +82,17 @@ func toMapDetailDTO(m *domain.Map) mapDetailDTO {
 }
 
 // List 处理 GET /api/v1/maps。
+//
+// `sort` 只在这里解析一次：未知值回落到「最近修改」而不是 422。排序是展示
+// 偏好，用户从旧版前端或手改地址栏带进来一个陌生值时，给他一页正常内容
+// 比给他一个错误页有用。
 func (h *MapHandler) List(c *gin.Context) {
 	owner, ok := ownerID(c)
 	if !ok {
 		return
 	}
 	page, pageSize := pageParams(c)
-	maps, total, err := h.maps.List(c.Request.Context(), owner, c.Query("q"), page, pageSize)
+	maps, total, err := h.maps.List(c.Request.Context(), owner, c.Query("q"), domain.ParseMapSort(c.Query("sort")), page, pageSize)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -210,6 +214,31 @@ func (h *MapHandler) Rename(c *gin.Context) {
 		return
 	}
 	response.OK(c, toMapSummaryDTO(updated))
+}
+
+type updateThumbnailRequest struct {
+	ThumbnailURL string `json:"thumbnailUrl"`
+}
+
+// UpdateThumbnail 处理 PUT /api/v1/maps/{uid}/thumbnail。
+//
+// 与保存接口分开：自动保存手里没有缩略图，而缩略图是在渲染稳定之后才由
+// 前端截图上传的。合成一条路径的话，两边都会互相覆盖。
+func (h *MapHandler) UpdateThumbnail(c *gin.Context) {
+	owner, ok := ownerID(c)
+	if !ok {
+		return
+	}
+	var req updateThumbnailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, apperr.Wrap(apperr.CodeBadRequest, err))
+		return
+	}
+	if err := h.maps.UpdateThumbnail(c.Request.Context(), c.Param("uid"), owner, req.ThumbnailURL); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.NoContent(c)
 }
 
 // Delete 处理 DELETE /api/v1/maps/{uid}（软删除进回收站）。

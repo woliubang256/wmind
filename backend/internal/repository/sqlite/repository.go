@@ -335,10 +335,30 @@ func (r *MapRepository) GetForUpdate(ctx context.Context, uid string, ownerID in
 	return mapSQLiteMap(v)
 }
 
-func (r *MapRepository) ListByOwner(ctx context.Context, ownerID int64, page domain.Page) ([]*domain.Map, error) {
-	rows, err := queries(ctx, r.db).ListMapsByOwner(ctx, sqlitedb.ListMapsByOwnerParams{
-		OwnerID: ownerID, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
-	})
+// ListByOwner 按排序方式挑一条固定语句。
+//
+// 不是把 sort 拼进 SQL，也不是给 ORDER BY 传参数：前者是注入面，后者 sqlc
+// 的 SQLite 引擎生成不出来（详见 queries/shared/maps.sql 的注释）。
+func (r *MapRepository) ListByOwner(ctx context.Context, ownerID int64, sort domain.MapSort, page domain.Page) ([]*domain.Map, error) {
+	q := queries(ctx, r.db)
+	var (
+		rows []sqlitedb.Map
+		err  error
+	)
+	switch sort {
+	case domain.MapSortTitle:
+		rows, err = q.ListMapsByOwnerName(ctx, sqlitedb.ListMapsByOwnerNameParams{
+			OwnerID: ownerID, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
+		})
+	case domain.MapSortCreated:
+		rows, err = q.ListMapsByOwnerCreated(ctx, sqlitedb.ListMapsByOwnerCreatedParams{
+			OwnerID: ownerID, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
+		})
+	default:
+		rows, err = q.ListMapsByOwner(ctx, sqlitedb.ListMapsByOwnerParams{
+			OwnerID: ownerID, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
+		})
+	}
 	if err != nil {
 		return nil, mapSQLiteError(err)
 	}
@@ -350,10 +370,26 @@ func (r *MapRepository) CountByOwner(ctx context.Context, ownerID int64) (int64,
 	return v, mapSQLiteError(err)
 }
 
-func (r *MapRepository) SearchByTitle(ctx context.Context, ownerID int64, pattern string, page domain.Page) ([]*domain.Map, error) {
-	rows, err := queries(ctx, r.db).SearchMapsByTitle(ctx, sqlitedb.SearchMapsByTitleParams{
-		OwnerID: ownerID, Pattern: pattern, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
-	})
+func (r *MapRepository) SearchByTitle(ctx context.Context, ownerID int64, pattern string, sort domain.MapSort, page domain.Page) ([]*domain.Map, error) {
+	q := queries(ctx, r.db)
+	var (
+		rows []sqlitedb.Map
+		err  error
+	)
+	switch sort {
+	case domain.MapSortTitle:
+		rows, err = q.SearchMapsByTitleName(ctx, sqlitedb.SearchMapsByTitleNameParams{
+			OwnerID: ownerID, Pattern: pattern, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
+		})
+	case domain.MapSortCreated:
+		rows, err = q.SearchMapsByTitleCreated(ctx, sqlitedb.SearchMapsByTitleCreatedParams{
+			OwnerID: ownerID, Pattern: pattern, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
+		})
+	default:
+		rows, err = q.SearchMapsByTitle(ctx, sqlitedb.SearchMapsByTitleParams{
+			OwnerID: ownerID, Pattern: pattern, RowOffset: int64(page.Offset), PageSize: int64(page.Limit),
+		})
+	}
 	if err != nil {
 		return nil, mapSQLiteError(err)
 	}
@@ -367,7 +403,7 @@ func (r *MapRepository) CountByTitle(ctx context.Context, ownerID int64, pattern
 
 func (r *MapRepository) UpdateWithVersion(ctx context.Context, in domain.UpdateMapInput) (*domain.Map, error) {
 	v, err := queries(ctx, r.db).UpdateMapWithVersion(ctx, sqlitedb.UpdateMapWithVersionParams{
-		Title: in.Title, Document: string(in.Document), ThumbnailUrl: in.ThumbnailURL,
+		Title: in.Title, Document: string(in.Document),
 		NodeCount: int64(in.NodeCount), SizeBytes: in.SizeBytes, UpdatedAt: sqliteTime(in.Now),
 		Uid: in.UID, OwnerID: in.OwnerID, ExpectedVersion: int64(in.ExpectedVersion),
 	})

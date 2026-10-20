@@ -9,10 +9,10 @@ import (
 	// 注册解码器：png/jpeg/gif 由 stdlib 提供，webp 由 x/image 提供。
 	// 与 avatar.go 共用同一个注册表——两边各 import 一份的话，改了白名单
 	// 只改一处，另一处就会「明明说支持却解不出来」。
+	_ "golang.org/x/image/webp"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	_ "golang.org/x/image/webp"
 )
 
 // ImageInfo 是「这张图是什么」的结论。
