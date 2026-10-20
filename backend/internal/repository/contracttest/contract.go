@@ -29,6 +29,7 @@ type Repos struct {
 	Audit     domain.AuditRepo
 	Shares    domain.ShareRepo
 	Templates domain.TemplateRepo
+	Themes    domain.ThemeRepo
 	Tx        domain.TxManager
 }
 
@@ -868,6 +869,129 @@ func Run(t *testing.T, r Repos) {
 		}
 		if _, err := templates.GetByUID(ctx, created.UID, owner.ID); !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("GetByUID after delete = %v; want ErrNotFound", err)
+		}
+	})
+
+	t.Run("custom theme lifecycle, JSON config round-trip, and owner isolation", func(t *testing.T) {
+		themes := r.Themes
+		owner := mustCreateUser(t, ctx, users, now)
+		other := mustCreateUser(t, ctx, users, now)
+
+		// 与模板同一个理由：2^24 + 1 一旦被当成 float64 解码就会变成 16777216。
+		config := []byte(`{"id":"custom-1","name":"我的配色","category":"custom",` +
+			`"palette":{"colors":["#112233"],"lineColors":["#445566"],"backgroundColor":"#FFFFFF"},` +
+			`"global":{"fontSize":14,"lineWidth":16777217}}`)
+
+		created, err := themes.Create(ctx, domain.CreateThemeInput{
+			UID: ulid.Make().String(), OwnerID: owner.ID, Name: "我的配色",
+			Category: domain.ThemeCategoryCustom, Config: config, Now: now,
+		})
+		if err != nil {
+			t.Fatalf("create theme: %v", err)
+		}
+		if created.ID <= 0 || created.UID == "" {
+			t.Fatalf("created theme has no identity: %#v", created)
+		}
+		// 接口建出来的主题按定义就是用户主题：is_builtin 是写死的 false，
+		// 否则一个构造出来的请求就能造出删不掉的「内置」行。
+		if created.IsBuiltin {
+			t.Fatal("API-created theme reported as built-in")
+		}
+		if created.SortOrder != 0 {
+			t.Fatalf("sort_order = %d, want 0", created.SortOrder)
+		}
+		if created.Category != domain.ThemeCategoryCustom {
+			t.Fatalf("category = %q, want %q", created.Category, domain.ThemeCategoryCustom)
+		}
+		if created.OwnerID == nil || *created.OwnerID != owner.ID {
+			t.Fatalf("owner_id = %v, want %d", created.OwnerID, owner.ID)
+		}
+		if !created.CreatedAt.Equal(now) || !created.UpdatedAt.Equal(now) {
+			t.Fatalf("timestamps = %v / %v, want %v", created.CreatedAt, created.UpdatedAt, now)
+		}
+		if !sameJSON(t, string(created.Config), string(config)) {
+			t.Fatalf("config round-trip mismatch: %s", created.Config)
+		}
+
+		got, err := themes.GetByUID(ctx, created.UID, owner.ID)
+		if err != nil {
+			t.Fatalf("GetByUID: %v", err)
+		}
+		if !sameJSON(t, string(got.Config), string(config)) {
+			t.Fatalf("GetByUID config mismatch: %s", got.Config)
+		}
+		// 跨用户访问一律「查不到」而不是「无权限」——后者会泄露 uid 是否存在。
+		if _, err := themes.GetByUID(ctx, created.UID, other.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("cross-owner GetByUID = %v; want ErrNotFound", err)
+		}
+
+		// 列表按 sort_order, created_at 升序；两行 sort_order 都是 0，
+		// 所以顺序由创建时间决定。
+		second, err := themes.Create(ctx, domain.CreateThemeInput{
+			UID: ulid.Make().String(), OwnerID: owner.ID, Name: "第二套",
+			Category: domain.ThemeCategoryCustom, Config: config, Now: now.Add(time.Second),
+		})
+		if err != nil {
+			t.Fatalf("create second theme: %v", err)
+		}
+		listed, err := themes.ListByOwner(ctx, owner.ID)
+		if err != nil {
+			t.Fatalf("ListByOwner: %v", err)
+		}
+		if len(listed) != 2 || listed[0].UID != created.UID || listed[1].UID != second.UID {
+			t.Fatalf("ListByOwner order = %#v, want [%s %s]", listed, created.UID, second.UID)
+		}
+		if others, err := themes.ListByOwner(ctx, other.ID); err != nil || len(others) != 0 {
+			t.Fatalf("other owner list = %#v, %v; want empty", others, err)
+		}
+		if n, err := themes.CountByOwner(ctx, owner.ID); err != nil || n != 2 {
+			t.Fatalf("CountByOwner = %d, %v; want 2", n, err)
+		}
+
+		// 改名 + 换配色。uid / category / created_at 都不该动。
+		updatedConfig := []byte(`{"id":"custom-1","name":"改过名","category":"custom","palette":{"colors":["#000000"],"lineColors":["#000000"],"backgroundColor":"#FFFFFF"},"global":{"fontSize":16,"lineWidth":2}}`)
+		renamed, err := themes.Update(ctx, domain.UpdateThemeInput{
+			UID: created.UID, OwnerID: owner.ID, Name: "改过名",
+			Config: updatedConfig, Now: now.Add(2 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if renamed.Name != "改过名" {
+			t.Fatalf("name = %q", renamed.Name)
+		}
+		if !sameJSON(t, string(renamed.Config), string(updatedConfig)) {
+			t.Fatalf("updated config mismatch: %s", renamed.Config)
+		}
+		if renamed.Category != domain.ThemeCategoryCustom || renamed.UID != created.UID {
+			t.Fatalf("update changed identity fields: %#v", renamed)
+		}
+		if !renamed.CreatedAt.Equal(created.CreatedAt) {
+			t.Fatalf("created_at changed on update: %v -> %v", created.CreatedAt, renamed.CreatedAt)
+		}
+		if !renamed.UpdatedAt.Equal(now.Add(2 * time.Minute)) {
+			t.Fatalf("updated_at = %v", renamed.UpdatedAt)
+		}
+		if _, err := themes.Update(ctx, domain.UpdateThemeInput{
+			UID: created.UID, OwnerID: other.ID, Name: "抢", Config: updatedConfig, Now: now,
+		}); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("cross-owner Update = %v; want ErrNotFound", err)
+		}
+
+		if err := themes.Delete(ctx, created.UID, other.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("cross-owner Delete = %v; want ErrNotFound", err)
+		}
+		if err := themes.Delete(ctx, created.UID, owner.ID); err != nil {
+			t.Fatalf("Delete: %v", err)
+		}
+		if err := themes.Delete(ctx, created.UID, owner.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("second Delete = %v; want ErrNotFound", err)
+		}
+		if _, err := themes.GetByUID(ctx, created.UID, owner.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("GetByUID after delete = %v; want ErrNotFound", err)
+		}
+		if n, err := themes.CountByOwner(ctx, owner.ID); err != nil || n != 1 {
+			t.Fatalf("CountByOwner after delete = %d, %v; want 1", n, err)
 		}
 	})
 }
