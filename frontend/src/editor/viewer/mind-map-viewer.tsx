@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { layoutMindmap } from '../layout/mindmap';
-import type { LayoutResult, NodeBox } from '../layout/types';
+import type { LayoutResult, NodeBox, Rect } from '../layout/types';
 import type { ComputedStyle, Sheet, Theme } from '../model/types';
 import { walkSheet } from '../model/traverse';
 import { fontStack } from '../theme/fonts';
@@ -24,6 +24,7 @@ import { ViewerContext } from './viewer-context';
 import type { CommitTitleOptions, ViewerContextValue, ViewerPlugin, Viewport } from './viewer-types';
 import { EdgesLayer, TopicsLayer } from './layers';
 import { BoundariesLayer, RelationshipsLayer } from './decorations';
+import { CULL_THRESHOLD } from './cull';
 
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
 
@@ -111,6 +112,31 @@ export function MindMapViewer({
     });
     return map;
   }, [sheet]);
+
+  /*
+    视口裁剪用的容器尺寸。
+
+    必须用 ResizeObserver 量一次存进 state，而不是渲染时读
+    `getBoundingClientRect()`：后者在渲染期读布局会让 React 报「render 期间读
+    布局属性」的告警，而且量到的还是上一帧的尺寸。只在尺寸变化时更新，
+    平移缩放不会触发这里。
+  */
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = svgRef.current;
+    if (!element) return undefined;
+    const apply = (width: number, height: number) => {
+      setCanvasSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+    };
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) apply(rect.width, rect.height);
+    });
+    observer.observe(element);
+    const rect = element.getBoundingClientRect();
+    apply(rect.width, rect.height);
+    return () => observer.disconnect();
+  }, []);
 
   const toWorld = useCallback<ViewerContextValue['toWorld']>(
     (clientX, clientY) => {
@@ -227,6 +253,33 @@ export function MindMapViewer({
   const editingStyle = editingId ? layout.styles.get(editingId) : undefined;
   const editingSize = editingId ? layout.sizes.get(editingId) : undefined;
 
+  /*
+    裁剪矩形（世界坐标）。`null` 表示不裁剪：小图不裁剪更快（多一次全量遍历
+    反而亏），导出也不该裁剪。
+  */
+  const cullRect = useMemo<Rect | null>(() => {
+    if (layout.boxes.size <= CULL_THRESHOLD) return null;
+    if (canvasSize.width <= 0 || canvasSize.height <= 0) return null;
+    return {
+      x: -viewport.x / viewport.zoom,
+      y: -viewport.y / viewport.zoom,
+      width: canvasSize.width / viewport.zoom,
+      height: canvasSize.height / viewport.zoom,
+    };
+  }, [layout.boxes.size, canvasSize, viewport]);
+
+  /*
+    选中的与被编辑的节点永远渲染，哪怕在视口外：`aria-activedescendant` 指向
+    一个不存在的 id 时读屏会静默失声，而且键盘把选区移出视口之后，元素一旦被
+    裁掉就再没有任何痕迹。
+  */
+  const keep = useMemo<ReadonlySet<string>>(() => {
+    if (selection.size === 0 && editingId === null) return EMPTY_SELECTION;
+    const set = new Set(selection);
+    if (editingId !== null) set.add(editingId);
+    return set;
+  }, [selection, editingId]);
+
   return (
     <ViewerContext.Provider value={context}>
       <div
@@ -253,7 +306,7 @@ export function MindMapViewer({
           >
             <BoundariesLayer sheet={sheet} layout={layout} theme={effectiveTheme} />
 
-            <EdgesLayer edges={layout.edges} />
+            <EdgesLayer edges={layout.edges} cullRect={cullRect} />
 
             <RelationshipsLayer sheet={sheet} layout={layout} theme={effectiveTheme} />
 
@@ -263,6 +316,8 @@ export function MindMapViewer({
               editingId={editingId}
               titles={titles}
               treeItems={!readOnly}
+              cullRect={cullRect}
+              keep={keep}
             />
 
             <g className="layer-overlay">

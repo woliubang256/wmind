@@ -20,7 +20,7 @@
  * 查看器本身不含任何交互：它拿到的是插件列表，只读预览时换一批插件即可。
  */
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -372,7 +372,28 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
       (selection.length > 0 ? selection : [sheet.rootTopic.id]).filter((id) => layout.styles.has(id)),
     [selection, sheet.rootTopic.id, layout],
   );
-  const panelStyle = panelTargets.length > 0 ? (layout.styles.get(panelTargets[0]!) ?? null) : null;
+  /*
+    面板**显示**用的选区，比动作慢一拍。
+
+    右侧面板是一大棵控件树（样式几十个控件、配色几十个色块），每次选中变化都
+    要整棵重渲染。压测实测：面板开着时按一次方向键 25ms（p90 68ms），收起面板
+    后回到单帧 16.9ms——也就是说这些时间全花在「把面板重画一遍」上，而用户按
+    方向键想看的是画布上的选中框。
+
+    所以把面板的**渲染**降级到低优先级：按键先落地，面板晚一帧跟上，肉眼看不
+    出来。注意只降级显示，`panelTargets` 仍然是即时选区——否则「选中 A 后立刻
+    点色块」会作用到上一帧的 B 上。
+  */
+  const deferredSelection = useDeferredValue(selection);
+  const panelStyleTargets = useMemo(
+    () =>
+      (deferredSelection.length > 0 ? deferredSelection : [sheet.rootTopic.id]).filter((id) =>
+        layout.styles.has(id),
+      ),
+    [deferredSelection, sheet.rootTopic.id, layout],
+  );
+  const panelStyle =
+    panelStyleTargets.length > 0 ? (layout.styles.get(panelStyleTargets[0]!) ?? null) : null;
 
   const patchStyle = useCallback(
     (patch: Partial<Style>) => {

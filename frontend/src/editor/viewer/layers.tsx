@@ -10,12 +10,14 @@
  */
 
 import { memo } from 'react';
-import type { EdgePath, LayoutResult, NodeBox } from '../layout/types';
+import type { EdgePath, LayoutResult, NodeBox, Rect } from '../layout/types';
 import type { ComputedStyle } from '../model/types';
+import { cullBoxes, cullEdges } from './cull';
 import { EdgeLine } from './edges';
 import { TopicNode } from './topic-node';
 
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
+const EMPTY_KEEP: ReadonlySet<string> = new Set();
 
 /**
  * 连线层。
@@ -24,10 +26,18 @@ const EMPTY_SELECTION: ReadonlySet<string> = new Set();
  * 组件里，每次 viewport 变化都会重新创建 2000 个 React 元素，React 要把
  * 它们逐个 diff 一遍——实测 2000 节点时一次滚轮要 300ms，完全不可用。
  */
-export const EdgesLayer = memo(function EdgesLayer({ edges }: { edges: EdgePath[] }) {
+export const EdgesLayer = memo(function EdgesLayer({
+  edges,
+  cullRect = null,
+}: {
+  edges: EdgePath[];
+  /** 世界坐标的视口矩形；`null` 表示不裁剪（小图与导出）。 */
+  cullRect?: Rect | null;
+}) {
+  const visible = cullEdges(edges, cullRect);
   return (
     <g className="layer-edges">
-      {edges.map((edge) => (
+      {visible.map((edge) => (
         <EdgeLine key={edge.id} edge={edge} />
       ))}
     </g>
@@ -54,6 +64,15 @@ export interface TopicsLayerProps {
    * 报出一棵「没有名字的树」，比不报还糟。导出同理（`false`）。
    */
   treeItems?: boolean;
+  /**
+   * 世界坐标的视口矩形；`null` 表示不裁剪（小图与导出）。
+   *
+   * 传了它就只渲染视口附近的节点——一次选中变化要 diff 的元素从 2001 个降到
+   * 视口内的几百个，这是按方向键从 50ms 降到个位数毫秒的关键。
+   */
+  cullRect?: Rect | null;
+  /** 无论是否在视口内都要保留的 id（选中的、正在编辑的）。 */
+  keep?: ReadonlySet<string>;
 }
 
 export const TopicsLayer = memo(function TopicsLayer({
@@ -63,10 +82,13 @@ export const TopicsLayer = memo(function TopicsLayer({
   showBadges = true,
   titles,
   treeItems = false,
+  cullRect = null,
+  keep = EMPTY_KEEP,
 }: TopicsLayerProps) {
+  const visible = cullBoxes(layout.boxes.values(), cullRect, keep);
   return (
     <g className="layer-topics">
-      {[...layout.boxes.values()].map((box) => {
+      {visible.map((box) => {
         const size = layout.sizes.get(box.id);
         return (
           <TopicNode
