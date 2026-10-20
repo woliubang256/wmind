@@ -33,8 +33,16 @@ import (
 // shutdownTimeout is bounded by the container stop_grace_period with 5s spare.
 const shutdownTimeout = 15 * time.Second
 
+// errAlreadyReported 表示错误已经自己打印过了（子命令的用法提示等），
+// main 只需要退出码，不必再套一层 "startup failed" 前缀——那会让
+// `wmind db` 的用法提示看起来像服务启动失败。
+var errAlreadyReported = errors.New("already reported")
+
 func main() {
 	if err := run(); err != nil {
+		if errors.Is(err, errAlreadyReported) {
+			os.Exit(1)
+		}
 		fmt.Fprintf(os.Stderr, "wmind startup failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -48,6 +56,18 @@ func run() error {
 
 	log := logger.New(cfg.LogLevel, cfg.IsProduction())
 	slog.SetDefault(log)
+
+	// 一次性子命令（目前只有 `db backup`）在起服务之前处理掉：同一个二进制
+	// 既是服务又是运维工具，生产镜像里不需要第二个可执行文件。
+	if handled, err := runDBSubcommand(context.Background(), cfg, os.Args[1:], log); handled {
+		if err != nil {
+			// 子命令的错误自己打印：用法提示套上 "startup failed" 会看不懂。
+			fmt.Fprintf(os.Stderr, "wmind: %v\n", err)
+			return errAlreadyReported
+		}
+		return nil
+	}
+
 	log.Info("wmind backend starting", cfg.Summary()...)
 
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 30*time.Second)
