@@ -12,9 +12,13 @@ import type { WmindDocument } from '../model/types';
 import {
   DEFAULT_EXPORT_OPTIONS,
   FOOTER_HEIGHT,
+  SCALE_MAX,
+  SCALE_MIN,
   SHEET_GAP,
   buildExportContext,
+  clampScale,
   contentBounds,
+  presetHasFill,
 } from './context';
 import { buildExportSvg, exportFileName, svgDataUrl } from './svg';
 
@@ -173,12 +177,48 @@ describe('SVG 序列化', () => {
     expect(svg).toContain(`translate(${ctx.sheets[1]!.offsetX - ctx.sheets[1]!.bounds.x} ${offset - ctx.sheets[1]!.bounds.y})`);
   });
 
-  it('边框只在开启时出现', () => {
+  it('边框只在开启时出现，颜色与粗细跟着预设走', () => {
     const doc = docWith();
-    expect(buildExportSvg(buildExportContext(doc, 'sheet-0', opts({ border: true }))))
+    expect(buildExportSvg(buildExportContext(doc, 'sheet-0', opts({ border: 'thin' }))))
       .toContain('stroke="#D9D9D9"');
-    expect(buildExportSvg(buildExportContext(doc, 'sheet-0', opts({ border: false }))))
+    expect(buildExportSvg(buildExportContext(doc, 'sheet-0', opts({ border: 'none' }))))
       .not.toContain('stroke="#D9D9D9"');
+    // 红色预设：描边换色、加粗到 2px
+    const red = buildExportSvg(buildExportContext(doc, 'sheet-0', opts({ border: 'red' })));
+    expect(red).toContain('stroke="#E54D42"');
+    expect(red).toContain('stroke-width="2"');
+  });
+
+  it('带底色的预设同时改背景，「透明背景」不再生效', () => {
+    const doc = docWith();
+    const ctx = buildExportContext(doc, 'sheet-0', opts({ border: 'green', transparent: true }));
+    // 底色排在透明前面：选了「绿底」又勾透明，两者互相抵消，界面上没有说得通的结果。
+    expect(ctx.background).toBe('#F1FAF4');
+    expect(buildExportSvg(ctx)).toContain('fill="#F1FAF4"');
+  });
+});
+
+describe('倍率与边框预设的纯规则', () => {
+  it('自定义倍率夹在 0.5~8 之间，并保留一位小数', () => {
+    expect(clampScale(2)).toBe(2);
+    expect(clampScale(0.1)).toBe(SCALE_MIN);
+    expect(clampScale(100)).toBe(SCALE_MAX);
+    expect(clampScale(2.34)).toBe(2.3);
+    expect(clampScale(2.36)).toBe(2.4);
+  });
+
+  it('非数值退回默认倍率，而不是 0', () => {
+    // 空输入框会给出 NaN；退回 0 会让画布变成 0×0。
+    expect(clampScale(Number.NaN)).toBe(DEFAULT_EXPORT_OPTIONS.scale);
+    expect(clampScale(Number.POSITIVE_INFINITY)).toBe(DEFAULT_EXPORT_OPTIONS.scale);
+  });
+
+  it('只有绿底 / 蓝底自带底色', () => {
+    expect(presetHasFill('green')).toBe(true);
+    expect(presetHasFill('blue')).toBe(true);
+    for (const id of ['none', 'thin', 'red', 'orange'] as const) {
+      expect(presetHasFill(id), id).toBe(false);
+    }
   });
 });
 

@@ -269,6 +269,13 @@
     "export.paddingNone": "无",
     "export.transparent": "透明背景",
     "export.border": "边框",
+    "export.borderNone": "无边框",
+    "export.borderThin": "细描边",
+    "export.borderRed": "红色边框",
+    "export.borderOrange": "橙色边框",
+    "export.borderGreen": "绿底",
+    "export.borderBlue": "蓝底",
+    "export.scaleCustom": "自定义",
     "export.date": "显示日期",
     "export.brand": "品牌标识",
     "export.previewAlt": "导出预览",
@@ -290,7 +297,8 @@
     "export.textWarning": "Markdown 与 OPML 不承载样式信息，重新导入会丢失配色、形状、线条与布局。",
     "export.textSingleSheet": "文本格式只导出当前画布。",
     "export.textSize": "{{count}} 字符",
-    "export.fontFallback": "{{count}} 个字符内置字体没有字形（{{chars}}），将用系统字体渲染"
+    "export.fontFallback": "{{count}} 个字符内置字体没有字形（{{chars}}），将用系统字体渲染",
+    "export.scaleCustomValue": "自定义倍率"
   },
   "import": {
     "title": "导入",

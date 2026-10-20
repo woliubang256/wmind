@@ -21,8 +21,6 @@ import type { ExportContext, ExportSheet } from './context';
 /** 品牌标识与日期的颜色：中性灰，不抢内容。 */
 const FOOTER_COLOR = '#8C8C8C';
 const FOOTER_SIZE = 12;
-/** 边框颜色。用固定中性色而不是主题色：主题色深浅不一，浅色主题上会看不见。 */
-const BORDER_COLOR = '#D9D9D9';
 
 function SheetGroup({ sheet }: { sheet: ExportSheet }) {
   return (
@@ -60,17 +58,19 @@ export function ExportCanvas({ ctx }: { ctx: ExportContext }) {
         <SheetGroup key={sheet.id} sheet={sheet} />
       ))}
 
-      {ctx.border ? (
+      {ctx.border.stroke === null ? null : (
         <rect
-          x={0.5}
-          y={0.5}
-          width={Math.max(0, width - 1)}
-          height={Math.max(0, height - 1)}
+          // 描边画在画布内侧：`width / 2` 的偏移让 1px 线落在像素中心上，
+          // 否则导出 PNG 时那条线会被摊成两个半透明的像素。
+          x={ctx.border.width / 2}
+          y={ctx.border.width / 2}
+          width={Math.max(0, width - ctx.border.width)}
+          height={Math.max(0, height - ctx.border.width)}
           fill="none"
-          stroke={BORDER_COLOR}
-          strokeWidth={1}
+          stroke={ctx.border.stroke}
+          strokeWidth={ctx.border.width}
         />
-      ) : null}
+      )}
 
       {ctx.date === null ? null : (
         <text x={12} y={height - 10} style={{ fontSize: FOOTER_SIZE, fill: FOOTER_COLOR }}>

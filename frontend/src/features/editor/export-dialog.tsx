@@ -23,8 +23,13 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
   DEFAULT_EXPORT_OPTIONS,
+  SCALE_MAX,
+  SCALE_MIN,
   buildExportContext,
+  clampScale,
   isTextFormat,
+  presetHasFill,
+  type BorderStyleId,
   type ExportFormat,
   type ExportOptions,
 } from '@/editor/export/context';
@@ -50,6 +55,17 @@ export interface ExportDialogProps {
 
 const SCALES = [1, 2, 3, 4] as const;
 const PADDINGS = [0, 24, 40, 80] as const;
+
+/** 边框预设的展示顺序与文案。 */
+const BORDER_ORDER: BorderStyleId[] = ['none', 'thin', 'red', 'orange', 'green', 'blue'];
+const BORDER_LABELS: Record<BorderStyleId, string> = {
+  none: 'editor.export.borderNone',
+  thin: 'editor.export.borderThin',
+  red: 'editor.export.borderRed',
+  orange: 'editor.export.borderOrange',
+  green: 'editor.export.borderGreen',
+  blue: 'editor.export.borderBlue',
+};
 
 /**
  * 格式选项。顺序即 UI 顺序：矢量在前，因为它是唯一无损的那个；文本格式垫底，
@@ -159,6 +175,13 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   const rasterVerdict = needsRaster ? checkRasterSize(outputWidth, outputHeight) : { kind: 'ok' as const };
 
   const [busy, setBusy] = useState(false);
+
+  // 「自定义倍率」是**界面状态**，不进 ExportOptions。
+  //
+  // 试过只用 `isPresetScale(options.scale)` 判断要不要显示输入框：选「自定义」时
+  // 倍率还是 2，判断结果仍是「预设」，下拉立刻弹回 2×，输入框永远不出现。
+  // 模式与数值必须分开记。
+  const [customScale, setCustomScale] = useState(false);
 
   const download = async () => {
     if (textContent !== null) {
@@ -337,17 +360,49 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 {t('editor.export.scale')}
-                <select
-                  value={options.scale}
-                  onChange={(event) => patch({ scale: Number(event.target.value) })}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
-                >
-                  {SCALES.map((scale) => (
-                    <option key={scale} value={scale}>
-                      {t('editor.export.scaleValue', { n: scale })}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={customScale ? 'custom' : String(options.scale)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === 'custom') {
+                        setCustomScale(true);
+                        // 保持当前倍率不动：直接跳到某个默认值会让用户以为他选的
+                        // 倍率被改掉了。
+                        patch({ scale: clampScale(options.scale) });
+                      } else {
+                        setCustomScale(false);
+                        patch({ scale: Number(value) });
+                      }
+                    }}
+                    className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
+                  >
+                    {SCALES.map((scale) => (
+                      <option key={scale} value={scale}>
+                        {t('editor.export.scaleValue', { n: scale })}
+                      </option>
+                    ))}
+                    <option value="custom">{t('editor.export.scaleCustom')}</option>
+                  </select>
+                  {customScale ? (
+                    <input
+                      type="number"
+                      // 0.5 是下限：再小就是缩略图，用户不如直接看画布。
+                      // 8 是上限：再大的位图基本一定撞上浏览器尺寸闸门，留着
+                      // 只会让人点一次「太大」。
+                      min={SCALE_MIN}
+                      max={SCALE_MAX}
+                      step={0.1}
+                      value={options.scale}
+                      onChange={(event) => patch({ scale: clampScale(Number(event.target.value)) })}
+                      className="h-8 w-16 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
+                      // 名字不能与下拉里的「自定义」相同：`<label>` 包着整个选择区，
+                      // 隐式关联会落到第一个可标注元素（下拉）上，两个控件撞名之后
+                      // 屏幕阅读器与自动化都分不清谁是谁。
+                      aria-label={t('editor.export.scaleCustomValue')}
+                    />
+                  ) : null}
+                </div>
               </label>
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
@@ -365,10 +420,29 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 </select>
               </label>
 
+              <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                {t('editor.export.border')}
+                <select
+                  value={options.border}
+                  onChange={(event) => {
+                    const next = event.target.value as BorderStyleId;
+                    // 带底色的预设与「透明背景」互斥：选中时顺手把透明关掉，
+                    // 免得留下「勾着透明却是绿底」这种自相矛盾的状态。
+                    patch({ border: next, ...(presetHasFill(next) ? { transparent: false } : {}) });
+                  }}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
+                >
+                  {BORDER_ORDER.map((id) => (
+                    <option key={id} value={id}>
+                      {t(BORDER_LABELS[id])}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="flex flex-col gap-1.5">
                 {([
                   ['transparent', t('editor.export.transparent')],
-                  ['border', t('editor.export.border')],
                   ['date', t('editor.export.date')],
                   ['brand', t('editor.export.brand')],
                 ] as const).map(([key, label]) => (
@@ -376,6 +450,8 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                     <input
                       type="checkbox"
                       checked={options[key]}
+                      // 带底色的预设自带背景，透明背景在这时没有意义。
+                      disabled={key === 'transparent' && presetHasFill(options.border)}
                       onChange={(event) => patch({ [key]: event.target.checked })}
                     />
                     {label}

@@ -25,6 +25,67 @@ export function isTextFormat(format: ExportFormat): format is TextExportFormat {
   return format === 'md' || format === 'opml';
 }
 
+/** 边框预设。`none` 表示不画。 */
+export type BorderStyleId = 'none' | 'thin' | 'red' | 'orange' | 'green' | 'blue';
+
+export interface BorderPreset {
+  id: BorderStyleId;
+  /** 描边色；`null` 表示不画边框。 */
+  stroke: string | null;
+  width: number;
+  /**
+   * 底色；`null` 表示不填。
+   *
+   * 「绿底」「蓝底」这类预设不只是描边换色——截图里它们是**带底色的一块板**。
+   * 底色与「透明背景」互斥，对话框在选中这类预设时会把透明背景关掉并禁用，
+   * 否则用户会看到「勾着透明却是绿底」这种自相矛盾的状态。
+   */
+  fill: string | null;
+}
+
+/**
+ * 六个边框预设。
+ *
+ * 色值是**暂定值**：docs/06 §3.7 记的「预设色值需按截图采样校准」还没有做，
+ * 这里的红/橙/绿/蓝取的是与主题色系协调的中性色，不是从截图里吸出来的。
+ * 校准只需要改这张表，`border` 的传递链路不用动。
+ */
+export const BORDER_PRESETS: Record<BorderStyleId, BorderPreset> = {
+  none: { id: 'none', stroke: null, width: 0, fill: null },
+  thin: { id: 'thin', stroke: '#D9D9D9', width: 1, fill: null },
+  red: { id: 'red', stroke: '#E54D42', width: 2, fill: null },
+  orange: { id: 'orange', stroke: '#F5A623', width: 2, fill: null },
+  green: { id: 'green', stroke: '#2E9E5B', width: 2, fill: '#F1FAF4' },
+  blue: { id: 'blue', stroke: '#2F6FE4', width: 2, fill: '#EFF5FF' },
+};
+
+/** 预设是否自带底色（决定要不要禁用「透明背景」）。 */
+export function presetHasFill(id: BorderStyleId): boolean {
+  return BORDER_PRESETS[id].fill !== null;
+}
+
+/**
+ * 自定义倍率的范围。
+ *
+ * 0.5 以下不如直接看画布；8 以上基本一定撞上浏览器的位图尺寸上限（`raster.ts`
+ * 的闸门会拦住），留着只会让人点一次「太大」。上限不是安全边界，只是别让输入框
+ * 变成一个能填 100 的地方。
+ */
+export const SCALE_MIN = 0.5;
+export const SCALE_MAX = 8;
+
+/**
+ * 把任意输入夹到合法倍率。
+ *
+ * 保留一位小数：`0.30000000000000004` 这种值出现在输入框里像是程序出错。
+ * 非数值（空输入框、用户敲了个 `-`）退回默认倍率，而不是 0——0 会让画布变成
+ * 0×0，再撞上 `MIN_CONTENT_SIZE` 的兜底，用户看到的是一个莫名其妙的尺寸。
+ */
+export function clampScale(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_EXPORT_OPTIONS.scale;
+  return Math.round(Math.min(SCALE_MAX, Math.max(SCALE_MIN, value)) * 10) / 10;
+}
+
 export interface ExportOptions {
   /** 只导当前画布，还是把所有画布拼成一张。 */
   scope: 'current' | 'all';
@@ -47,8 +108,8 @@ export interface ExportOptions {
   padding: number;
   /** 透明背景。JPEG 不支持透明，栅格化时会强制填白。 */
   transparent: boolean;
-  /** 沿画布边缘画一圈细边框。 */
-  border: boolean;
+  /** 边框预设（含自带底色的「绿底 / 蓝底」）。 */
+  border: BorderStyleId;
   /** 左下角打印导出日期。 */
   date: boolean;
   /** 右下角打印「由 wmind 生成」。 */
@@ -61,7 +122,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   scale: 2,
   padding: 40,
   transparent: false,
-  border: false,
+  border: 'none',
   date: false,
   brand: true,
 };
@@ -97,7 +158,8 @@ export interface ExportContext {
   height: number;
   /** `null` 表示透明背景。 */
   background: string | null;
-  border: boolean;
+  /** 边框预设；`none` 时 `stroke` 为 `null`。 */
+  border: BorderPreset;
   /** `YYYY-MM-DD`；`null` 表示不打印。 */
   date: string | null;
   brand: boolean;
@@ -155,12 +217,19 @@ function pickSheets(document: WmindDocument, currentSheetId: string | null, scop
 /**
  * 导出画布的背景色；`null` 表示透明。
  *
+ * 三层优先级：预设自带底色 > 透明 > 主题背景。底色排在透明前面，是因为
+ * 「绿底」这个预设的语义就是「一块绿板」——选了它再勾透明，两者互相抵消，
+ * 界面上没有任何一种结果说得过去。对话框在选中带底色的预设时会关掉并禁用
+ * 「透明背景」，这里只是把同一条规则写成代码。
+ *
  * JPEG 单独一条分支：它没有 alpha 通道，透明像素会被编码成黑色。勾了「透明
  * 背景」再导 JPEG，唯一说得通的行为是**填白**——而且要在上下文里就填白，
  * 这样预览里看到的白底就是拿到手的白底。
  */
 function backgroundColor(theme: Theme, options: ExportOptions): string | null {
   const themeBackground = theme.palette.backgroundColor ?? '#FFFFFF';
+  const presetFill = BORDER_PRESETS[options.border].fill;
+  if (presetFill !== null) return presetFill;
   if (options.format === 'jpeg') {
     return options.transparent ? '#FFFFFF' : themeBackground;
   }
@@ -220,7 +289,7 @@ export function buildExportContext(
     width,
     height,
     background: backgroundColor(laid[0]?.theme ?? document.theme, options),
-    border: options.border,
+    border: BORDER_PRESETS[options.border],
     date: options.date ? today(now) : null,
     brand: options.brand,
     scale: options.scale,

@@ -269,6 +269,13 @@
     "export.paddingNone": "None",
     "export.transparent": "Transparent background",
     "export.border": "Border",
+    "export.borderNone": "No border",
+    "export.borderThin": "Thin outline",
+    "export.borderRed": "Red border",
+    "export.borderOrange": "Orange border",
+    "export.borderGreen": "Green fill",
+    "export.borderBlue": "Blue fill",
+    "export.scaleCustom": "Custom",
     "export.date": "Show date",
     "export.brand": "Brand mark",
     "export.previewAlt": "Export preview",
@@ -290,7 +297,8 @@
     "export.textWarning": "Markdown and OPML carry no styling: re-importing loses colours, shapes, lines and layout.",
     "export.textSingleSheet": "Text formats export the current sheet only.",
     "export.textSize": "{{count}} characters",
-    "export.fontFallback": "{{count}} character(s) have no glyph in the bundled font ({{chars}}); they will render with a system font"
+    "export.fontFallback": "{{count}} character(s) have no glyph in the bundled font ({{chars}}); they will render with a system font",
+    "export.scaleCustomValue": "Custom scale"
   },
   "import": {
     "title": "Import",
