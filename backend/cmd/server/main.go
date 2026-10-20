@@ -64,6 +64,7 @@ func run() error {
 		auditRepo    domain.AuditRepo
 		mapRepo      domain.MapRepo
 		themeRepo    domain.ThemeRepo
+		shareRepo    domain.ShareRepo
 		txManager    domain.TxManager
 	)
 
@@ -88,6 +89,7 @@ func run() error {
 		auditRepo = sqliterepo.NewAuditRepository(db)
 		mapRepo = sqliterepo.NewMapRepository(db)
 		themeRepo = sqliterepo.NewThemeRepository(db)
+		shareRepo = sqliterepo.NewShareRepository(db)
 		txManager = sqliterepo.NewTxManager(db)
 
 	case config.DriverPostgres:
@@ -119,6 +121,7 @@ func run() error {
 		auditRepo = postgresrepo.NewAuditRepository(pool)
 		mapRepo = postgresrepo.NewMapRepository(pool)
 		themeRepo = postgresrepo.NewThemeRepository(pool)
+		shareRepo = postgresrepo.NewShareRepository(pool)
 		txManager = postgresrepo.NewTxManager(pool)
 
 	default:
@@ -203,6 +206,21 @@ func run() error {
 		return err
 	}
 
+	// 分享访问凭证与登录令牌共用同一个密钥，但 iss 不同（见 auth.ShareTokenIssuer），
+	// 所以两种令牌在 JWT 校验层就互相拒绝，不会被拿去互换。
+	shareTokens, err := auth.NewShareTokenIssuer(cfg.Auth.JWTSecret, auth.DefaultShareAccessTTL)
+	if err != nil {
+		return err
+	}
+	shareSvc, err := service.NewShareService(service.ShareServiceConfig{
+		Shares: shareRepo, Maps: mapRepo, Policy: settingsSvc,
+		Tokens: shareTokens,
+		Views:  service.NewViewDeduper(service.DefaultShareViewWindow, nil),
+	})
+	if err != nil {
+		return err
+	}
+
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(
 		authSvc,
@@ -220,6 +238,7 @@ func run() error {
 		Maps:          handler.NewMapHandler(mapSvc),
 		Themes:        handler.NewThemeHandler(themeSvc),
 		Files:         handler.NewFileHandler(fileSvc),
+		Shares:        handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

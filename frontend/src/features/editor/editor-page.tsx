@@ -67,6 +67,7 @@ import { ConflictDialog, LeaveDialog } from './persistence/dialogs';
 import { SaveIndicator } from './persistence/save-indicator';
 import { useFontsReady } from './use-fonts-ready';
 import { useThumbnailUpload } from './use-thumbnail-upload';
+import { ShareDialog } from '@/features/share/share-dialog';
 
 // 导出对话框是懒加载的：它把 `react-dom/server` 带进包里（序列化 SVG 要用），
 // 而绝大多数编辑会话里用户根本不会点「导出」。不点就不下载。
@@ -260,6 +261,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>('style');
   const [exportOpen, setExportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   /** 快捷键监听挂在这里：包含画布与面板，但排除侧栏与页头之外的一切。 */
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -594,6 +596,11 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </Button>
         ) : null}
 
+        <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
+          <Icon name="link" className="mr-1.5 size-4" />
+          {t('share.action')}
+        </Button>
+
         <Button variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
           <Icon name="download" className="mr-1.5 size-4" />
           {t('editor.exportEntry')}
@@ -752,6 +759,12 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
       />
 
       <LeaveDialog open={autosave.blocked} onStay={autosave.stay} onLeave={autosave.leave} />
+
+      {/*
+        分享对话框不按需加载：它只有几个表单控件，比一次动态 import 的
+        往返还轻。导出对话框不同，它带着字体分片与栅格化，必须懒加载。
+      */}
+      <ShareDialog open={shareOpen} mapUid={uid} mapTitle={doc.title} onClose={() => setShareOpen(false)} />
 
       {exportOpen ? (
         <Suspense fallback={null}>

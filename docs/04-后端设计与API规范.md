@@ -283,12 +283,16 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
     "exportEnabled": true,
     "userTemplateEnabled": true,
     "shareEnabled": true,
+    "shareDefaultExpireDays": 0,
+    "shareDefaultAllowDownload": true,
     "version": "1.0.0"
   }
 }
 ```
 
 `shareEnabled` 由 `share.public_link_enabled` 派生，用于在前端隐藏「创建分享链接」入口（对应 `SHARE_DISABLED`）。字段清单由 `internal/handler/site.go` 的 `siteConfig` 结构体白名单决定：**新增设置项不会自动暴露**，必须同时改那里，否则敏感设置会被公开接口带出去。
+
+`shareDefaultExpireDays` / `shareDefaultAllowDownload` 只是**表单预填值**，让后台里那两项设置改了能落到界面上。真正有约束力的两项（`share.require_password`、`share.max_links_per_map`）刻意不公开：它们是服务端强制的策略，前端知道与否都改变不了结果，公开只会让「为什么我填了却被拒」多一条可被探测的信息。
 
 ### 5.2 认证接口
 
@@ -633,10 +637,11 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 ```
 
 - `token` 明文返回（属主可随时复制），`url` 由 `site.base_url` 拼接。
+- `site.base_url` **为空时 `url` 是相对路径**（`/s/<token>`），前端用 `window.location.origin` 补全。这是刻意的：反代后面的服务端看到的 `Host` 往往不是用户实际访问的域名（内网地址、容器名、端口都不对），在服务端猜绝对地址比让浏览器补更错。
 - `share.public_link_enabled = false` → 403 `SHARE_DISABLED`。
 - `share.require_password = true` 且未提供密码 → 422 `VALIDATION_FAILED`。
-- 超过 `share.max_links_per_map` → 403 `SHARE_LIMIT_REACHED`。
-- 创建与撤销均写入 `audit_logs`。
+- 超过 `share.max_links_per_map` → 403 `SHARE_LIMIT_REACHED`。计数只算**未撤销**的链接：撤销后的链接已经打不开，再占配额只会逼用户删记录、连带丢掉访问统计。
+- 创建与撤销均写入 `audit_logs`（`share.create` / `share.revoke`，`detail` 里带 `mapUid`）。
 
 #### `GET /api/v1/maps/{uid}/shares`
 
@@ -658,6 +663,10 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 ```
 
 仅修改显式传入的字段。改密码不影响已发放的访问凭证（需撤销并重建才能立即失效）。
+
+`password` 的三种取值必须区分：**字段缺省** = 不改；**`null`** = 清除密码；**字符串** = 设为该密码。所以 handler 用 `json.RawMessage` 解析这一个字段，而不是 `*string`——后者会把「缺省」和 `null` 都折叠成 `nil`，于是「只想关掉下载」会顺手把密码抹掉。
+
+已撤销的链接不可再修改（404 `SHARE_NOT_FOUND`）：撤销是终态，允许修改等于允许复活一条已经发出去、对方可能已经收到「已失效」的链接。
 
 #### `DELETE /api/v1/shares/{uid}`
 
@@ -1091,6 +1100,18 @@ if !share.ShowNotes {
 ```
 
 **`X-Share-Access` 令牌**：`typ: share`、`sub: share.uid`、`exp: 30min`、HS256。用 `sub` 绑定到具体分享记录，防止把一个分享的访问令牌用到另一个分享上。
+
+#### 与初版设计的差异（实现时定稿）
+
+1. **`iss` 不同**。分享访问令牌用 `wmind-share`，登录令牌用 `wmind`。两者同一个密钥签发，如果 `iss` 也相同，分享令牌在结构上就是一枚合法的访问令牌，`typ` 只是第二道锁。改 `iss` 让两种令牌在 jwt 库的校验层就互相拒绝。
+
+2. **剥离备注不用 `WalkAll`，改成 JSON 往返**。`service/share_document.go` 把文档解成 `map[string]any`，递归删除 `notes`（仅在 `showNotes = false` 时）与 `extensions`，再序列化回去。理由是 `WalkAll` 依赖文档模型的结构体标签，而这个响应是**公开**的——模型里将来新增一个字段（比如协同编辑的内部 id），只要没人记得在剥离函数里补一行，它就自动出现在公开响应里。JSON 往返是白名单的反面：默认全部透传，只删明确要删的。解码必须 `dec.UseNumber()`，否则 `float64` 会把 `16777217` 变成 `16777216`，某些宽度会静默少 1px。
+
+3. **访问计数带 30 分钟去重窗口**（键 = token + IP 的 SHA-256）。同一访客刷新十次不该算十次访问。IP 进哈希而不是明文存表：`share_links` 的访问记录可能被导出做排查，「哪个 IP 看了哪张图」属于访问数据，不该在表里躺着。
+
+4. **`UpdateShare` 是整行写入，不是局部 patch**。sqlc 的 SQLite 引擎不会重写 `CASE WHEN narg(...)` 里的命名参数，所以「只更新传入的列」这条 SQL 写不出来。service 做读-合并-写。代价是并发 PATCH 为 last-write-wins，可以接受：这几个字段是同一人在同一个对话框里翻的独立开关。
+
+5. **`share.default_expire_days` / `share.default_allow_download` 走站点公开配置**（见 §5.1），不进服务端策略。
 
 ### 7.8 优雅退出
 

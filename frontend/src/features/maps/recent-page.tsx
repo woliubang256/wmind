@@ -30,7 +30,8 @@ import { createStarterDocument } from '@/features/editor/demo-document';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { mapKeys } from './queries';
 import { MapCard, MapCardSkeleton } from './map-card';
-import { ConfirmDialog } from './confirm-dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ShareDialog } from '@/features/share/share-dialog';
 
 /**
  * 导入模块按需加载。
@@ -60,6 +61,7 @@ export function RecentPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [dropping, setDropping] = useState(false);
   const [renaming, setRenaming] = useState<MapSummary | null>(null);
+  const [sharing, setSharing] = useState<MapSummary | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [deleting, setDeleting] = useState<MapSummary | null>(null);
 
@@ -307,11 +309,9 @@ export function RecentPage() {
                     onClick: () => duplicate.mutate(map.uid),
                   },
                   {
-                    // 分享链接是 M5 的下一批交付。这里先给出明确的「还没做」，
-                    // 而不是一个点了没反应的按钮——后者会被当成 bug。
                     label: t('maps.actions.share'),
-                    icon: 'eye',
-                    onClick: () => toast.info(t('maps.shareSoon')),
+                    icon: 'link',
+                    onClick: () => setSharing(map),
                   },
                   {
                     label: t('maps.actions.delete'),
@@ -370,6 +370,15 @@ export function RecentPage() {
           }}
         />
       </Modal>
+
+      {sharing ? (
+        <ShareDialog
+          open
+          mapUid={sharing.uid}
+          mapTitle={sharing.title}
+          onClose={() => setSharing(null)}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={deleting !== null}

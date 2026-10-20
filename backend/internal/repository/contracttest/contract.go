@@ -27,6 +27,7 @@ type Repos struct {
 	Tokens   domain.RefreshTokenRepo
 	Settings domain.SettingsRepo
 	Audit    domain.AuditRepo
+	Shares   domain.ShareRepo
 	Tx       domain.TxManager
 }
 
@@ -596,6 +597,176 @@ func Run(t *testing.T, r Repos) {
 			To:      timePtr(now.Add(-time.Hour)),
 		}); err != nil || n != 0 {
 			t.Fatalf("count with past upper bound = %d, %v; want 0", n, err)
+		}
+	})
+
+	t.Run("share link lifecycle, join fields, and revoke semantics", func(t *testing.T) {
+		shares := r.Shares
+		owner := mustCreateUser(t, ctx, users, now)
+		other := mustCreateUser(t, ctx, users, now)
+
+		doc := []byte(`{"format":"wmind","formatVersion":"1.0","sheets":[{"id":"s1"}]}`)
+		target, err := maps.Create(ctx, domain.CreateMapInput{
+			UID: ulid.Make().String(), OwnerID: owner.ID, Title: "Contract Share Map",
+			Document: doc, NodeCount: 1, SizeBytes: int64(len(doc)), Now: now,
+		})
+		if err != nil {
+			t.Fatalf("create map for share: %v", err)
+		}
+
+		expires := now.Add(7 * 24 * time.Hour)
+		link, err := shares.Create(ctx, domain.CreateShareInput{
+			UID: ulid.Make().String(), Token: "tok-" + ulid.Make().String(),
+			MapID: target.ID, OwnerID: owner.ID, PasswordHash: "bcrypt-hash",
+			AllowDownload: false, ShowNotes: false, ExpiresAt: &expires, Now: now,
+		})
+		if err != nil {
+			t.Fatalf("create share: %v", err)
+		}
+		if link.AllowDownload || link.ShowNotes {
+			t.Fatalf("booleans not stored: %#v", link)
+		}
+		if link.ExpiresAt == nil || !link.ExpiresAt.Equal(expires) {
+			t.Fatalf("expires_at mismatch: %v, want %v", link.ExpiresAt, expires)
+		}
+		if !link.CreatedAt.Equal(now) {
+			t.Fatalf("created_at mismatch: %v, want %v", link.CreatedAt, now)
+		}
+
+		// GetByUID carries the joined map fields -- every list surface shows them.
+		got, err := shares.GetByUID(ctx, link.UID, owner.ID)
+		if err != nil {
+			t.Fatalf("GetByUID: %v", err)
+		}
+		if got.MapUID != target.UID || got.MapTitle != target.Title {
+			t.Fatalf("join fields missing: uid=%q title=%q", got.MapUID, got.MapTitle)
+		}
+		// A different owner must see "not found", never "forbidden".
+		if _, err := shares.GetByUID(ctx, link.UID, other.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("cross-owner GetByUID = %v; want ErrNotFound", err)
+		}
+
+		// GetByToken returns the document and the owner nickname in one round trip.
+		byToken, err := shares.GetByToken(ctx, link.Token)
+		if err != nil {
+			t.Fatalf("GetByToken: %v", err)
+		}
+		if !sameJSON(t, string(byToken.Document), string(doc)) {
+			t.Fatalf("document mismatch: %s", byToken.Document)
+		}
+		if byToken.MapDeleted {
+			t.Fatal("freshly created map reported as deleted")
+		}
+		if byToken.OwnerNickname != owner.Nickname {
+			t.Fatalf("owner nickname = %q, want %q", byToken.OwnerNickname, owner.Nickname)
+		}
+		if _, err := shares.GetByToken(ctx, "no-such-token"); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("unknown token = %v; want ErrNotFound", err)
+		}
+
+		// A second link, so listing and counting have something to compare.
+		second, err := shares.Create(ctx, domain.CreateShareInput{
+			UID: ulid.Make().String(), Token: "tok2-" + ulid.Make().String(),
+			MapID: target.ID, OwnerID: owner.ID, AllowDownload: true, ShowNotes: true, Now: now,
+		})
+		if err != nil {
+			t.Fatalf("create second share: %v", err)
+		}
+
+		byMap, err := shares.ListByMap(ctx, target.ID, owner.ID)
+		if err != nil {
+			t.Fatalf("ListByMap: %v", err)
+		}
+		if len(byMap) != 2 {
+			t.Fatalf("ListByMap = %d rows; want 2", len(byMap))
+		}
+		if byMap[0].ID != second.ID {
+			t.Fatalf("ListByMap is not newest-first: %#v", byMap[0])
+		}
+
+		if n, err := shares.CountActiveByMap(ctx, target.ID); err != nil || n != 2 {
+			t.Fatalf("CountActiveByMap = %d, %v; want 2", n, err)
+		}
+
+		mine, err := shares.ListByOwner(ctx, owner.ID, "", domain.NewPage(1, 20))
+		if err != nil {
+			t.Fatalf("ListByOwner: %v", err)
+		}
+		if len(mine) != 2 {
+			t.Fatalf("ListByOwner = %d rows; want 2", len(mine))
+		}
+		// The optional map_uid filter must narrow, not widen.
+		if rows, err := shares.ListByOwner(ctx, owner.ID, target.UID, domain.NewPage(1, 20)); err != nil || len(rows) != 2 {
+			t.Fatalf("filter by existing map = %d rows, %v; want 2", len(rows), err)
+		}
+		if rows, err := shares.ListByOwner(ctx, owner.ID, ulid.Make().String(), domain.NewPage(1, 20)); err != nil || len(rows) != 0 {
+			t.Fatalf("filter by unknown map = %d rows, %v; want 0", len(rows), err)
+		}
+		if n, err := shares.CountByOwner(ctx, owner.ID, ""); err != nil || n != 2 {
+			t.Fatalf("CountByOwner = %d, %v; want 2", n, err)
+		}
+		if rows, err := shares.ListByOwner(ctx, other.ID, "", domain.NewPage(1, 20)); err != nil || len(rows) != 0 {
+			t.Fatalf("other owner sees %d rows, %v; want 0", len(rows), err)
+		}
+
+		// Update is a full write: passing nil expires_at clears the expiry.
+		updated, err := shares.Update(ctx, domain.UpdateShareInput{
+			UID: link.UID, OwnerID: owner.ID, PasswordHash: "",
+			AllowDownload: true, ShowNotes: true, ExpiresAt: nil,
+		})
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.PasswordHash != "" || !updated.AllowDownload || !updated.ShowNotes || updated.ExpiresAt != nil {
+			t.Fatalf("update did not apply every field: %#v", updated)
+		}
+
+		// View counting.
+		if err := shares.RecordView(ctx, link.ID, now.Add(time.Minute)); err != nil {
+			t.Fatalf("RecordView: %v", err)
+		}
+		afterView, err := shares.GetByUID(ctx, link.UID, owner.ID)
+		if err != nil {
+			t.Fatalf("GetByUID after view: %v", err)
+		}
+		if afterView.ViewCount != 1 || afterView.LastViewedAt == nil {
+			t.Fatalf("view not recorded: count=%d last=%v", afterView.ViewCount, afterView.LastViewedAt)
+		}
+
+		// Revoke keeps the row (statistics survive) but blocks further writes.
+		if err := shares.Revoke(ctx, link.UID, owner.ID, now); err != nil {
+			t.Fatalf("Revoke: %v", err)
+		}
+		revoked, err := shares.GetByUID(ctx, link.UID, owner.ID)
+		if err != nil {
+			t.Fatalf("GetByUID after revoke: %v", err)
+		}
+		if !revoked.Revoked() || revoked.ViewCount != 1 {
+			t.Fatalf("revoke lost data: %#v", revoked)
+		}
+		if err := shares.Revoke(ctx, link.UID, owner.ID, now); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("second revoke = %v; want ErrNotFound", err)
+		}
+		if _, err := shares.Update(ctx, domain.UpdateShareInput{
+			UID: link.UID, OwnerID: owner.ID, AllowDownload: true,
+		}); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("update after revoke = %v; want ErrNotFound", err)
+		}
+		if n, err := shares.CountActiveByMap(ctx, target.ID); err != nil || n != 1 {
+			t.Fatalf("CountActiveByMap after revoke = %d, %v; want 1", n, err)
+		}
+
+		// Soft-deleting the map must surface through GetByToken, not as an error:
+		// the caller folds it into the same 404 as a revoked token.
+		if err := maps.SoftDelete(ctx, target.UID, owner.ID, now); err != nil {
+			t.Fatalf("SoftDelete map: %v", err)
+		}
+		trashed, err := shares.GetByToken(ctx, second.Token)
+		if err != nil {
+			t.Fatalf("GetByToken after map delete: %v", err)
+		}
+		if !trashed.MapDeleted {
+			t.Fatal("map deleted but MapDeleted is false")
 		}
 	})
 }

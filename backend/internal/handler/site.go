@@ -34,7 +34,11 @@ type siteConfig struct {
 	ExportEnabled       bool   `json:"exportEnabled"`
 	UserTemplateEnabled bool   `json:"userTemplateEnabled"`
 	ShareEnabled        bool   `json:"shareEnabled"`
-	Version             string `json:"version"`
+	// 两个分享默认值：新建分享对话框要按站点策略预填，否则后台配的
+	// `share.default_expire_days` 就是一条改了没反应的设置。
+	ShareDefaultExpireDays    int    `json:"shareDefaultExpireDays"`
+	ShareDefaultAllowDownload bool   `json:"shareDefaultAllowDownload"`
+	Version                   string `json:"version"`
 }
 
 // Config 处理 GET /api/v1/site/config。
@@ -53,6 +57,11 @@ func (h *SiteHandler) Config(c *gin.Context) {
 		ExportEnabled:       snapshot.Bool("feature.export_enabled"),
 		UserTemplateEnabled: snapshot.Bool("feature.user_template_enabled"),
 		ShareEnabled:        snapshot.Bool("share.public_link_enabled"),
-		Version:             h.version,
+		// 这两个只是**新建链接时的预填值**，不参与任何鉴权判断，所以可以
+		// 公开。真正的强制项（require_password / max_links_per_map）留在
+		// 服务端，不下发——下发了只会让前端多一条可能与服务端不一致的规则。
+		ShareDefaultExpireDays:    snapshot.Int("share.default_expire_days"),
+		ShareDefaultAllowDownload: snapshot.Bool("share.default_allow_download"),
+		Version:                   h.version,
 	})
 }

@@ -132,6 +132,21 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewFileService: %v", err)
 	}
 
+	// 分享服务：Policy 传真实 settings，这样「关闭分享」这类站点开关在测试里
+	// 也是真的生效的（验收标准 11 就是靠它验的）。
+	shareTokens, err := auth.NewShareTokenIssuer("http-test-secret-that-is-long-enough", 30*time.Minute)
+	if err != nil {
+		t.Fatalf("NewShareTokenIssuer: %v", err)
+	}
+	shareSvc, err := service.NewShareService(service.ShareServiceConfig{
+		Shares: sqlite.NewShareRepository(db), Maps: sqlite.NewMapRepository(db),
+		Policy: settingsSvc, Tokens: shareTokens,
+		Views: service.NewViewDeduper(30*time.Minute, nil),
+	})
+	if err != nil {
+		t.Fatalf("NewShareService: %v", err)
+	}
+
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
@@ -151,6 +166,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Maps:          handler.NewMapHandler(mapSvc),
 		Themes:        handler.NewThemeHandler(themeSvc),
 		Files:         handler.NewFileHandler(fileSvc),
+		Shares:        handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
 
 	server := httptest.NewServer(router)

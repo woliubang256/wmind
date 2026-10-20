@@ -268,3 +268,38 @@ var _ interface {
 	PasswordMinLength() int
 	DefaultRole() string
 } = (*Service)(nil)
+
+// ShareEnabled 报告站点是否允许分享。
+//
+// 它同时是「能不能新建链接」和「历史链接还能不能用」的开关：运营关掉分享
+// 时的诉求是后者，只挡新建等于没关（验收标准 11）。
+func (s *Service) ShareEnabled() bool { return s.Snapshot().Bool("share.public_link_enabled") }
+
+// ShareRequirePassword 报告是否强制分享链接设密码。
+func (s *Service) ShareRequirePassword() bool { return s.Snapshot().Bool("share.require_password") }
+
+// ShareMaxLinksPerMap 返回单张导图的分享链接上限。
+func (s *Service) ShareMaxLinksPerMap() int { return s.Snapshot().Int("share.max_links_per_map") }
+
+// ShareDefaultExpireDays 返回新建分享链接的默认有效期（0 = 永久）。
+func (s *Service) ShareDefaultExpireDays() int { return s.Snapshot().Int("share.default_expire_days") }
+
+// ShareDefaultAllowDownload 返回新建分享链接「允许下载」的默认值。
+func (s *Service) ShareDefaultAllowDownload() bool {
+	return s.Snapshot().Bool("share.default_allow_download")
+}
+
+// SiteBaseURL 返回站点对外地址，用于拼接分享链接。
+//
+// 空串表示未配置：此时分享 URL 退化为站内相对路径 /s/<token>，由前端用
+// 当前 origin 补全。服务端看不到用户实际访问的域名（反向代理后面尤其如此），
+// 所以宁可让前端补，也不在这里猜。
+func (s *Service) SiteBaseURL() string { return s.Snapshot().String("site.base_url") }
+
+// 编译期确认 Service 满足分享服务需要的站点策略接口（service.SharePolicy）。
+var _ interface {
+	ShareEnabled() bool
+	ShareRequirePassword() bool
+	ShareMaxLinksPerMap() int
+	SiteBaseURL() string
+} = (*Service)(nil)

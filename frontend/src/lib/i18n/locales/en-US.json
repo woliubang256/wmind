@@ -21,6 +21,7 @@
   "nav": {
     "recent": "Recent",
     "templates": "Templates",
+    "shares": "My shares",
     "trash": "Trash",
     "account": "Account",
     "adminOverview": "Overview",
@@ -398,7 +399,6 @@
     "actions.duplicate": "Duplicate",
     "actions.share": "Share",
     "actions.delete": "Delete",
-    "shareSoon": "Share links aren't built yet — they land in the next batch.",
     "rename.title": "Rename map",
     "rename.label": "Title",
     "delete.title": "Delete this map?",
@@ -429,5 +429,74 @@
     "emptyConfirm.body": "All {{count}} maps in the recycle bin will be erased permanently.",
     "emptyConfirm.confirm": "Empty it",
     "emptied": "Recycle bin emptied"
+  },
+  "share": {
+    "action": "Share",
+    "title": "Share \"{{title}}\"",
+    "copy": "Copy link",
+    "copied": "Copied",
+    "copyFailed": "Could not copy. Select the link and copy it manually.",
+    "revoke": "Revoke",
+    "revoked": "Link revoked. That address no longer opens.",
+    "views": "{{count}} views",
+    "createdAt": "Created {{time}}",
+    "create": {
+      "title": "New link",
+      "password": "Access password",
+      "passwordPlaceholder": "Leave empty for no password",
+      "passwordHint": "At least 4 characters. Visitors must enter it before the map opens.",
+      "expiry": "Expires",
+      "allowDownload": "Allow download",
+      "allowDownloadHint": "When off, the share page hides the export entry. Note: the page must send the document to the browser to support collapsing and zooming, so a technical visitor can still read it via devtools — this lowers the barrier, it is not access control.",
+      "showNotes": "Show notes",
+      "showNotesHint": "When off, notes are stripped on the server — the response does not contain them at all.",
+      "submit": "Create link",
+      "submitting": "Creating…",
+      "done": "Link created. Copy it and send it over:"
+    },
+    "expiry": {
+      "forever": "Never expires",
+      "days": "{{count}} days"
+    },
+    "list": {
+      "title": "Existing links ({{count}})",
+      "empty": "No share links yet."
+    },
+    "badge": {
+      "revoked": "Revoked",
+      "password": "Password",
+      "expires": "Expires {{time}}",
+      "forever": "No expiry",
+      "noDownload": "No download"
+    },
+    "revokeConfirm": {
+      "title": "Revoke this link?",
+      "body": "The address stops working immediately, including copies already sent out. The record and its view count are kept."
+    },
+    "mine": {
+      "title": "My shares",
+      "subtitle": "Every link you have handed out, and a way to take them back.",
+      "emptyTitle": "You have not shared anything yet",
+      "emptyBody": "Use \"Share\" on a map card, or open a map and use \"Share\" in the header.",
+      "emptyAction": "Go to my maps",
+      "prev": "Previous",
+      "next": "Next",
+      "pageOf": "Page {{page}} of {{total}}"
+    },
+    "public": {
+      "invalidTitle": "This link is no longer valid",
+      "invalidBody": "It may have been revoked or expired, or the map may have been deleted. Ask the person who shared it for a new link.",
+      "disabledTitle": "Sharing is turned off",
+      "disabledBody": "An administrator disabled sharing, so every share link is temporarily unavailable.",
+      "passwordTitle": "Password required",
+      "passwordBody": "The owner protected this map with a password.",
+      "passwordLabel": "Access password",
+      "submit": "Open map",
+      "submitting": "Checking…",
+      "passwordExpired": "Your access expired. Please enter the password again.",
+      "byline": "Shared by {{owner}} on {{time}}",
+      "anonymous": "someone",
+      "expiresAt": "Expires {{time}}"
+    }
   }
 }

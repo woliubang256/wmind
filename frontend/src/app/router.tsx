@@ -3,9 +3,11 @@ import { AuthLayout, PublicLayout, RequireAdmin, RequireAuth } from './layouts';
 import { LoginPage } from '@/features/auth/login-page';
 import { RegisterPage } from '@/features/auth/register-page';
 import { AccountPage } from '@/features/account/account-page';
-import { PlaceholderPage, PublicSharePage } from '@/features/dashboard/pages';
+import { PlaceholderPage } from '@/features/dashboard/pages';
 import { RecentPage } from '@/features/maps/recent-page';
 import { TrashPage } from '@/features/maps/trash-page';
+import { PublicSharePage } from '@/features/share/public-share-page';
+import { SharesPage } from '@/features/share/shares-page';
 
 /**
  * 管理后台三个页面按需加载。
@@ -39,6 +41,8 @@ export const router = createBrowserRouter([
   },
   {
     element: <PublicLayout />,
+    // 公开分享页：**不套 RequireAuth**。访客通常没有账号，安全边界由
+    // 令牌与可选的访问密码承担，见 features/share/public-share-page.tsx。
     children: [{ path: '/s/:token', element: <PublicSharePage /> }],
   },
   {
@@ -52,7 +56,7 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', element: <RecentPage /> },
           { path: '/templates', element: <PlaceholderPage page="templates" /> },
-          { path: '/shares', element: <PlaceholderPage page="shares" /> },
+          { path: '/shares', element: <SharesPage /> },
           { path: '/trash', element: <TrashPage /> },
           { path: '/account', element: <AccountPage /> },
           {element: <RequireAdmin />, children: adminRoutes},

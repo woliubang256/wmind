@@ -24,5 +24,6 @@ func TestRepositoryContract(t *testing.T) {
 	contracttest.Run(t, contracttest.Repos{
 		Users: NewUserRepository(db), Maps: NewMapRepository(db), Tx: NewTxManager(db),
 		Tokens: NewRefreshTokenRepository(db), Settings: NewSettingsRepository(db), Audit: NewAuditRepository(db),
+		Shares: NewShareRepository(db),
 	})
 }

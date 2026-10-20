@@ -265,3 +265,13 @@ func toUserDTO(user *domain.User) userDTO {
 func formatTime(t time.Time) string {
 	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
+
+// formatTimePtr 是可空时间的格式化：nil 保持 nil，让 JSON 里出现的是 null
+// 而不是零值时间串（"0001-01-01T00:00:00Z" 会被前端当成一个真实日期渲染）。
+func formatTimePtr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	value := formatTime(*t)
+	return &value
+}

@@ -50,6 +50,8 @@ const (
 	AuditUserRoleChange    = "user.role"
 	AuditUserPasswordReset = "user.reset_password"
 	AuditSettingsUpdate    = "settings.update"
+	AuditShareCreate       = "share.create"
+	AuditShareRevoke       = "share.revoke"
 )
 
 // CreateAuditLogInput 是写审计记录的入参。

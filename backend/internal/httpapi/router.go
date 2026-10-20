@@ -52,6 +52,8 @@ type Deps struct {
 	Themes *handler.ThemeHandler
 	// Files 处理通用图片上传（导入时的图片还原）。
 	Files *handler.FileHandler
+	// Shares 处理分享链接的增删改查与两个公开访问接口。
+	Shares *handler.ShareHandler
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -95,6 +97,7 @@ func NewRouter(deps Deps) http.Handler {
 	})
 	registerUsers(v1, deps)
 	registerMaps(v1, deps)
+	registerShares(v1, deps)
 	registerThemes(v1, deps)
 	registerFiles(v1, deps)
 	registerAdmin(v1, deps)
@@ -156,6 +159,41 @@ func registerMaps(v1 *gin.RouterGroup, deps Deps) {
 	trash.DELETE("", deps.Maps.EmptyTrash)
 	trash.POST("/:uid/restore", deps.Maps.Restore)
 	trash.DELETE("/:uid", deps.Maps.Purge)
+}
+
+// registerShares 注册分享链接接口。
+//
+// 分成三组，鉴权边界各不相同：
+//
+//   - `/maps/{uid}/shares`：属主为某张导图建链、看链，要求登录。
+//   - `/shares`：管理自己建的链接（列表 / 改设置 / 撤销），要求登录。
+//   - `/public/shares`：匿名访问，**不能**挂 RequireAuth——分享页的访客
+//     通常没有账号。它的安全边界完全由令牌（128 bit 随机）与密码承担。
+//
+// 校验密码的入口按 IP 限流 10 次/分钟（docs/04 §5.7）：分享密码往往是
+// 四位数字，不限流的话 10000 种组合几分钟就能穷举完。
+func registerShares(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Shares == nil {
+		return
+	}
+
+	if deps.Sessions != nil {
+		auth := middleware.RequireAuth(deps.Sessions)
+		maps := v1.Group("/maps", auth)
+		maps.POST("/:uid/shares", deps.Shares.Create)
+		maps.GET("/:uid/shares", deps.Shares.ListByMap)
+
+		shares := v1.Group("/shares", auth)
+		shares.GET("", deps.Shares.ListMine)
+		shares.PATCH("/:uid", deps.Shares.Update)
+		shares.DELETE("/:uid", deps.Shares.Revoke)
+	}
+
+	public := v1.Group("/public/shares")
+	public.GET("/:token", deps.Shares.PublicGet)
+	public.POST("/:token/verify",
+		middleware.NewRateLimiter(10, time.Minute, 10).Middleware(middleware.ClientIPKey),
+		deps.Shares.PublicVerify)
 }
 
 // registerThemes 注册自定义主题接口，全部要求登录态。

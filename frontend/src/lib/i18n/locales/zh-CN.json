@@ -21,6 +21,7 @@
   "nav": {
     "recent": "最近",
     "templates": "模板",
+    "shares": "我的分享",
     "trash": "回收站",
     "account": "个人设置",
     "adminOverview": "管理概览",
@@ -398,7 +399,6 @@
     "actions.duplicate": "复制",
     "actions.share": "分享",
     "actions.delete": "删除",
-    "shareSoon": "分享链接还没做好，下一批交付里会加上。",
     "rename.title": "重命名导图",
     "rename.label": "标题",
     "delete.title": "删除导图？",
@@ -429,5 +429,74 @@
     "emptyConfirm.body": "回收站里的 {{count}} 张导图将被永久删除，无法恢复。",
     "emptyConfirm.confirm": "清空",
     "emptied": "回收站已清空"
+  },
+  "share": {
+    "action": "分享",
+    "title": "分享「{{title}}」",
+    "copy": "复制链接",
+    "copied": "已复制",
+    "copyFailed": "复制失败，请手动选中链接复制。",
+    "revoke": "撤销",
+    "revoked": "分享链接已撤销，该地址现在打不开了。",
+    "views": "{{count}} 次访问",
+    "createdAt": "创建于 {{time}}",
+    "create": {
+      "title": "新建链接",
+      "password": "访问密码",
+      "passwordPlaceholder": "留空表示不需要密码",
+      "passwordHint": "至少 4 位。设了密码后，打开链接的人要先输密码。",
+      "expiry": "有效期",
+      "allowDownload": "允许下载",
+      "allowDownloadHint": "关闭后分享页不显示导出入口。注意：页面需要把文档结构下发到浏览器才能折叠和缩放，懂技术的人仍可通过开发者工具看到内容——这道开关降低门槛，不是访问控制。",
+      "showNotes": "显示备注",
+      "showNotesHint": "关闭后备注会在服务端被剥掉，响应里根本没有这部分内容。",
+      "submit": "创建链接",
+      "submitting": "创建中…",
+      "done": "链接已创建，复制它发给对方："
+    },
+    "expiry": {
+      "forever": "永久有效",
+      "days": "{{count}} 天"
+    },
+    "list": {
+      "title": "已有链接（{{count}} 条）",
+      "empty": "还没有分享链接。"
+    },
+    "badge": {
+      "revoked": "已撤销",
+      "password": "需要密码",
+      "expires": "{{time}} 过期",
+      "forever": "永久",
+      "noDownload": "禁止下载"
+    },
+    "revokeConfirm": {
+      "title": "撤销这条分享链接？",
+      "body": "撤销后该地址立即失效，已经发出去的链接也打不开。记录会保留，访问次数不会丢。"
+    },
+    "mine": {
+      "title": "我的分享",
+      "subtitle": "这里能看到你发出去的所有链接，随时收回。",
+      "emptyTitle": "还没有分享过导图",
+      "emptyBody": "在导图列表里点「分享」，或者打开一张导图后在顶部点「分享」。",
+      "emptyAction": "去导图列表",
+      "prev": "上一页",
+      "next": "下一页",
+      "pageOf": "第 {{page}} / {{total}} 页"
+    },
+    "public": {
+      "invalidTitle": "分享链接已失效",
+      "invalidBody": "这个链接可能已被撤销、已过期，或者对应的导图已被删除。请向分享者索要新的链接。",
+      "disabledTitle": "本站已关闭分享",
+      "disabledBody": "管理员关闭了分享功能，所有分享链接暂时都无法访问。",
+      "passwordTitle": "需要访问密码",
+      "passwordBody": "分享者给这张导图设了密码，输入后即可查看。",
+      "passwordLabel": "访问密码",
+      "submit": "查看导图",
+      "submitting": "校验中…",
+      "passwordExpired": "访问凭证已过期，请重新输入密码。",
+      "byline": "由 {{owner}} 分享于 {{time}}",
+      "anonymous": "某人",
+      "expiresAt": "{{time}} 后失效"
+    }
   }
 }

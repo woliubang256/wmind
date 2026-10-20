@@ -35,6 +35,10 @@ export interface SiteConfig {
   exportEnabled: boolean;
   userTemplateEnabled: boolean;
   shareEnabled: boolean;
+  /** 新建分享链接时的默认有效期（天）；0 表示永久。 */
+  shareDefaultExpireDays: number;
+  /** 新建分享链接时「允许下载」的默认值。 */
+  shareDefaultAllowDownload: boolean;
   version: string;
 }
 

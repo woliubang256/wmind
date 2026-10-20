@@ -19,7 +19,7 @@ import { mapApi, type MapSummary } from '@/lib/api/maps';
 import { formatNumber, formatRelative } from '@/lib/format';
 import { mapKeys } from './queries';
 import { MapCard, MapCardSkeleton } from './map-card';
-import { ConfirmDialog } from './confirm-dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const PAGE_SIZE = 24;
 
