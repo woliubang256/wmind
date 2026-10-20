@@ -30,6 +30,8 @@ import type {
 import { sanitizeNotesHtml } from '../html';
 import type { ImportContext, ImportInput } from '../types';
 import { mapMarker } from '../markers';
+import { claimId as claimIdShared, remapRange as remapRangeShared } from './ids';
+import { imageFromSource } from './image';
 import { mapStructure } from './mapping';
 import { isRecord, read, type Properties } from './properties';
 import { toPartialStyle } from './style';
@@ -98,67 +100,22 @@ function newSheetState(resources?: ReadonlyMap<string, Uint8Array>): SheetState 
   };
 }
 
-/** 图片扩展名 → MIME。不在表里的（svg 等）一律不收。 */
-const IMAGE_MIME: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-};
-
-/** 图片默认尺寸：XMind 没给宽高时用，与 Markdown 导入保持一致。 */
-const DEFAULT_IMAGE_WIDTH = 120;
-const DEFAULT_IMAGE_HEIGHT = 80;
-
-/**
- * 把 `xap:resources/a.png` / `resources/a.png` 归一成 zip 条目名。
- *
- * 只做前缀剥离与斜杠规整，**不做 URL 解码**：条目名按原样匹配，解出来的
- * 名字反而可能对不上（`%20` 与空格在 zip 里就是两个不同的键）。
- */
-function normalizeResourcePath(src: string): string {
-  let path = src.trim();
-  if (path.toLowerCase().startsWith('xap:')) path = path.slice(4);
-  path = path.replace(/^\/+/, '').replace(/^\.\//, '');
-  return path;
-}
-
-function toSize(raw: unknown): number {
-  const value = typeof raw === 'number' ? raw : Number.parseFloat(String(raw ?? ''));
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
-}
-
 /**
  * 把 XMind 的 `image` 节点变成 `TopicImage` + 待上传 asset。
  *
  * 三种 `src` 写法：`xap:resources/a.png`（包内）、`resources/a.png`（包内）、
- * `https://...`（外链）。外链直接用；包内的把字节交给 `ctx.asset()`，`src`
- * 先留原值作占位符，等 `finalize.ts` 换成服务端 URL。
+ * `https://...`（外链）。细节在 `./image.ts`——XMind 8 从备注富文本里捞
+ * 图片时走的是同一条路。
  *
  * 返回 null 表示这张图**没法还原**（条目不在包里、扩展名不支持、超过
  * `maxAssets`），调用方计入 `image-skipped`——不写一个指向 `xap:` 的坏引用。
  */
 function readImage(node: Properties, ctx: ImportContext, state: SheetState): TopicImage | null {
-  const src = textOf(read(node, 'src'));
-  if (src === '') return null;
-
-  const width = toSize(read(node, 'width')) || DEFAULT_IMAGE_WIDTH;
-  const height = toSize(read(node, 'height')) || DEFAULT_IMAGE_HEIGHT;
-
-  if (/^https?:\/\//i.test(src)) return { src, width, height };
-
-  const entry = normalizeResourcePath(src);
-  const bytes = entry === '' ? undefined : state.resources.get(entry);
-  if (bytes === undefined) return null;
-
-  const dot = entry.lastIndexOf('.');
-  const ext = dot < 0 ? '' : entry.slice(dot + 1).toLowerCase();
-  const mime = IMAGE_MIME[ext];
-  if (mime === undefined) return null;
-
-  if (!ctx.asset({ ref: src, bytes, fileName: entry, mime })) return null;
-  return { src, width, height };
+  return imageFromSource(
+    { src: textOf(read(node, 'src')), width: read(node, 'width'), height: read(node, 'height') },
+    ctx,
+    state.resources,
+  );
 }
 
 /**
@@ -166,41 +123,16 @@ function readImage(node: Properties, ctx: ImportContext, state: SheetState): Top
  *
  * 冲突时**保留第一次出现的映射**：后来的同名节点换新 id，但引用（联系、外框、
  * 概要）应该指向前者——用户拖出来的联系线连着的是先画的那个节点。
+ *
+ * 实现见 `./ids.ts`：XMind 8 走同一条路，两套格式的 id 语义没有区别。
  */
 function claimId(raw: unknown, ctx: ImportContext, state: SheetState): string {
-  const original = typeof raw === 'string' ? raw : '';
-  if (original !== '' && !state.used.has(original)) {
-    state.used.add(original);
-    state.ids.set(original, original);
-    return original;
-  }
-  const fresh = ctx.ids.topic();
-  state.used.add(fresh);
-  if (original !== '' && !state.ids.has(original)) state.ids.set(original, fresh);
-  return fresh;
-}
-
-/** XMind 的 range 可能是 `"(a,b)"`、`"a"` 或数组。 */
-export function parseRange(raw: unknown): string[] {
-  if (Array.isArray(raw)) {
-    return raw.filter((item): item is string => typeof item === 'string' && item !== '');
-  }
-  if (typeof raw !== 'string') return [];
-  return raw
-    .replace(/^\(|\)$/g, '')
-    .split(/[,\s]+/)
-    .map((item) => item.trim())
-    .filter((item) => item !== '');
+  return claimIdShared(raw, ctx, state.ids, state.used);
 }
 
 /** 把引用里的老 id 换成新 id；指向不存在节点的引用直接丢掉。 */
 function remapRange(raw: unknown, state: SheetState): string[] {
-  const out: string[] = [];
-  for (const id of parseRange(raw)) {
-    const mapped = state.ids.get(id);
-    if (mapped !== undefined && !out.includes(mapped)) out.push(mapped);
-  }
-  return out;
+  return remapRangeShared(raw, state.ids);
 }
 
 // ---------------------------------------------------------------------------

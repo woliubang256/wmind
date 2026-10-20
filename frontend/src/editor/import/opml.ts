@@ -17,26 +17,17 @@ import { FORMAT_TAG, FORMAT_VERSION } from '../model/types';
 import type { Marker, Topic, WmindDocument } from '../model/types';
 import { mapMarker } from './markers';
 import type { ImportContext } from './types';
-import { parseXml, type XmlElement } from './xml';
+import { parseXml, childNamed, childrenNamed, type XmlElement } from './xml';
 
 const UNTITLED = '(未命名)';
 
 /**
- * 按名字取子元素，**忽略大小写**。
+ * 按名字取子元素，**忽略大小写**（实现见 `xml.ts`）。
  *
  * XML 本身区分大小写，`xml.ts` 的 `childOf` 也严格比对；但存量 OPML 里确实
  * 有老导出器写 `<OPML><BODY><OUTLINE>`。放宽的代价只是多认几个元素，收益是
  * 这类文件不会变成「空文档」。
  */
-function childNamed(element: XmlElement, name: string): XmlElement | undefined {
-  const wanted = name.toLowerCase();
-  return element.children.find((child) => child.name.toLowerCase() === wanted);
-}
-
-function childrenNamed(element: XmlElement, name: string): XmlElement[] {
-  const wanted = name.toLowerCase();
-  return element.children.filter((child) => child.name.toLowerCase() === wanted);
-}
 
 /** OPML `_status` → 任务标记。 */
 const STATUS_MARKERS: Record<string, string> = {

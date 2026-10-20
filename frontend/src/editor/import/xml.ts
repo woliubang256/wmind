@@ -264,3 +264,31 @@ export function pathOf(element: XmlElement, path: readonly string[]): XmlElement
   }
   return current;
 }
+
+/**
+ * 去掉命名空间前缀：`xhtml:div` → `div`。
+ *
+ * XMind 的 `content.xml` 里 `<xhtml:img>` 与 `<img>` 指的是同一件事，前缀
+ * 只取决于导出器当时绑定了哪个命名空间。按前缀匹配会漏掉一半文件。
+ */
+export function localName(name: string): string {
+  const colon = name.indexOf(':');
+  return colon < 0 ? name : name.slice(colon + 1);
+}
+
+/**
+ * 按**本地名**找子元素，**忽略大小写**。
+ *
+ * XML 本身区分大小写，`childOf` 也严格比对；但存量文件里确实有老导出器写
+ * `<OPML><BODY><OUTLINE>`，XMind 8 的属性名也有 `style-id` / `styleId` 两种
+ * 写法。放宽的代价只是多认几个元素，收益是这类文件不会变成「空文档」。
+ */
+export function childNamed(element: XmlElement, name: string): XmlElement | undefined {
+  const wanted = name.toLowerCase();
+  return element.children.find((child) => localName(child.name).toLowerCase() === wanted);
+}
+
+export function childrenNamed(element: XmlElement, name: string): XmlElement[] {
+  const wanted = name.toLowerCase();
+  return element.children.filter((child) => localName(child.name).toLowerCase() === wanted);
+}
