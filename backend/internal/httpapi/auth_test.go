@@ -127,6 +127,11 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewThemeService: %v", err)
 	}
 
+	fileSvc, err := service.NewFileService(service.FileServiceConfig{Store: avatarStore})
+	if err != nil {
+		t.Fatalf("NewFileService: %v", err)
+	}
+
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
@@ -145,6 +150,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Admin:         handler.NewAdminHandler(adminSvc),
 		Maps:          handler.NewMapHandler(mapSvc),
 		Themes:        handler.NewThemeHandler(themeSvc),
+		Files:         handler.NewFileHandler(fileSvc),
 	})
 
 	server := httptest.NewServer(router)

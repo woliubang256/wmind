@@ -45,6 +45,8 @@ export const xmindAdapter: ImportAdapter = {
       throw new ImportError('PARSE_FAILED', { fileName: input.fileName }, error);
     }
 
-    return parseContentJson(parsed, input.fileName, ctx);
+    // `resources()` 只在真的有图片时才解压：没有图片的 XMind 不该为
+    // 一次「可能存在的资源扫描」多付一遍解压开销。
+    return parseContentJson(parsed, input.fileName, ctx, zip.resources());
   },
 };

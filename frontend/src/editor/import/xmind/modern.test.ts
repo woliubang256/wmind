@@ -387,3 +387,99 @@ describe('空内容', () => {
     expect(parseContentJson({ nothing: true }, 'x.xmind', ctx).sheets).toEqual([]);
   });
 });
+
+describe('图片', () => {
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+  function sheetWithImage(image: Record<string, unknown>) {
+    return [{ title: '画布', rootTopic: { id: 'root', title: '根', image } }];
+  }
+
+  it('包内资源登记成待上传 asset，src 先留占位符', () => {
+    const handle = ctxOf();
+    const doc = parseContentJson(
+      sheetWithImage({ src: 'xap:resources/a.png', width: 200, height: 100 }),
+      'x.xmind',
+      handle.context,
+      new Map([['resources/a.png', bytes]]),
+    );
+
+    expect(doc.sheets[0].rootTopic.image).toEqual({ src: 'xap:resources/a.png', width: 200, height: 100 });
+    expect(handle.assets).toHaveLength(1);
+    expect(handle.assets[0]).toMatchObject({ ref: 'xap:resources/a.png', fileName: 'resources/a.png', mime: 'image/png' });
+    expect(handle.assets[0].bytes).toBe(bytes);
+  });
+
+  it('条目不在包里时不算 asset，计入 image-skipped', () => {
+    const handle = ctxOf();
+    const doc = parseContentJson(
+      sheetWithImage({ src: 'xap:resources/missing.png' }),
+      'x.xmind',
+      handle.context,
+      new Map(),
+    );
+
+    expect(doc.sheets[0].rootTopic.image).toBeNull();
+    expect(handle.assets).toEqual([]);
+  });
+
+  it('不支持的扩展名（svg）不收', () => {
+    const handle = ctxOf();
+    const doc = parseContentJson(
+      sheetWithImage({ src: 'xap:resources/logo.svg' }),
+      'x.xmind',
+      handle.context,
+      new Map([['resources/logo.svg', bytes]]),
+    );
+
+    expect(doc.sheets[0].rootTopic.image).toBeNull();
+    expect(handle.assets).toEqual([]);
+  });
+
+  it('外链图片直接用，不进上传队列', () => {
+    const handle = ctxOf();
+    const doc = parseContentJson(
+      sheetWithImage({ src: 'https://cdn.test/a.png' }),
+      'x.xmind',
+      handle.context,
+      new Map(),
+    );
+
+    expect(doc.sheets[0].rootTopic.image?.src).toBe('https://cdn.test/a.png');
+    expect(handle.assets).toEqual([]);
+  });
+
+  it('超过 maxAssets 的图片退回「未能还原」，不留占位符', () => {
+    const handle = ctxOf({ maxAssets: 1 });
+    const resources = new Map([
+      ['resources/a.png', bytes],
+      ['resources/b.png', bytes],
+    ]);
+    const doc = parseContentJson(
+      [
+        {
+          title: '画布',
+          rootTopic: {
+            id: 'root',
+            title: '根',
+            children: {
+              attached: [
+                { id: 'a', title: 'A', image: { src: 'xap:resources/a.png' } },
+                { id: 'b', title: 'B', image: { src: 'xap:resources/b.png' } },
+              ],
+            },
+          },
+        },
+      ],
+      'x.xmind',
+      handle.context,
+      resources,
+    );
+
+    expect(handle.assets).toHaveLength(1);
+    const kids = doc.sheets[0].rootTopic.children.attached;
+    expect(kids[0].image?.src).toBe('xap:resources/a.png');
+    // 第二张没有进队列，就不能留占位符——否则上传阶段没人认领它。
+    expect(kids[1].image).toBeNull();
+  });
+});

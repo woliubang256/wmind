@@ -100,7 +100,7 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.maxAvatarBytes+multipartSlack)
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		response.Fail(c, h.uploadError(err))
+		response.Fail(c, uploadError(err, h.maxAvatarBytes))
 		return
 	}
 	file, err := fileHeader.Open()
@@ -112,7 +112,7 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 
 	data, err := io.ReadAll(io.LimitReader(file, h.maxAvatarBytes+1))
 	if err != nil {
-		response.Fail(c, h.uploadError(err))
+		response.Fail(c, uploadError(err, h.maxAvatarBytes))
 		return
 	}
 	user, err := h.users.UpdateAvatar(c.Request.Context(), middleware.UserID(c), data)
@@ -130,11 +130,13 @@ const multipartSlack = 64 << 10
 //
 // MaxBytesReader 超限时返回 *http.MaxBytesError，若不单独识别，用户看到的
 // 会是「参数校验失败」而不是「文件过大」——前端就没法给出正确提示。
-func (h *UserHandler) uploadError(err error) error {
+//
+// 放在包级而不是某个 handler 的方法上：头像与通用图片上传共用这一套翻译，
+// 各写一份必然有一处漏掉 MaxBytesError 的判断。
+func uploadError(err error, maxBytes int64) error {
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
-		return apperr.New(apperr.CodeFileTooLarge, "").
-			WithDetail("maxBytes", h.maxAvatarBytes)
+		return apperr.New(apperr.CodeFileTooLarge, "").WithDetail("maxBytes", maxBytes)
 	}
 	if errors.Is(err, http.ErrMissingFile) {
 		return apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{

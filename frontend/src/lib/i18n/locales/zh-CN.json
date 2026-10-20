@@ -304,6 +304,7 @@
     "dialog.dropHint": "或点击选择文件",
     "dialog.formats": "XMind / Markdown / OPML · 最大 {{limit}}",
     "dialog.parsing": "正在解析…",
+    "dialog.uploading": "正在上传图片 {{done}}/{{total}}…",
     "dialog.summaryTitle": "导入完成",
     "dialog.summaryDescription": "确认内容无误后创建导图。",
     "dialog.fileMeta": "{{format}} · {{name}} · {{size}}",

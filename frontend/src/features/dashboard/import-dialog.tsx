@@ -10,6 +10,10 @@
  *    `arrayBuffer()`；否则一个 2GB 的文件会先把内存吃满再报错。
  * 3. **摘要里的每一项都来自最终文档**（`summarizeImport` 扫的是产出的
  *    文档，不是适配器的自述），所以「已还原：备注」是真的有备注。
+ *
+ * 图片上传放在「解析完成 → 显示摘要」之间，而不是等用户点「创建导图」：
+ * 摘要要如实说明「12 张图片已上传」还是「3 张没传上去」，用户才能决定是否
+ * 继续。等确认后再传，失败就只能事后弹个 toast，而导图已经建好了。
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -19,9 +23,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Modal } from '@/components/ui/modal';
+import { fileApi } from '@/lib/api/files';
 import { mapApi } from '@/lib/api/maps';
 import { formatBytes } from '@/lib/format';
 import { importAcceptAttribute, importRegistry } from '@/editor/import/builtins';
+import { finalizeImport } from '@/editor/import/finalize';
 import { IMPORT_LIMITS } from '@/editor/import/limits';
 import type { ImportResult } from '@/editor/import/types';
 import {
@@ -35,6 +41,7 @@ import {
 type Phase =
   | { kind: 'idle' }
   | { kind: 'parsing'; fileName: string }
+  | { kind: 'uploading'; fileName: string; size: number; done: number; total: number }
   | { kind: 'ready'; fileName: string; size: number; result: ImportResult }
   | { kind: 'failed'; fileName: string; message: string };
 
@@ -83,8 +90,22 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 0);
       });
-      const result = importRegistry.run({ fileName: file.name, bytes });
-      setPhase({ kind: 'ready', fileName: file.name, size: file.size, result });
+      const parsed = importRegistry.run({ fileName: file.name, bytes });
+
+      if (parsed.assets.length === 0) {
+        setPhase({ kind: 'ready', fileName: file.name, size: file.size, result: parsed });
+        return;
+      }
+
+      const total = parsed.assets.length;
+      setPhase({ kind: 'uploading', fileName: file.name, size: file.size, done: 0, total });
+      const outcome = await finalizeImport(parsed, {
+        upload: (asset) => fileApi.upload(asset),
+        onProgress: (done) => {
+          setPhase({ kind: 'uploading', fileName: file.name, size: file.size, done, total });
+        },
+      });
+      setPhase({ kind: 'ready', fileName: file.name, size: file.size, result: outcome.result });
     } catch (error) {
       setPhase({ kind: 'failed', fileName: file.name, message: importErrorMessage(error, t) });
     }
@@ -206,6 +227,27 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{phase.fileName}</p>
             <p className="mt-1 text-xs text-muted-foreground">{t('import.dialog.parsing')}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {phase.kind === 'uploading' ? (
+        <div className="space-y-3 rounded-2xl border border-border bg-card/40 px-5 py-6">
+          <div className="flex items-center gap-3">
+            <span className="size-5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{phase.fileName}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('import.dialog.uploading', { done: phase.done, total: phase.total })}
+              </p>
+            </div>
+          </div>
+          {/* 进度条用宽度百分比而不是 <progress>：与其余卡片同一套圆角与配色。 */}
+          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-200"
+              style={{ width: `${phase.total === 0 ? 0 : Math.round((phase.done / phase.total) * 100)}%` }}
+            />
           </div>
         </div>
       ) : null}

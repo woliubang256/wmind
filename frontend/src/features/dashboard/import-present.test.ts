@@ -55,6 +55,7 @@ function resultOf(overrides: Partial<ImportResult> = {}): ImportResult {
     warnings: [],
     unsupported: {},
     summary: { sheets: 1, topics: 42, maxDepth: 4, restored: ['structure', 'notes', 'labels'] },
+    assets: [],
     ...overrides,
   };
 }

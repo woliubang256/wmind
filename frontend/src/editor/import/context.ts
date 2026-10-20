@@ -10,6 +10,7 @@ import { newBoundaryId, newDocumentId, newRelationshipId, newSheetId, newSummary
 import { ImportError } from './errors';
 import type { ImportLimits } from './limits';
 import type {
+  ImportAsset,
   ImportContext,
   ImportIdFactory,
   ImportWarning,
@@ -37,6 +38,8 @@ export interface ImportContextHandle {
   context: ImportContext;
   warnings: ImportWarning[];
   unsupported: UnsupportedSummary;
+  /** 待上传的图片，按 `ref` 去重（同一张图挂多个节点只传一次）。 */
+  assets: ImportAsset[];
   topicCount(): number;
   /** 被截断的标题数量。由调用方在结束时汇总成一条警告，避免刷屏。 */
   truncatedTitles(): number;
@@ -55,6 +58,8 @@ export function createImportContext(options: CreateImportContextOptions): Import
   const warnings: ImportWarning[] = [];
   const seenWarnings = new Set<string>();
   const unsupported: UnsupportedSummary = {};
+  const assets: ImportAsset[] = [];
+  const seenAssets = new Set<string>();
   let topics = 0;
   let truncated = 0;
 
@@ -75,6 +80,18 @@ export function createImportContext(options: CreateImportContextOptions): Import
     unsupported(feature, count = 1) {
       if (count <= 0) return;
       unsupported[feature] = (unsupported[feature] ?? 0) + count;
+    },
+
+    asset(asset) {
+      // 同一张图可能被多个节点引用（XMind 复制粘贴会共用资源条目）。
+      // 按 ref 去重，避免同一个文件被上传十次。
+      if (seenAssets.has(asset.ref)) return true;
+      // 上限按**张数**而不是字节：字节由 zip 的跨趟预算管住，这里要防的是
+      // 「一个包里 4000 张小图」——它们不会撑爆内存，但会拖死上传队列。
+      if (assets.length >= limits.maxAssets) return false;
+      seenAssets.add(asset.ref);
+      assets.push(asset);
+      return true;
     },
 
     topic() {
@@ -102,6 +119,7 @@ export function createImportContext(options: CreateImportContextOptions): Import
     context,
     warnings,
     unsupported,
+    assets,
     topicCount: () => topics,
     truncatedTitles: () => truncated,
   };

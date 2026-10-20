@@ -3,6 +3,7 @@ package id
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -26,4 +27,18 @@ func New() string {
 func Valid(s string) bool {
 	_, err := ulid.ParseStrict(s)
 	return err == nil
+}
+
+// Random 生成 128 位随机标识（小写十六进制，32 字符）。
+//
+// 与 New 的区别：ULID 的前 48 位是时间戳，同一毫秒内的取值可以按时间猜出来。
+// 文件 URL 是**唯一**的访问凭证（不带鉴权），所以这里用纯随机量——「不可枚举」
+// 必须由生成方式保证，而不是靠没人去猜。
+func Random() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		// 与 New 一致：熵源异常时继续运行只会产出重复标识。
+		panic("id: 读取随机源失败: " + err.Error())
+	}
+	return hex.EncodeToString(buf)
 }

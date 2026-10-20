@@ -250,8 +250,10 @@ function applyInline(topic: Topic, text: string, state: BuildState): void {
   if (inline.labels.length > 0) topic.labels = inline.labels.map((label) => state.ctx.title(label));
 
   if (inline.image !== null) {
-    // 绝对地址可以直接用；相对路径要先上传（后端还没有 POST /files），
-    // 写进文档只会是一张破图，所以如实计入「未能还原」。
+    // 绝对地址可以直接用。相对路径（`./img/a.png`）的字节在**文件之外**：
+    // 用户只拖进来一个 .md，旁边那个 img 目录没跟过来，没有任何东西可以
+    // 上传（`/files` 接口在，但没数据）。写进文档只会是一张破图，所以
+    // 如实计入「未能还原」，而不是留个假 URL。
     if (/^https?:\/\//i.test(inline.image.src)) {
       topic.image = { src: inline.image.src, width: 120, height: 80 };
     } else {

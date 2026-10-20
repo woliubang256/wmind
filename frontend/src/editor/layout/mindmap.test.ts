@@ -6,7 +6,7 @@ import type { NodeBox } from './types';
 import type { Topic } from '../model/types';
 
 /** 所有节点固定 100×40：几何完全可预测，断言不用看字体度量。 */
-const stubMeasure = (topic: Topic) => ({ width: 100, height: 40, lines: [topic.title] });
+const stubMeasure = (topic: Topic) => ({ width: 100, height: 40, lines: [topic.title], image: null });
 
 function layout(options: Parameters<typeof layoutMindmap>[0]['options'] = {}) {
   const doc = docWithTree();
@@ -204,6 +204,7 @@ describe('布局开关', () => {
     width: 60 + t.title.length * 24,
     height: 40,
     lines: [t.title],
+    image: null,
   });
 
   /** 单向树：两个一级分支都在右侧，且宽度不同。 */

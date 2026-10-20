@@ -50,6 +50,8 @@ type Deps struct {
 	Maps *handler.MapHandler
 	// Themes 处理用户自定义主题的增删改查。
 	Themes *handler.ThemeHandler
+	// Files 处理通用图片上传（导入时的图片还原）。
+	Files *handler.FileHandler
 }
 
 // NewRouter 构建 HTTP 处理器。
@@ -94,6 +96,7 @@ func NewRouter(deps Deps) http.Handler {
 	registerUsers(v1, deps)
 	registerMaps(v1, deps)
 	registerThemes(v1, deps)
+	registerFiles(v1, deps)
 	registerAdmin(v1, deps)
 
 	// 头像等上传文件由 API 直接提供。生产部署里 Nginx 把 /uploads/ 也代理到
@@ -167,6 +170,29 @@ func registerThemes(v1 *gin.RouterGroup, deps Deps) {
 	g.POST("", deps.Themes.Create)
 	g.PUT("/:uid", deps.Themes.Update)
 	g.DELETE("/:uid", deps.Themes.Delete)
+}
+
+// registerFiles 注册通用图片上传，要求登录态。
+//
+// 限流按**用户**（20 次/分钟，docs/04 §3.1）而不是 IP：上传是「一个人连着
+// 传几十张图」的形态，按 IP 会让同一出口的人互相挤占配额。
+//
+// 只有 POST：文件由 `/uploads` 静态目录直接回放，与头像同一条映射。缺
+// `files` 表意味着没有属主信息，所以**没有** DELETE——那要等 M5 补表。
+func registerFiles(v1 *gin.RouterGroup, deps Deps) {
+	if deps.Files == nil || deps.Sessions == nil {
+		return
+	}
+	// 120 次/分钟/用户，与前端 `IMPORT_LIMITS.maxAssets`（100 张）是一对：
+	// 一次导入会把图片**串行**传完，额度必须装得下一次完整的导入，否则用户
+	// 在第 21 张之后就只能看着「图片未能还原」。改一个必须同时改另一个。
+	//
+	// 按用户而不是按 IP：同一个办公室出口 IP 可能有多个人同时导入，按 IP
+	// 限流会让同事互相拖累；而上传的滥用面是「往磁盘里灌东西」，按账号记
+	// 才是对的。
+	limit := middleware.NewRateLimiter(120, time.Minute, 120)
+	g := v1.Group("/files", middleware.RequireAuth(deps.Sessions))
+	g.POST("", limit.Middleware(middleware.UserKey), deps.Files.Upload)
 }
 
 // registerAdmin 注册管理后台接口。

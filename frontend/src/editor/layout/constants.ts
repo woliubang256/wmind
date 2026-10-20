@@ -37,7 +37,26 @@ export const NODE_METRICS = {
   /** 自动宽度下的最大内容宽度；超过就折行。 */
   maxContentWidth: 320,
   lineHeightRatio: 1.4,
+  /** 文本块与图片之间的竖直间距。 */
+  imageGap: 6,
 } as const;
+
+/**
+ * 图片的显示尺寸约束。
+ *
+ * XMind 把用户拖出来的尺寸写进 `image.width/height`，那个值可能大得离谱
+ * （有的文件里是原图像素）。不夹一下，一个 5000px 高的节点会把整张画布的
+ * 布局撑成没法看，还会让「缩放到适应」把别的节点缩成一个点。
+ *
+ * 只按**等比缩小**处理，不放大：小图保持原样，比放大后糊成一片强。
+ */
+export const IMAGE_METRICS = {
+  maxWidth: 320,
+  maxHeight: 240,
+  /** 小于这个尺寸的图看不清，按最小尺寸撑开。 */
+  minSize: 16,
+} as const;
+
 
 export function spacingFor(compact: boolean): LayoutSpacing {
   return compact ? COMPACT_SPACING : DEFAULT_SPACING;

@@ -304,6 +304,7 @@
     "dialog.dropHint": "or click to browse",
     "dialog.formats": "XMind / Markdown / OPML · up to {{limit}}",
     "dialog.parsing": "Parsing…",
+    "dialog.uploading": "Uploading images {{done}}/{{total}}…",
     "dialog.summaryTitle": "Import finished",
     "dialog.summaryDescription": "Review the summary, then create the map.",
     "dialog.fileMeta": "{{format}} · {{name}} · {{size}}",

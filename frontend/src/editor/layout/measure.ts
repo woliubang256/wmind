@@ -16,10 +16,10 @@
  * 不与浏览器逐像素一致——测试只断言相对关系与折行行为，不断言绝对宽度。
  */
 
-import type { ComputedStyle, FontFamily, Topic } from '../model/types';
+import type { ComputedStyle, FontFamily, Topic, TopicImage } from '../model/types';
 import { canvasFont } from '../theme/fonts';
-import { NODE_METRICS } from './constants';
-import type { TopicSize } from './types';
+import { IMAGE_METRICS, NODE_METRICS } from './constants';
+import type { ImageSize, TopicSize } from './types';
 
 export interface FontSpec {
   family: FontFamily;
@@ -298,17 +298,51 @@ export function fontOf(style: ComputedStyle): FontSpec {
 }
 
 /**
+ * 把图片的声明尺寸夹进可用范围。
+ *
+ * 等比缩小到 `maxWidth × maxHeight` 之内，再保证不小于 `minSize`。宽高有一个
+ * 缺失或非正数时按另一个推 4:3（XMind 的默认比例），两个都没有就按默认尺寸。
+ */
+export function imageDisplaySize(image: TopicImage): ImageSize {
+  const raw = { width: image.width, height: image.height };
+  let width = Number.isFinite(raw.width) && raw.width > 0 ? raw.width : 0;
+  let height = Number.isFinite(raw.height) && raw.height > 0 ? raw.height : 0;
+  if (width === 0 && height === 0) {
+    width = 120;
+    height = 80;
+  } else if (width === 0) {
+    width = (height * 4) / 3;
+  } else if (height === 0) {
+    height = (width * 3) / 4;
+  }
+
+  const scale = Math.min(1, IMAGE_METRICS.maxWidth / width, IMAGE_METRICS.maxHeight / height);
+  width *= scale;
+  height *= scale;
+
+  return {
+    src: image.src,
+    width: roundHalf(Math.max(IMAGE_METRICS.minSize, width)),
+    height: roundHalf(Math.max(IMAGE_METRICS.minSize, height)),
+  };
+}
+
+/**
  * 测量一个主题节点。
  *
  * 自动宽度：`clamp(内容宽度, 60, 320) + 左右内边距`（docs/05 §4.3）。
  * 固定宽度：直接用 `style.width`，文本按减去内边距后的宽度折行。
+ *
+ * 有图片时**图片在文本下方**（与 XMind 一致）：盒子宽度取「文本宽」与
+ * 「图片宽」的较大者，高度是两段相加。这样文本换行与图片尺寸互不干扰，
+ * 也不会出现「图片把文字挤到只剩一个字宽」的排版。
  */
 export function measureTopic(
   topic: Topic,
   style: ComputedStyle,
   impl: MeasureBackend = defaultBackend(),
 ): TopicSize {
-  const { paddingX, paddingY, minContentWidth, maxContentWidth } = NODE_METRICS;
+  const { paddingX, paddingY, minContentWidth, maxContentWidth, imageGap } = NODE_METRICS;
   const font = fontOf(style);
   const available = style.autoWidth
     ? maxContentWidth
@@ -316,13 +350,21 @@ export function measureTopic(
 
   const measured = measureText(topic.title, font, available, impl);
 
-  const width = style.autoWidth
+  const image = topic.image === null ? null : imageDisplaySize(topic.image);
+
+  let width = style.autoWidth
     ? Math.min(maxContentWidth, Math.max(minContentWidth, measured.width)) + paddingX * 2
     : style.width;
+  if (image !== null) width = Math.max(width, image.width + paddingX * 2);
+
+  const height = image === null
+    ? measured.height + paddingY * 2
+    : measured.height + imageGap + image.height + paddingY * 2;
 
   return {
     width: roundHalf(width),
-    height: roundHalf(measured.height + paddingY * 2),
+    height: roundHalf(height),
     lines: measured.lines,
+    image,
   };
 }

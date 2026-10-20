@@ -526,11 +526,46 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 ### 5.6 文件接口
 
-| 方法 | 路径 | 说明 |
+#### `POST /api/v1/files`
+
+上传一张图片。`multipart/form-data`，字段 `file`。需要登录态。
+
+| 约束 | 值 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/v1/files` | 上传图片（`multipart/form-data`，字段 `file`，参数 `kind`）。返回 `{ uid, url, width, height }` |
-| `GET` | `/api/v1/files/{uid}` | 读取文件。公开可读（URL 含随机 uid，不可枚举）；若 `site` 要求鉴权则校验属主 |
-| `DELETE` | `/api/v1/files/{uid}` | 删除（仅属主） |
+| 单文件字节数 | 8 MB | 超限 `413 FILE_TOO_LARGE` |
+| 像素总数 | 4000 万 | 超限同样 `FILE_TOO_LARGE`（`details.maxPixels`） |
+| 允许的格式 | PNG / JPEG / GIF / WebP | 其余 `415 FILE_TYPE_NOT_ALLOWED` |
+| 限流 | 120 次/分钟/用户 | 按 `user_uid` 而不是 IP |
+
+```json
+{
+  "data": {
+    "uid": "9736debf25f08efe5fd0dd392d788a5b",
+    "url": "/uploads/file_9736debf25f08efe5fd0dd392d788a5b.png",
+    "width": 40,
+    "height": 30,
+    "format": "png",
+    "bytes": 98
+  }
+}
+```
+
+四条实现约定：
+
+1. **类型由解码结果决定**，不看 `Content-Type`，也不看扩展名。存下来的扩展名来自解码出的格式——一个叫 `photo.png` 的 JPEG 会存成 `.jpg`，避免浏览器按扩展名猜错。
+2. **同时卡字节与像素**。只看字节挡不住「纯色 10000×10000 PNG」：它压完只有几十 KB，解开却是几百 MB 的位图。用 `image.DecodeConfig` 只读文件头，不解整张图，内存因此是平的。
+3. **文件名与 URL 由服务端生成**（`file_<128 位随机 hex><ext>`）。文件名是凭据，不能用 ULID——ULID 前 48 位是时间戳，等于把「什么时候传的」和可枚举性一起送出去。
+4. **没有 `kind` 参数**。这个接口目前只服务「导入时还原图片」，而导入的调用方自己知道传的是什么；加一个只用来做白名单分支的参数，等真有第二种用途时再加不迟。
+
+#### 读取：`GET /uploads/{name}`
+
+文件**不在 `/api/v1` 下**，由 Go 进程在根路径 `/uploads` 直接回放静态目录（与头像同一条映射，见 `router.go` 的 `r.Static`），生产环境由 Nginx 直接命中磁盘。
+
+因此**没有鉴权**：URL 里的 128 位随机串就是凭据。这个取舍与头像一致——图片要嵌在 `<img>` 里、要能进导出产物，加一层令牌只会让渲染链路多一次失败点；而猜中 32 个 hex 字符的概率可以忽略。
+
+#### `DELETE /api/v1/files/{uid}`（未实现，随 M5 落地）
+
+单文件删除的问题不是权限，而是**引用计数**：一张图片可能被同一份导图的多个节点引用，也可能被复制到别的导图里。现在删掉它，别处的图就静默变成破图。正确做法是随导图清理任务一起做（`docs/07` 的孤儿文件回收），而不是开一个能被界面随手调用的删除接口。
 
 ### 5.7 分享接口
 
@@ -816,11 +851,11 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 导图 | 12 | 列表、创建、读取、保存、重命名、删除、复制、缩略图、回收站 ×4 |
 | 模板 | 4 | 列表、创建、改名、删除 |
 | 主题 | 4 | 列表、创建、更新、删除 |
-| 文件 | 3 | 上传、读取、删除 |
+| 文件 | 1 | 上传（读取走 `/uploads` 静态目录，删除随 M5 落地） |
 | **分享** | **6** | 创建、导图维度列表、我的分享、修改、撤销、公开读取、密码校验（含公开接口共 6 个） |
 | 导出 | 1 | 服务端兜底导出 |
 | 管理 | 10 | 用户 ×5、设置 ×2、统计、日志、重置密码 |
-| **合计** | **50** | 相比 v1.1 的 55 减少 5 个（`forgot-password` / `reset-password` / `verify-email` / `resend-verification` / `admin/mail/test`） |
+| **合计** | **48** | 相比 v1.1 的 55 减少 7 个（`forgot-password` / `reset-password` / `verify-email` / `resend-verification` / `admin/mail/test` / `GET files/{uid}` / `DELETE files/{uid}`） |
 
 > 二期接入邮件后恢复为 55 个。`POST /admin/users/{uid}/reset-password` 一期即为正式接口（非占位），二期也不会移除——它与邮件重置是并存的两条找回路径。
 

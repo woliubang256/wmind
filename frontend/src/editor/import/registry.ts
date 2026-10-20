@@ -178,6 +178,7 @@ export function createImportRegistry(initial: readonly ImportAdapter[] = []): Im
         warnings: handle.warnings,
         unsupported: handle.unsupported,
         summary,
+        assets: handle.assets,
       };
     },
   };

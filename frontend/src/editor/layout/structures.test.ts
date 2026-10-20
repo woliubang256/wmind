@@ -12,7 +12,7 @@ import type { StructureClass, Topic } from '../model/types';
  * 而「子节点在父节点右侧」是结构的定义。
  */
 
-const stubMeasure = (topic: Topic) => ({ width: 100, height: 40, lines: [topic.title] });
+const stubMeasure = (topic: Topic) => ({ width: 100, height: 40, lines: [topic.title], image: null });
 
 function layout(structure: StructureClass) {
   const doc = docWithTree();

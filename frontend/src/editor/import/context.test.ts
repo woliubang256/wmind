@@ -108,6 +108,31 @@ describe('unsupported 计数', () => {
   });
 });
 
+describe('图片登记', () => {
+  const asset = (ref: string) => ({
+    ref,
+    bytes: new Uint8Array([1]),
+    fileName: ref.replace('xap:', ''),
+    mime: 'image/png',
+  });
+
+  it('按 ref 去重，同一个条目只传一次', () => {
+    const handle = makeContext();
+    expect(handle.context.asset(asset('xap:resources/a.png'))).toBe(true);
+    // 复制粘贴出来的节点共用同一个资源条目。
+    expect(handle.context.asset(asset('xap:resources/a.png'))).toBe(true);
+    expect(handle.assets).toHaveLength(1);
+  });
+
+  it('超过 maxAssets 返回 false，且不入队', () => {
+    const handle = makeContext({ maxAssets: 1 });
+    expect(handle.context.asset(asset('xap:resources/a.png'))).toBe(true);
+    // 返回 false 是让适配器把这张图算进「未能还原」，而不是写一个没人认领的占位符。
+    expect(handle.context.asset(asset('xap:resources/b.png'))).toBe(false);
+    expect(handle.assets.map((item) => item.ref)).toEqual(['xap:resources/a.png']);
+  });
+});
+
 describe('ID 工厂', () => {
   it('默认生成带前缀的唯一 ID', () => {
     const { context } = makeContext();

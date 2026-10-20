@@ -40,6 +40,13 @@ export default defineConfig({
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
+      // 上传的图片（头像、导入还原的导图图片）由 Go 进程在根路径 `/uploads`
+      // 直接回放，生产里由 Nginx 转发。开发时若不转发，页面上每张图都是 404
+      // 破图——看起来像导入功能坏了，实际只是代理少了一条。
+      '/uploads': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
     },
   },
   test: {

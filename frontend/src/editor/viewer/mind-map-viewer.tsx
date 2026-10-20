@@ -210,6 +210,7 @@ export function MindMapViewer({
 
   const editingBox = editingId ? layout.boxes.get(editingId) : undefined;
   const editingStyle = editingId ? layout.styles.get(editingId) : undefined;
+  const editingSize = editingId ? layout.sizes.get(editingId) : undefined;
 
   return (
     <ViewerContext.Provider value={context}>
@@ -253,6 +254,7 @@ export function MindMapViewer({
             key={editingBox.id}
             box={editingBox}
             style={editingStyle}
+            textHeight={editingSize ? editingSize.lines.length * Math.round(editingStyle.fontSize * 1.4) : editingBox.height}
             viewport={viewport}
             initialValue={findTitle(sheet, editingBox.id)}
             onCommit={(value, options) => commitTitle(editingBox.id, value, options)}
@@ -293,16 +295,20 @@ interface TopicsLayerProps {
 const TopicsLayer = memo(function TopicsLayer({ layout, selection, editingId }: TopicsLayerProps) {
   return (
     <g className="layer-topics">
-      {[...layout.boxes.values()].map((box) => (
-        <TopicNode
-          key={box.id}
-          box={box}
-          style={layout.styles.get(box.id) ?? fallbackStyle(box)}
-          lines={layout.sizes.get(box.id)?.lines ?? ['']}
-          selected={selection.has(box.id)}
-          editing={editingId === box.id}
-        />
-      ))}
+      {[...layout.boxes.values()].map((box) => {
+        const size = layout.sizes.get(box.id);
+        return (
+          <TopicNode
+            key={box.id}
+            box={box}
+            style={layout.styles.get(box.id) ?? fallbackStyle(box)}
+            lines={size?.lines ?? ['']}
+            image={size?.image ?? null}
+            selected={selection.has(box.id)}
+            editing={editingId === box.id}
+          />
+        );
+      })}
     </g>
   );
 });
@@ -348,6 +354,13 @@ function fallbackStyle(box: NodeBox): ComputedStyle {
 interface EditingOverlayProps {
   box: NodeBox;
   style: ComputedStyle;
+  /**
+   * 文本块的世界高度（不含图片）。
+   *
+   * 带图片的节点，盒子高度里有一大半是图。输入框若照着盒子高度画，双击一个
+   * 带大图的节点就会弹出一块把图整个盖住的白框。只覆盖文本那一段更符合直觉。
+   */
+  textHeight: number;
   viewport: Viewport;
   initialValue: string;
   onCommit(value: string, options?: CommitTitleOptions): void;
@@ -363,7 +376,7 @@ interface EditingOverlayProps {
  *
  * 位置按当前 viewport 换算成屏幕坐标——所以缩放、平移时输入框会跟着走。
  */
-function EditingOverlay({ box, style, viewport, initialValue, onCommit, onCancel }: EditingOverlayProps) {
+function EditingOverlay({ box, style, textHeight, viewport, initialValue, onCommit, onCancel }: EditingOverlayProps) {
   const [value, setValue] = useState(initialValue);
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const settled = useRef(false);
@@ -420,7 +433,7 @@ function EditingOverlay({ box, style, viewport, initialValue, onCommit, onCancel
         left: viewport.x + box.x * zoom,
         top: viewport.y + box.y * zoom,
         width: box.width * zoom,
-        height: Math.max(box.height * zoom, lineHeight * zoom + 16),
+        height: Math.max(textHeight * zoom + 16, lineHeight * zoom + 16),
         padding: `${8 * zoom}px ${12 * zoom}px`,
         fontFamily: fontStack(style.fontFamily),
         fontSize: style.fontSize * zoom,

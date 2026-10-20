@@ -140,6 +140,19 @@ export interface ImportContext {
   topic(): void;
   /** 按 `maxTitleLength` 截断并清洗控制字符。 */
   title(value: string): string;
+  /**
+   * 登记一份待上传的图片，并在文档里留下占位符 `ref`。
+   *
+   * 走 context 而不是让 `parse` 返回第二个值：适配器已经有 `warn` /
+   * `unsupported` 这类「顺手记一笔」的通道，图片是同一种东西，再加一个返回
+   * 形状只会让三个适配器的签名一起改。
+   *
+   * **返回 false 表示这张图没被接受**（超过 `maxAssets`）。适配器必须据此
+   * 放弃这张图并计入 `image-skipped`——不能把占位符写进文档，否则上传阶段
+   * 没人认领它，数据库里就留下一张指向 `xap:resources/...` 的破图。
+   * 已登记过的 `ref` 返回 true（字节已经在队列里，调用方照常用）。
+   */
+  asset(asset: ImportAsset): boolean;
 }
 
 export interface ImportAdapter {
@@ -162,10 +175,29 @@ export interface ImportRequest {
   now?: number;
 }
 
+/**
+ * 一份待上传的图片。
+ *
+ * 解析是同步的、上传是异步的，所以解析阶段只把字节攒起来，`image.src` 先写
+ * 一个占位符（XMind 里的原引用，如 `xap:resources/a.png`）。上传完成后由
+ * `finalize.ts` 把占位符换成服务端 URL——**文档在这之前不要落库**，否则
+ * 存进去的是一批指向不存在资源的图片。
+ */
+export interface ImportAsset {
+  /** 占位符，等于文档里 `image.src` 暂时持有的值。 */
+  ref: string;
+  bytes: Uint8Array;
+  /** 原始条目名（`resources/a.png`），用于错误信息与扩展名推断。 */
+  fileName: string;
+  mime: string;
+}
+
 export interface ImportResult {
   format: ImportFormatId;
   document: WmindDocument;
   warnings: ImportWarning[];
   unsupported: UnsupportedSummary;
   summary: ImportSummary;
+  /** 需要上传的图片；为空表示这份文件不含内嵌图片。 */
+  assets: ImportAsset[];
 }

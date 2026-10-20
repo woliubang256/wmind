@@ -24,6 +24,7 @@ import type {
   StructureClass,
   Summary,
   Topic,
+  TopicImage,
   WmindDocument,
 } from '../../model/types';
 import { sanitizeNotesHtml } from '../html';
@@ -83,10 +84,81 @@ interface SheetState {
   /** 计数后统一出一条警告，避免 200 张图出 200 条重复警告。 */
   skippedImages: number;
   unknownMarkers: number;
+  /** zip 里 `resources/` 下的图片；为空表示没有资源（或不是 zip）。 */
+  resources: ReadonlyMap<string, Uint8Array>;
 }
 
-function newSheetState(): SheetState {
-  return { ids: new Map(), used: new Set(), skippedImages: 0, unknownMarkers: 0 };
+function newSheetState(resources?: ReadonlyMap<string, Uint8Array>): SheetState {
+  return {
+    ids: new Map(),
+    used: new Set(),
+    skippedImages: 0,
+    unknownMarkers: 0,
+    resources: resources ?? new Map(),
+  };
+}
+
+/** 图片扩展名 → MIME。不在表里的（svg 等）一律不收。 */
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+
+/** 图片默认尺寸：XMind 没给宽高时用，与 Markdown 导入保持一致。 */
+const DEFAULT_IMAGE_WIDTH = 120;
+const DEFAULT_IMAGE_HEIGHT = 80;
+
+/**
+ * 把 `xap:resources/a.png` / `resources/a.png` 归一成 zip 条目名。
+ *
+ * 只做前缀剥离与斜杠规整，**不做 URL 解码**：条目名按原样匹配，解出来的
+ * 名字反而可能对不上（`%20` 与空格在 zip 里就是两个不同的键）。
+ */
+function normalizeResourcePath(src: string): string {
+  let path = src.trim();
+  if (path.toLowerCase().startsWith('xap:')) path = path.slice(4);
+  path = path.replace(/^\/+/, '').replace(/^\.\//, '');
+  return path;
+}
+
+function toSize(raw: unknown): number {
+  const value = typeof raw === 'number' ? raw : Number.parseFloat(String(raw ?? ''));
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+}
+
+/**
+ * 把 XMind 的 `image` 节点变成 `TopicImage` + 待上传 asset。
+ *
+ * 三种 `src` 写法：`xap:resources/a.png`（包内）、`resources/a.png`（包内）、
+ * `https://...`（外链）。外链直接用；包内的把字节交给 `ctx.asset()`，`src`
+ * 先留原值作占位符，等 `finalize.ts` 换成服务端 URL。
+ *
+ * 返回 null 表示这张图**没法还原**（条目不在包里、扩展名不支持、超过
+ * `maxAssets`），调用方计入 `image-skipped`——不写一个指向 `xap:` 的坏引用。
+ */
+function readImage(node: Properties, ctx: ImportContext, state: SheetState): TopicImage | null {
+  const src = textOf(read(node, 'src'));
+  if (src === '') return null;
+
+  const width = toSize(read(node, 'width')) || DEFAULT_IMAGE_WIDTH;
+  const height = toSize(read(node, 'height')) || DEFAULT_IMAGE_HEIGHT;
+
+  if (/^https?:\/\//i.test(src)) return { src, width, height };
+
+  const entry = normalizeResourcePath(src);
+  const bytes = entry === '' ? undefined : state.resources.get(entry);
+  if (bytes === undefined) return null;
+
+  const dot = entry.lastIndexOf('.');
+  const ext = dot < 0 ? '' : entry.slice(dot + 1).toLowerCase();
+  const mime = IMAGE_MIME[ext];
+  if (mime === undefined) return null;
+
+  if (!ctx.asset({ ref: src, bytes, fileName: entry, mime })) return null;
+  return { src, width, height };
 }
 
 /**
@@ -195,9 +267,13 @@ function convertTopic(raw: unknown, ctx: ImportContext, state: SheetState, float
     topic.markers.push(mapped);
   }
 
-  // 图片要上传到服务端才能用（docs/06 §2.1.3 的 `POST /files`）。后端还没有
-  // 这个接口，先如实计入「未能还原」，不写一个指向 xap: 的坏引用。
-  if (isRecord(node.image)) state.skippedImages += 1;
+  // 图片：把 `resources/` 里对应的字节攒起来，`src` 先写原引用作占位符。
+  // 上传是异步的，解析是同步的——两者之间由 `finalize.ts` 接起来。
+  if (isRecord(node.image)) {
+    const attached = readImage(node.image, ctx, state);
+    if (attached === null) state.skippedImages += 1;
+    else topic.image = attached;
+  }
 
   const children = isRecord(node.children) ? node.children : {};
   for (const child of asArray(children.attached)) {
@@ -273,9 +349,14 @@ function convertSummary(raw: unknown, state: SheetState, fallbackTopicId: string
 // Sheet
 // ---------------------------------------------------------------------------
 
-function convertSheet(raw: unknown, index: number, ctx: ImportContext): Sheet {
+function convertSheet(
+  raw: unknown,
+  index: number,
+  ctx: ImportContext,
+  resources?: ReadonlyMap<string, Uint8Array>,
+): Sheet {
   const node: Properties = isRecord(raw) ? (raw as Properties) : {};
-  const state = newSheetState();
+  const state = newSheetState(resources);
   const floating: Topic[] = [];
 
   const rootTopic = convertTopic(node.rootTopic, ctx, state, floating);
@@ -342,9 +423,15 @@ export function normalizeSheets(parsed: unknown): unknown[] {
  * 空内容（没有任何画布）会返回 `sheets: []`，由 `run()` 判 `EMPTY_DOCUMENT`——
  * 这里不抛错，是因为「空」和「坏」是两种失败，判断该由框架统一做。
  */
-export function parseContentJson(content: unknown, fileName: string, ctx: ImportContext): WmindDocument {
+export function parseContentJson(
+  content: unknown,
+  fileName: string,
+  ctx: ImportContext,
+  /** zip 里的 `resources/` 条目。不传表示没有图片可读（如直接喂 JSON 的测试）。 */
+  resources?: ReadonlyMap<string, Uint8Array>,
+): WmindDocument {
   const rawSheets = normalizeSheets(content);
-  const sheets = rawSheets.map((raw, index) => convertSheet(raw, index, ctx));
+  const sheets = rawSheets.map((raw, index) => convertSheet(raw, index, ctx, resources));
 
   const now = new Date().toISOString();
   // 第一张画布的主题升为文档主题；其余画布保留自己的 themeOverride。

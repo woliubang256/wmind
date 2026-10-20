@@ -100,9 +100,27 @@ export interface LayoutResult {
   styles: Map<string, ComputedStyle>;
 }
 
+/**
+ * 图片在节点内的显示信息。
+ *
+ * 只给尺寸，不给坐标：坐标依赖盒子位置，而 `TopicSize` 是**测量**产物，
+ * 在盒子摆好之前就存在。让渲染层用「盒子 + 尺寸」自己算位置，两边不会
+ * 因为各算一遍而错位。
+ *
+ * `src` 一起带上，而不是让渲染层回文档里查：布局遍历时已经拿在手上，
+ * 再查一次要么多一张 id → topic 表，要么每个节点做一次 O(n) 搜索。
+ */
+export interface ImageSize {
+  src: string;
+  width: number;
+  height: number;
+}
+
 export interface TopicSize {
   width: number;
   height: number;
   /** 折行后的文本行。渲染层直接逐行输出 `<tspan>`。 */
   lines: string[];
+  /** 节点内的图片；没有图片为 null。 */
+  image: ImageSize | null;
 }

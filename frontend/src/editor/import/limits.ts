@@ -22,6 +22,17 @@ export interface ImportLimits {
   maxTopics: number;
   /** 单个标题的字符数。XMind 允许超长标题，不截断会变成内存与布局的炸弹。 */
   maxTitleLength: number;
+  /**
+   * 单次导入最多上传多少张图片。
+   *
+   * 这个数字与后端 `/files` 的限流（120 次/分钟）是**一对**：超过它的图片
+   * 会在上传阶段撞限流，比在解析阶段就明确「只还原前 N 张」更糟。改其中
+   * 一个必须同时改另一个。
+   *
+   * 内存不受它约束——图片字节的上限由 `maxTotalUncompressedBytes` 卡住
+   * （zip 的预算跨趟共享），这里卡的是**请求次数与等待时间**。
+   */
+  maxAssets: number;
 }
 
 export const IMPORT_LIMITS: ImportLimits = {
@@ -31,6 +42,7 @@ export const IMPORT_LIMITS: ImportLimits = {
   maxEntries: 4096,
   maxTopics: 20_000,
   maxTitleLength: 2000,
+  maxAssets: 100,
 };
 
 /** 合并调用方覆盖项。只覆盖传进来的键，其余保持默认。 */

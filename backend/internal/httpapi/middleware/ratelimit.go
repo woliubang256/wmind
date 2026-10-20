@@ -122,3 +122,15 @@ func (l *RateLimiter) Middleware(keyFn func(*gin.Context) string) gin.HandlerFun
 func ClientIPKey(c *gin.Context) string {
 	return c.ClientIP()
 }
+
+// UserKey 按已认证用户限流。
+//
+// 上传接口用它而不是 IP：同一个办公室里的人共用一个出口 IP，按 IP 限流会
+// 让「同事刚传过 20 张图」变成「你也传不了」。必须挂在 RequireAuth 之后，
+// 否则拿到的是空串，所有人挤进同一个桶。
+func UserKey(c *gin.Context) string {
+	if uid := UserID(c); uid != "" {
+		return "u:" + uid
+	}
+	return "ip:" + c.ClientIP()
+}

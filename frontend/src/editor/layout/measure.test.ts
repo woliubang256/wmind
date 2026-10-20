@@ -10,6 +10,7 @@ import {
 } from './measure';
 import { computeStyle } from '../theme/resolve';
 import { defaultTheme, createTopic } from '../model/create';
+import type { TopicImage } from '../model/types';
 
 /**
  * 每个字符固定 `size * 0.5` 宽的后端：让折行位置可精确断言。
@@ -163,6 +164,63 @@ describe('measureTopic', () => {
     expect(size.lines).toHaveLength(2);
     // 字号 16 → 行高 round(16 * 1.4) = 22
     expect(size.height).toBe(2 * Math.round(16 * 1.4) + 16);
+  });
+});
+
+describe('measureTopic 带图片', () => {
+  const theme = defaultTheme();
+
+  function sizeOf(title: string, image: TopicImage | null) {
+    const topic = createTopic({ id: 't', title });
+    topic.image = image;
+    const style = computeStyle(
+      topic,
+      { depth: 1, branchIndex: 0, isRoot: false, isFloating: false, isSummary: false },
+      theme,
+    );
+    return measureTopic(topic, style);
+  }
+
+  it('没有图片时 image 为 null', () => {
+    expect(sizeOf('标题', null).image).toBeNull();
+  });
+
+  it('高度加上间距与图片高，宽度取文本与图片的较大者', () => {
+    const text = sizeOf('标题', null);
+    const withImage = sizeOf('标题', { src: '/uploads/a.png', width: 200, height: 100 });
+
+    expect(withImage.image).toEqual({ src: '/uploads/a.png', width: 200, height: 100 });
+    // 图片比文本宽 → 盒子宽度跟着图片走（200 + 左右内边距 24）
+    expect(withImage.width).toBe(224);
+    expect(withImage.height).toBe(text.height + 6 + 100);
+  });
+
+  it('图片比文本窄时盒子宽度仍由文本决定', () => {
+    const text = sizeOf('一二三四五六七八九十', null);
+    const withImage = sizeOf('一二三四五六七八九十', { src: '/uploads/a.png', width: 40, height: 40 });
+    expect(withImage.width).toBe(text.width);
+    expect(withImage.height).toBe(text.height + 6 + 40);
+  });
+
+  it('超大图片等比缩小到上限，不撑爆布局', () => {
+    // 5000×5000：缩到 240×240（受最大高度约束），比例不变
+    const size = sizeOf('标题', { src: '/uploads/big.png', width: 5000, height: 5000 });
+    expect(size.image?.width).toBe(240);
+    expect(size.image?.height).toBe(240);
+  });
+
+  it('小图不放大，只保证不小于最小尺寸', () => {
+    expect(sizeOf('标题', { src: '/uploads/s.png', width: 8, height: 4 }).image).toEqual({
+      src: '/uploads/s.png',
+      width: 16,
+      height: 16,
+    });
+  });
+
+  it('只给一个维度时按 4:3 补另一个', () => {
+    const size = sizeOf('标题', { src: '/uploads/x.png', width: 0, height: 60 });
+    expect(size.image?.height).toBe(60);
+    expect(size.image?.width).toBe(80);
   });
 });
 
