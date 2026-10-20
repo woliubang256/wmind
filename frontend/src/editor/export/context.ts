@@ -220,6 +220,14 @@ export interface ExportContext {
   date: string | null;
   brand: boolean;
   scale: number;
+  /**
+   * 内嵌字体的 `@font-face` 规则，写进 SVG 的 `<defs><style>`。
+   *
+   * 默认空串——「还没有算」。它不是导出选项，而是**异步算出来的产物**：要按
+   * 实际用到的字去挑分片、读字节、转 base64。由 `font-embed.ts` 生成后经
+   * `applyFontCss` 挂上来，与图片内嵌（`assets.ts`）同一套节奏。
+   */
+  fontCss: string;
 }
 
 /**
@@ -353,5 +361,6 @@ export function buildExportContext(
     date: options.date ? today(now) : null,
     brand: options.brand,
     scale: options.scale,
+    fontCss: '',
   };
 }

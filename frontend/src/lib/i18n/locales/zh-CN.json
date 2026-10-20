@@ -307,7 +307,8 @@
     "export.aspect9x16": "9:16（竖屏）",
     "export.split": "按主分支拆分（{{count}} 个文件，zip）",
     "export.splitFiles": "{{count}} 个文件（zip）",
-    "export.downloadZip": "下载 ZIP"
+    "export.downloadZip": "下载 ZIP",
+    "export.fontEmbedded": "内嵌字体 {{size}}（{{count}} 个分片）"
   },
   "import": {
     "title": "导入",

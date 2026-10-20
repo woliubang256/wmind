@@ -307,7 +307,8 @@
     "export.aspect9x16": "9:16 (portrait)",
     "export.split": "Split by main branch ({{count}} files, zip)",
     "export.splitFiles": "{{count}} files (zip)",
-    "export.downloadZip": "Download ZIP"
+    "export.downloadZip": "Download ZIP",
+    "export.fontEmbedded": "{{count}} font shard(s) embedded ({{size}})"
   },
   "import": {
     "title": "Import",

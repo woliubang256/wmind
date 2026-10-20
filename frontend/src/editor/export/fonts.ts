@@ -31,6 +31,53 @@ export interface FallbackReport {
   count: number;
 }
 
+/** 一段**会被画出来**的文字，连带它用到的字体族与字重。 */
+export interface PaintedRun {
+  text: string;
+  family: FontFamily;
+  weight: number;
+  style: string;
+}
+
+/**
+ * 收集画布上真正会画出来的文字段。
+ *
+ * 字体回退检测与字体内嵌都要用它：两处如果各自扫一遍，迟早会出现「提示说
+ * 缺 3 个字、内嵌却漏了第 4 个」这种对不上的状态。
+ */
+export function paintedRuns(ctx: ExportContext): PaintedRun[] {
+  const runs: PaintedRun[] = [];
+
+  for (const sheet of ctx.sheets) {
+    for (const box of sheet.layout.boxes.values()) {
+      const size = sheet.layout.sizes.get(box.id);
+      const style = sheet.layout.styles.get(box.id);
+      const lines = size?.lines ?? [];
+      if (lines.length === 0) continue;
+      runs.push({
+        text: lines.join(''),
+        family: style?.fontFamily ?? DECORATION_FAMILY,
+        weight: style?.fontWeight ?? 400,
+        style: style?.fontStyle ?? 'normal',
+      });
+    }
+
+    // 边界与关系线的标题没有独立字体，继承 SVG 根上的 `sans`。
+    for (const boundary of sheet.sheet.boundaries) {
+      if (boundary.title !== '') {
+        runs.push({ text: boundary.title, family: DECORATION_FAMILY, weight: 400, style: 'normal' });
+      }
+    }
+    for (const relationship of sheet.sheet.relationships) {
+      if (relationship.title !== '') {
+        runs.push({ text: relationship.title, family: DECORATION_FAMILY, weight: 400, style: 'normal' });
+      }
+    }
+  }
+
+  return runs;
+}
+
 /**
  * 扫一遍导出上下文，找出内置字体里没有字形的字符。
  *
@@ -41,28 +88,16 @@ export function detectFallback(ctx: ExportContext): FallbackReport {
   const chars: string[] = [];
   const seen = new Set<string>();
 
-  const consider = (text: string, family: FontFamily): void => {
-    if (text === '') return;
-    const ranges = coverageOf(family);
+  for (const run of paintedRuns(ctx)) {
+    const ranges = coverageOf(run.family);
     // `system` 族没有覆盖表：它本来就是系统字体，不存在「回退」。
-    if (ranges === null) return;
+    if (ranges === null) continue;
 
-    for (const char of uncoveredChars(text, ranges)) {
+    for (const char of uncoveredChars(run.text, ranges)) {
       if (seen.has(char)) continue;
       seen.add(char);
       chars.push(char);
     }
-  };
-
-  for (const sheet of ctx.sheets) {
-    for (const box of sheet.layout.boxes.values()) {
-      const lines = sheet.layout.sizes.get(box.id)?.lines ?? [];
-      const family = sheet.layout.styles.get(box.id)?.fontFamily ?? DECORATION_FAMILY;
-      consider(lines.join(''), family);
-    }
-
-    for (const boundary of sheet.sheet.boundaries) consider(boundary.title, DECORATION_FAMILY);
-    for (const relationship of sheet.sheet.relationships) consider(relationship.title, DECORATION_FAMILY);
   }
 
   return { chars, count: chars.length };

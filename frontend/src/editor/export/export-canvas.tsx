@@ -50,6 +50,14 @@ export function ExportCanvas({ ctx }: { ctx: ExportContext }) {
       // 字体栈，这一层只是给「没写字体」的元素（比如日期）一个兜底。
       style={{ fontFamily: fontStack('sans') }}
     >
+      {ctx.fontCss === '' ? null : (
+        // 内嵌字体的 `@font-face`。必须放在 SVG 内部：`<img>` 载入的 SVG 不许
+        // 引用外部资源，`data:` 是自身的一部分所以不受限。见 `font-embed.ts`。
+        <defs>
+          <style>{ctx.fontCss}</style>
+        </defs>
+      )}
+
       {ctx.background === null ? null : (
         <rect x={0} y={0} width={width} height={height} fill={ctx.background} />
       )}

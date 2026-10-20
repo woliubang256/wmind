@@ -40,6 +40,7 @@ import {
   loadImageSources,
 } from '@/editor/export/assets';
 import { downloadBlob, downloadSvg } from '@/editor/export/download';
+import { applyFontCss, loadFontCss, planFamilies } from '@/editor/export/font-embed';
 import { detectFallback } from '@/editor/export/fonts';
 import { checkRasterSize, rasterizeSvg } from '@/editor/export/raster';
 import { exportBranches, planBranches, svgEncoder } from '@/editor/export/split';
@@ -57,6 +58,14 @@ export interface ExportDialogProps {
 
 const SCALES = [1, 2, 3, 4] as const;
 const PADDINGS = [0, 24, 40, 80] as const;
+
+/**
+ * 内嵌字体超过这个长度（字符数≈base64 字节数）才提一句体积。
+ *
+ * 半兆以下不提：内嵌是默认行为，每次都报「我嵌了字体」只会变成噪音；而到了
+ * 半兆以上，用户在下 SVG 时确实该知道文件为什么这么大。
+ */
+const FONT_SIZE_HINT_BYTES = 512 * 1024;
 
 /** 边框预设的展示顺序与文案。 */
 const BORDER_ORDER: BorderStyleId[] = ['none', 'thin', 'red', 'orange', 'green', 'blue'];
@@ -156,7 +165,38 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
     });
   }, [sourceKey]);
 
-  const ctx = useMemo(() => applyImageSources(baseCtx, dataUrls), [baseCtx, dataUrls]);
+  // 内嵌字体：把用到的分片读成 base64 塞进 SVG。
+  //
+  // 与图片内嵌同一个理由——导出的 SVG 是独立文件，`<img>` 载入时拿不到页面的
+  // `@font-face`，不嵌就只能用系统字体画（实测字宽差 16%，文字会溢出节点框）。
+  // 依赖用「族 + 字重 + 码位」拼出的签名：改倍率、留白、边框都不该重算字体，
+  // 而加一个字就该重算。
+  const fontPlan = useMemo(() => (text ? [] : planFamilies(baseCtx)), [baseCtx, text]);
+  const fontKey = fontPlan
+    .map((need) => `${need.family}/${[...need.weights].sort().join(',')}/${[...need.codePoints].sort((a, b) => a - b).join(',')}`)
+    .join('|');
+  const [fontCss, setFontCss] = useState('');
+  const [fontFaces, setFontFaces] = useState(0);
+
+  useEffect(() => {
+    if (fontKey === '') {
+      setFontCss('');
+      setFontFaces(0);
+      return;
+    }
+    // 同图片那条：不挂卸载闸门，StrictMode 双跑时清理函数会先把结果丢掉。
+    void loadFontCss(baseCtx).then((result) => {
+      setFontCss(result.css);
+      setFontFaces(result.faces);
+    });
+    // baseCtx 由 fontKey 唯一决定（族/字重/码位都变了才会换 key）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fontKey]);
+
+  const ctx = useMemo(
+    () => applyFontCss(applyImageSources(baseCtx, dataUrls), fontCss),
+    [baseCtx, dataUrls, fontCss],
+  );
   const markup = useMemo(() => (text ? '' : buildExportSvg(ctx)), [ctx, text]);
   const dataUrl = useMemo(() => (markup === '' ? '' : svgDataUrl(markup)), [markup]);
 
@@ -216,7 +256,11 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
         const result = await exportBranches(doc, sheetId, options, format.ext, {
           // 图片内嵌对拆分同样有效：每张分支图也要把 `/uploads/…` 换成 data URL，
           // 否则打出来的 zip 里全是指回本机的死链。
-          prepare: (raw) => applyImageSources(raw, dataUrls),
+          //
+          // 字体同理，而且这里用的是**整份文档**算出来的那份 CSS：每个分支的文字
+          // 都是它的子集，覆盖面只多不少。逐分支重算要多读几次分片，收益只是
+          // 每个文件小一点点——分支图本来就要发给别人，宁可多带几十 KB。
+          prepare: (raw) => applyFontCss(applyImageSources(raw, dataUrls), fontCss),
           encode:
             options.format === 'svg'
               ? svgEncoder
@@ -308,6 +352,16 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             {fallback.count > 0 ? (
               <span className="ml-2 text-amber-600 dark:text-amber-400">
                 {t('editor.export.fontFallback', { count: fallback.count, chars: fallbackSample })}
+              </span>
+            ) : null}
+            {/* 字体真的嵌进去了才提体积。半兆以下不必打扰——内嵌是默认行为，
+                每次都报一句「我嵌了字体」只会变成噪音。 */}
+            {fontCss.length > FONT_SIZE_HINT_BYTES ? (
+              <span className="ml-2 text-muted-foreground">
+                {t('editor.export.fontEmbedded', {
+                  size: `${Math.round(fontCss.length / 1024)} KB`,
+                  count: fontFaces,
+                })}
               </span>
             ) : null}
           </div>
