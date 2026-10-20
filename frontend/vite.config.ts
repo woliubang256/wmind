@@ -7,6 +7,17 @@ export default defineConfig({
   resolve: {
     alias: { '@': '/src' },
   },
+  /**
+   * `react-dom/server` 只被导出对话框用到，而对话框是懒加载的，所以 Vite 在
+   * 开发期**第一次**打开导出面板时才会发现这个依赖。发现得晚的代价是：它要
+   * 重新预构建依赖并整体换掉 `node_modules/.vite/deps`，正在跑的页面会被强制
+   * 刷新，用户手上的编辑状态直接没了。
+   *
+   * 写进 `include` 让它和 react 一起在冷启动时预构建，之后不再触发重优化。
+   */
+  optimizeDeps: {
+    include: ['react-dom/server'],
+  },
   build: {
     rollupOptions: {
       output: {
@@ -23,6 +34,19 @@ export default defineConfig({
          */
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
+          /**
+           * `react-dom/server` 必须**不**归入 react chunk。
+           *
+           * 它只被懒加载的导出对话框引用，归进 react chunk 就等于让首屏多下载
+           * 几十 KB 的序列化器——而那正是把导出对话框做成 `React.lazy` 想避免
+           * 的事。返回 undefined 让 Rollup 按引用关系把它放进导出那个动态
+           * chunk 里。
+           *
+           * 两种路径都要匹配：`react-dom/server.browser.js` 是个薄包装，
+           * 真正的实现（`react-dom-server.browser.production.js`，几百 KB）
+           * 在 `react-dom/cjs/` 下面。只匹配前者等于没匹配。
+           */
+          if (/[\\/]react-dom[\\/](server\.|cjs[\\/]react-dom-server)/.test(id)) return undefined;
           if (/[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(id)) return 'react';
           if (id.includes('@tanstack') || id.includes('/zustand/') || id.includes('/immer/')) return 'data';
           if (id.includes('i18next')) return 'i18n';

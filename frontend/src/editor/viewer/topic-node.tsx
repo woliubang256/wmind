@@ -22,6 +22,13 @@ export interface TopicNodeProps {
   image?: ImageSize | null;
   selected: boolean;
   editing: boolean;
+  /**
+   * 是否画折叠徽标与悬停折叠按钮。
+   *
+   * 导出必须传 `false`：徽标是编辑器的交互产物（它本身就是按钮），
+   * 出现在导出的图片里等于把「这里可以点」印在成品上。
+   */
+  showBadges?: boolean;
 }
 
 const SELECTION_INSET = 3;
@@ -34,6 +41,7 @@ export const TopicNode = memo(function TopicNode({
   image = null,
   selected,
   editing,
+  showBadges = true,
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
   const textHeight = lines.length * lineHeight;
@@ -58,7 +66,7 @@ export const TopicNode = memo(function TopicNode({
   // 自上而下的结构（org-chart）在下沿。
   const badgeX = box.side === 'left' ? box.x : box.side === 'bottom' ? box.x + box.width / 2 : box.x + box.width;
   const badgeY = box.side === 'bottom' ? box.y + box.height : box.y + box.height / 2;
-  const showBadge = box.collapsed && box.hiddenChildren > 0;
+  const showBadge = showBadges && box.collapsed && box.hiddenChildren > 0;
 
   return (
     <g className="wmind-topic" data-topic-id={box.id} data-topic-side={box.side}>
@@ -128,7 +136,7 @@ export const TopicNode = memo(function TopicNode({
 
       {/* 展开态且有子节点：悬停时浮现「折叠」按钮（减号）。
           折叠态那个带数字的徽标本身就是展开按钮，两者语义相同、位置相同。 */}
-      {!box.collapsed && box.childCount > 0 ? (
+      {showBadges && !box.collapsed && box.childCount > 0 ? (
         <g className="wmind-collapse-toggle" data-collapse-toggle={box.id} style={{ cursor: 'pointer' }}>
           <circle
             cx={badgeX}
@@ -172,6 +180,7 @@ function areEqual(prev: TopicNodeProps, next: TopicNodeProps): boolean {
     prev.style === next.style &&
     prev.lines === next.lines &&
     prev.image === next.image &&
+    prev.showBadges === next.showBadges &&
     prev.selected === next.selected &&
     prev.editing === next.editing
   );

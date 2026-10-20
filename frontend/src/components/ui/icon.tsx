@@ -35,7 +35,8 @@ export type IconName =
   | 'zoom-out'
   | 'maximize'
   | 'eye'
-  | 'upload';
+  | 'upload'
+  | 'download';
 
 const paths: Record<IconName, ReactNode> = {
   'arrow-right': <><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>,
@@ -73,6 +74,7 @@ const paths: Record<IconName, ReactNode> = {
   maximize: <><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></>,
   eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></>,
   upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></>,
+  download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></>,
 };
 
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconName }) {

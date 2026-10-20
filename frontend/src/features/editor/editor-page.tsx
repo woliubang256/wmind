@@ -20,7 +20,7 @@
  * 查看器本身不含任何交互：它拿到的是插件列表，只读预览时换一批插件即可。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -65,6 +65,12 @@ import { clearDraft, pruneDrafts, type LocalDraft } from './persistence/local-dr
 import { ConflictDialog, LeaveDialog } from './persistence/dialogs';
 import { SaveIndicator } from './persistence/save-indicator';
 import { useFontsReady } from './use-fonts-ready';
+
+// 导出对话框是懒加载的：它把 `react-dom/server` 带进包里（序列化 SVG 要用），
+// 而绝大多数编辑会话里用户根本不会点「导出」。不点就不下载。
+const ExportDialog = lazy(() =>
+  import('./export-dialog').then((module) => ({ default: module.ExportDialog })),
+);
 
 export function EditorPage() {
   const { uid = '' } = useParams();
@@ -236,6 +242,7 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
   const [conflictOpen, setConflictOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>('style');
+  const [exportOpen, setExportOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   /** 快捷键监听挂在这里：包含画布与面板，但排除侧栏与页头之外的一切。 */
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -558,6 +565,11 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
           </Button>
         ) : null}
 
+        <Button variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
+          <Icon name="download" className="mr-1.5 size-4" />
+          {t('editor.exportEntry')}
+        </Button>
+
         <Button
           variant={preview ? 'default' : 'outline'}
           size="sm"
@@ -711,6 +723,17 @@ function Workspace({ uid, enabled, initialDraft }: WorkspaceProps) {
       />
 
       <LeaveDialog open={autosave.blocked} onStay={autosave.stay} onLeave={autosave.leave} />
+
+      {exportOpen ? (
+        <Suspense fallback={null}>
+          <ExportDialog
+            open
+            document={doc}
+            sheetId={sheet.id}
+            onClose={() => setExportOpen(false)}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

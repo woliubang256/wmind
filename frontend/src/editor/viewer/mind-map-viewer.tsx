@@ -13,16 +13,15 @@
  * 跨分支的细线，被密集的分支线盖住就看不见了。
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { layoutMindmap } from '../layout/mindmap';
-import type { EdgePath, LayoutResult, NodeBox } from '../layout/types';
+import type { LayoutResult, NodeBox } from '../layout/types';
 import type { ComputedStyle, Sheet, Theme } from '../model/types';
 import { fontStack } from '../theme/fonts';
 import { ViewerContext } from './viewer-context';
 import type { CommitTitleOptions, ViewerContextValue, ViewerPlugin, Viewport } from './viewer-types';
-import { TopicNode } from './topic-node';
-import { EdgeLine } from './edges';
+import { EdgesLayer, TopicsLayer } from './layers';
 import { BoundariesLayer, RelationshipsLayer } from './decorations';
 
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
@@ -266,53 +265,6 @@ export function MindMapViewer({
   );
 }
 
-/**
- * 连线层与主题层都做了记忆化。
- *
- * 原因：平移缩放只改 `<g transform>` 一个属性，但如果这两层写在主组件里，
- * 每次 viewport 变化都会重新创建 2000 个 React 元素，React 要把它们逐个
- * diff 一遍——实测 2000 节点时一次滚轮要 300ms，完全不可用。
- *
- * 记忆化之后，viewport 变化只重渲染外层与插件，两层元素数组原样复用，
- * React 直接跳过它们的子树。
- */
-const EdgesLayer = memo(function EdgesLayer({ edges }: { edges: EdgePath[] }) {
-  return (
-    <g className="layer-edges">
-      {edges.map((edge) => (
-        <EdgeLine key={edge.id} edge={edge} />
-      ))}
-    </g>
-  );
-});
-
-interface TopicsLayerProps {
-  layout: LayoutResult;
-  selection: ReadonlySet<string>;
-  editingId: string | null;
-}
-
-const TopicsLayer = memo(function TopicsLayer({ layout, selection, editingId }: TopicsLayerProps) {
-  return (
-    <g className="layer-topics">
-      {[...layout.boxes.values()].map((box) => {
-        const size = layout.sizes.get(box.id);
-        return (
-          <TopicNode
-            key={box.id}
-            box={box}
-            style={layout.styles.get(box.id) ?? fallbackStyle(box)}
-            lines={size?.lines ?? ['']}
-            image={size?.image ?? null}
-            selected={selection.has(box.id)}
-            editing={editingId === box.id}
-          />
-        );
-      })}
-    </g>
-  );
-});
-
 function findTitle(sheet: Sheet, id: string): string {
   const stack = [sheet.rootTopic, ...sheet.floatingTopics];
   while (stack.length > 0) {
@@ -322,33 +274,6 @@ function findTitle(sheet: Sheet, id: string): string {
     stack.push(...topic.children.attached, ...topic.children.detached);
   }
   return '';
-}
-
-/** 理论上每个盒子都有样式；万一没有，用一份中性样式兜底而不是崩溃。 */
-function fallbackStyle(box: NodeBox): ComputedStyle {
-  return {
-    shape: 'rounded-rect',
-    fill: '#FFFFFF',
-    fillPattern: 'solid',
-    borderColor: '#BDBDBD',
-    borderWidth: 1,
-    borderStyle: 'solid',
-    fontFamily: 'sans',
-    fontSize: 14,
-    fontWeight: 400,
-    fontStyle: 'normal',
-    textDecoration: 'none',
-    textColor: '#333333',
-    textAlign: 'center',
-    width: box.width,
-    autoWidth: true,
-    lineStyle: 'curve',
-    lineEnd: 'none',
-    lineWidth: 2,
-    lineColor: '#BDBDBD',
-    rainbowBranch: false,
-    backgroundColor: null,
-  };
 }
 
 interface EditingOverlayProps {
