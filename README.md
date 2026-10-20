@@ -7,26 +7,32 @@
 | 后端 | Go 1.25 + Gin，模块化单体；**SQLite（默认）与 PostgreSQL 双方言** |
 | 前端 | React + TypeScript + Vite + Tailwind v4，纯 SPA，自带三档暗色模式（light / dark / system） |
 | 编辑器 | 自研 SVG 渲染 + 自研布局引擎（8 种结构、10 套配色） |
-| 格式 | 自有 `.wmind` 文档格式；导入 XMind / Markdown / OPML，导出 PNG / JPEG / SVG / PDF / Markdown / OPML |
+| 格式 | 自有 `.wmind` 文档格式；导入 XMind / Markdown / OPML，导出 PNG / JPEG / SVG / Markdown / OPML（PDF 待做） |
 | 部署 | `docker compose up -d`，一期零外部依赖 |
 
-需求、架构、接口、部署的完整设计见 [`docs/`](./docs/README.md)。
+需求、架构、接口、部署的完整设计见 [`docs/`](./docs/README.md)，逐里程碑的进度与验收记录见
+[`docs/08-开发路线图.md`](./docs/08-开发路线图.md)。
 
 ## 当前状态
 
-**M0 基建与 M1 账号体系已完成，正在进入 M2 编辑器内核。** 认证闭环（注册 / 登录 / 刷新 / 登出 / 改密 / 头像）、管理员后台（用户管理、站点设置、审计、一次性重置密码）、暗色模式已可用；导图编辑、导入导出与分享按路线图继续开发。
+**M0–M6 的功能主体已完成。** 账号体系、编辑器内核、8 种结构与 10 套配色、导入导出、
+多画布与大纲视图、分享链接、模板、管理后台、无障碍、视口裁剪、备份恢复都已可用，
+并各自跑过验收。剩下的是几处需要外部环境的收尾（见下表 🟡 与 ⬜）。
 
 | 模块 | 状态 |
 | --- | --- |
-| 文档与架构决策 | ✅ v1.3 定稿 |
-| 后端骨架、迁移、双 sqlc target、双方言仓储与契约测试 | ✅ M0 实现，SQLite 通过；PostgreSQL 测试由 CI 环境提供 |
-| 方言检查、迁移 parity 与 GitHub Actions | ✅ 已配置 |
-| 前端登录/工作台骨架、品牌图标、API 客户端 | ✅ 已实现，含 401 单飞刷新与分页信封 |
-| M1 账号体系：认证闭环、个人设置、头像上传 | ✅ 已实现并通过 11 条验收标准（[验收记录](./.agents/notes/implemented/process/2026-10-17-wmind-acceptance-m1.md)） |
-| M1 管理后台：用户管理、站点设置、审计、重置密码 | ✅ 已实现；导图统计字段待 M2 填充 |
-| M1 暗色模式：三档 + 首帧防闪烁 | ✅ 已实现 |
-| 两套 Compose / Dockerfile / Nginx | ✅ 配置已写；按约定未在本机 Docker 验证 |
-| 导图编辑器、导入导出、分享等业务功能 | ⏳ 后续 M2–M6 |
+| 文档与架构决策 | ✅ v1.3 定稿，ADR 见 [docs/09](./docs/09-技术决策记录.md) |
+| M0 基建：迁移、双 sqlc target、双方言仓储与契约测试、方言静态检查、CI | ✅ SQLite 全绿；PostgreSQL 由 CI 提供环境 |
+| M1 账号体系：注册/登录/刷新/登出/改密/头像、管理后台、审计、三档暗色 | ✅ |
+| M2 编辑器内核：SVG 渲染、布局引擎、拖拽、快捷键、撤销重做、自动保存 | ✅ |
+| M3 样式与主题：8 种结构、10 套配色、自定义主题、面板 | ✅ |
+| M4 导入导出：XMind 8/新版、Markdown、OPML；导出 SVG/PNG/JPEG/MD/OPML | ✅ **PDF 导出未做**（字体子集化是独立工程，见 [docs/06](./docs/06-导入导出与主题系统.md)） |
+| M5 模板 / 多画布 / 大纲 / ZEN / 分享链接 | ✅ |
+| M6 无障碍、视口裁剪、错误兜底、备份与恢复 | ✅ 无障碍 23 条、裁剪 6 条、错误 3 条界面验收全过 |
+| 测试 | ✅ 前端 959 条单测；后端全绿；界面验收 108 条（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
+| 两套 Compose / Dockerfile / Nginx | 🟡 配置已写，**本机没有 Docker，镜像构建与编排未实跑** |
+| PostgreSQL 完整回归 | ⬜ 需要 CI 提供实例 |
+| 多语言 | 🟡 zh-CN 完整；en-US 覆盖主要文案，管理后台等页面仍以中文为主 |
 
 ## 快速开始
 
@@ -94,9 +100,18 @@ docker compose -f docker-compose.postgres.yml up -d
 ```bash
 make help            # 列出全部命令
 make dev-backend     # 本地启动后端
-make test            # 后端全部测试
+make dev-frontend    # 本地启动前端
+make test            # 后端全部测试（SQLite，不需要 Docker）
+make test-frontend   # 前端类型检查 + 单测 + 生产构建
 make lint            # go vet + gofmt
 make verify-notes    # 校验架构决策笔记
+make verify-dialect  # 迁移 parity + 方言分层检查
+```
+
+界面验收（需要后端与前端都起着，见 [`frontend/e2e/README.md`](./frontend/e2e/README.md)）：
+
+```bash
+cd frontend && npm run e2e    # 六套 108 条，串行约 90 秒
 ```
 
 ## 目录结构
@@ -117,6 +132,7 @@ wmind/
 │   │   └── pkg/              apperr / logger / id / reqid 等通用件
 │   └── db/                   两套迁移集、sqlc 配置与查询
 ├── frontend/                 React 前端（Vite + TypeScript + Tailwind v4，自建 UI 组件）
+│   └── e2e/                  界面验收脚本（六套 108 条，见 e2e/README.md）
 ├── deploy/                   Compose、Dockerfile、Nginx 配置
 ├── docs/                     需求、架构、接口、部署文档
 └── .agents/                  架构决策笔记与校验脚本
