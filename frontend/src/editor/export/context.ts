@@ -86,6 +86,54 @@ export function clampScale(value: number): number {
   return Math.round(Math.min(SCALE_MAX, Math.max(SCALE_MIN, value)) * 10) / 10;
 }
 
+/** 输出长宽比。`auto` 表示完全由内容决定。 */
+export type AspectRatioId = 'auto' | '16:9' | '4:3' | '1:1' | '9:16';
+
+/** 每个预设的宽高比；`null` = 不约束。 */
+export const ASPECT_RATIOS: Record<AspectRatioId, number | null> = {
+  auto: null,
+  '16:9': 16 / 9,
+  '4:3': 4 / 3,
+  '1:1': 1,
+  '9:16': 9 / 16,
+};
+
+export interface AspectFit {
+  width: number;
+  height: number;
+  /** 内容需要在水平/竖直方向多让出的空间（已取整）。 */
+  extraX: number;
+  extraY: number;
+}
+
+/**
+ * 把内容尺寸撑到目标长宽比，**只放大不裁切**。
+ *
+ * 裁切是另一种产品（「裁剪导出」），这里要的是「给内容加边」：内容永远完整，
+ * 只是画布变大、内容居中。
+ *
+ * 多出来的空间取整后再对称分配（`width + extra * 2`），而不是让两侧各得
+ * 小数半格：半像素的偏移在栅格化时会变成一条模糊的边，而且左右不对称本身
+ * 就是肉眼可见的缺陷。代价是最终比例可能与目标差 ±1px，可以接受。
+ */
+export function fitAspect(width: number, height: number, ratio: number | null): AspectFit {
+  if (ratio === null || !Number.isFinite(ratio) || ratio <= 0) {
+    return { width, height, extraX: 0, extraY: 0 };
+  }
+
+  const current = width / height;
+  if (current < ratio) {
+    // 太窄：加宽。用 `height * ratio` 而不是把 height 缩小——只放大不裁切。
+    const extra = Math.round((height * ratio - width) / 2);
+    if (extra <= 0) return { width, height, extraX: 0, extraY: 0 };
+    return { width: width + extra * 2, height, extraX: extra, extraY: 0 };
+  }
+
+  const extra = Math.round((width / ratio - height) / 2);
+  if (extra <= 0) return { width, height, extraX: 0, extraY: 0 };
+  return { width, height: height + extra * 2, extraX: 0, extraY: extra };
+}
+
 export interface ExportOptions {
   /** 只导当前画布，还是把所有画布拼成一张。 */
   scope: 'current' | 'all';
@@ -104,8 +152,15 @@ export interface ExportOptions {
    * 但对 PNG 来说它是唯一的清晰度开关，所以默认给 2 而不是 1。
    */
   scale: number;
-  /** 内容四周的额外留白（px，导出坐标系，不含画布自身的布局留白）。 */
+  /** 留白（px，导出坐标系，不含画布自身的布局留白）。 */
   padding: number;
+  /**
+   * 输出长宽比。`auto` 完全由内容决定；其余预设只加边、不裁切。
+   *
+   * 贴 PPT / 微信朋友圈这类固定版式的场景需要它：16:9 的图直接贴进去不用再
+   * 手动裁，比「导出后再到别的软件里对比例」省事得多。
+   */
+  aspect: AspectRatioId;
   /** 透明背景。JPEG 不支持透明，栅格化时会强制填白。 */
   transparent: boolean;
   /** 边框预设（含自带底色的「绿底 / 蓝底」）。 */
@@ -121,6 +176,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   format: 'svg',
   scale: 2,
   padding: 40,
+  aspect: 'auto',
   transparent: false,
   border: 'none',
   date: false,
@@ -263,10 +319,14 @@ export function buildExportContext(
   const padding = Math.max(0, options.padding);
   const footer = options.date || options.brand ? FOOTER_HEIGHT : 0;
 
-  const width = Math.max(MIN_CONTENT_SIZE, innerWidth + padding * 2);
-  const height = Math.max(MIN_CONTENT_SIZE, innerHeight + padding * 2 + footer);
+  const baseWidth = Math.max(MIN_CONTENT_SIZE, innerWidth + padding * 2);
+  const baseHeight = Math.max(MIN_CONTENT_SIZE, innerHeight + padding * 2 + footer);
 
-  let cursor = padding;
+  // 长宽比只放大画布，内容居中：多出来的空间对称地分给两侧。
+  const fitted = fitAspect(baseWidth, baseHeight, ASPECT_RATIOS[options.aspect]);
+  const { width, height, extraX, extraY } = fitted;
+
+  let cursor = padding + extraY;
   const exportSheets: ExportSheet[] = laid.map((item) => {
     const offsetY = cursor;
     cursor += item.bounds.height + SHEET_GAP;
@@ -278,7 +338,7 @@ export function buildExportContext(
       theme: item.theme,
       bounds: item.bounds,
       // 多画布时水平居中：左对齐会让窄画布贴着左边，看起来像被裁掉了一块。
-      offsetX: padding + (innerWidth - item.bounds.width) / 2,
+      offsetX: padding + extraX + (innerWidth - item.bounds.width) / 2,
       offsetY,
     };
   });

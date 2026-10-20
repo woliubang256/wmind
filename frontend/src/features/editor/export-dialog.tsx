@@ -29,6 +29,7 @@ import {
   clampScale,
   isTextFormat,
   presetHasFill,
+  type AspectRatioId,
   type BorderStyleId,
   type ExportFormat,
   type ExportOptions,
@@ -65,6 +66,16 @@ const BORDER_LABELS: Record<BorderStyleId, string> = {
   orange: 'editor.export.borderOrange',
   green: 'editor.export.borderGreen',
   blue: 'editor.export.borderBlue',
+};
+
+/** 长宽比的展示顺序与文案。 */
+const ASPECT_ORDER: AspectRatioId[] = ['auto', '16:9', '4:3', '1:1', '9:16'];
+const ASPECT_LABELS: Record<AspectRatioId, string> = {
+  auto: 'editor.export.aspectAuto',
+  '16:9': 'editor.export.aspect16x9',
+  '4:3': 'editor.export.aspect4x3',
+  '1:1': 'editor.export.aspect1x1',
+  '9:16': 'editor.export.aspect9x16',
 };
 
 /**
@@ -415,6 +426,21 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                   {PADDINGS.map((padding) => (
                     <option key={padding} value={padding}>
                       {padding === 0 ? t('editor.export.paddingNone') : `${padding}px`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                {t('editor.export.aspect')}
+                <select
+                  value={options.aspect}
+                  onChange={(event) => patch({ aspect: event.target.value as AspectRatioId })}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
+                >
+                  {ASPECT_ORDER.map((id) => (
+                    <option key={id} value={id}>
+                      {t(ASPECT_LABELS[id])}
                     </option>
                   ))}
                 </select>

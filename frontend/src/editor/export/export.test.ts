@@ -18,6 +18,7 @@ import {
   buildExportContext,
   clampScale,
   contentBounds,
+  fitAspect,
   presetHasFill,
 } from './context';
 import { buildExportSvg, exportFileName, svgDataUrl } from './svg';
@@ -219,6 +220,71 @@ describe('倍率与边框预设的纯规则', () => {
     for (const id of ['none', 'thin', 'red', 'orange'] as const) {
       expect(presetHasFill(id), id).toBe(false);
     }
+  });
+});
+
+describe('长宽比', () => {
+  it('auto 不动尺寸', () => {
+    expect(fitAspect(400, 200, null)).toEqual({ width: 400, height: 200, extraX: 0, extraY: 0 });
+  });
+
+  it('太窄时只加宽，高度不变', () => {
+    const fit = fitAspect(400, 400, 16 / 9);
+    expect(fit.height).toBe(400);
+    expect(fit.extraY).toBe(0);
+    expect(fit.width).toBeGreaterThan(400);
+    // 比例误差不超过 1px：多出来的空间取整后对称分配，不追求像素级精确。
+    expect(Math.abs(fit.width / fit.height - 16 / 9)).toBeLessThan(0.01);
+  });
+
+  it('太扁时只加高，宽度不变', () => {
+    const fit = fitAspect(800, 200, 1);
+    expect(fit.width).toBe(800);
+    expect(fit.extraX).toBe(0);
+    expect(fit.height).toBe(800);
+    expect(fit.extraY).toBe(300);
+  });
+
+  it('多出来的空间是整数且左右对称', () => {
+    for (const ratio of [16 / 9, 4 / 3, 1, 9 / 16]) {
+      const fit = fitAspect(333, 217, ratio);
+      expect(Number.isInteger(fit.extraX), `extraX @ ${ratio}`).toBe(true);
+      expect(Number.isInteger(fit.extraY), `extraY @ ${ratio}`).toBe(true);
+      // 对称：base + 2 * extra，内容永远居中
+      expect(fit.width === 333 || fit.width === 333 + fit.extraX * 2).toBe(true);
+      expect(fit.height === 217 || fit.height === 217 + fit.extraY * 2).toBe(true);
+    }
+  });
+
+  it('已经符合比例时不动', () => {
+    expect(fitAspect(1600, 900, 16 / 9)).toEqual({ width: 1600, height: 900, extraX: 0, extraY: 0 });
+  });
+
+  it('非法比例退回不约束', () => {
+    expect(fitAspect(400, 200, 0)).toEqual({ width: 400, height: 200, extraX: 0, extraY: 0 });
+    expect(fitAspect(400, 200, Number.NaN)).toEqual({ width: 400, height: 200, extraX: 0, extraY: 0 });
+  });
+
+  it('上下文里内容随画布一起居中', () => {
+    const doc = docWith();
+    const auto = buildExportContext(doc, 'sheet-0', opts({ aspect: 'auto' }));
+    const wide = buildExportContext(doc, 'sheet-0', opts({ aspect: '16:9' }));
+
+    // 这张图很宽，16:9 需要加高
+    expect(wide.width).toBe(auto.width);
+    expect(wide.height).toBeGreaterThan(auto.height);
+
+    const shifted = wide.sheets[0]!.offsetY - auto.sheets[0]!.offsetY;
+    expect(shifted).toBeGreaterThan(0);
+
+    // 居中的是**内容盒**（内容 + 留白 + 页脚），不是整个画布：
+    // 品牌/日期贴着画布底边，所以下边距比上边距正好多一个页脚高度。
+    const bottomGap = wide.height - (wide.sheets[0]!.offsetY + wide.sheets[0]!.bounds.height);
+    expect(bottomGap - wide.sheets[0]!.offsetY).toBe(FOOTER_HEIGHT);
+    // 加高量上下对称
+    expect(wide.sheets[0]!.offsetY - auto.sheets[0]!.offsetY).toBe(
+      Math.round((wide.height - auto.height) / 2),
+    );
   });
 });
 
