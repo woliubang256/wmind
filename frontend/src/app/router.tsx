@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import { AuthLayout, PublicLayout, RequireAdmin, RequireAuth } from './layouts';
+import { RouteCrash } from '@/components/error-boundary';
 import { LoginPage } from '@/features/auth/login-page';
 import { RegisterPage } from '@/features/auth/register-page';
 import { AccountPage } from '@/features/account/account-page';
@@ -33,40 +34,51 @@ const adminRoutes = [
 
 export const router = createBrowserRouter([
   {
-    element: <AuthLayout />,
-    children: [
-      { path: '/login', element: <LoginPage /> },
-      { path: '/register', element: <RegisterPage /> },
-    ],
-  },
-  {
-    element: <PublicLayout />,
-    // 公开分享页：**不套 RequireAuth**。访客通常没有账号，安全边界由
-    // 令牌与可选的访问密码承担，见 features/share/public-share-page.tsx。
-    children: [{ path: '/s/:token', element: <PublicSharePage /> }],
-  },
-  {
-    element: <RequireAuth />,
+    /*
+      顶层只负责错误兜底：这一层没有 element（渲染时等价于 `<Outlet/>`），
+      但挂了 `errorElement`，于是下面三条路由里任何一处渲染期抛错都会冒到
+      这里，而不是落到 react-router 自带那张「Unexpected Application Error」
+      的英文堆栈页上。
+    */
+    errorElement: <RouteCrash />,
     children: [
       {
-        lazy: async () => {
-          const { AppLayout } = await import('./shell');
-          return { Component: AppLayout };
-        },
+        element: <AuthLayout />,
         children: [
-          { path: '/', element: <RecentPage /> },
-          { path: '/templates', element: <TemplatesPage /> },
-          { path: '/shares', element: <SharesPage /> },
-          { path: '/trash', element: <TrashPage /> },
-          { path: '/account', element: <AccountPage /> },
-          {element: <RequireAdmin />, children: adminRoutes},
+          { path: '/login', element: <LoginPage /> },
+          { path: '/register', element: <RegisterPage /> },
+        ],
+      },
+      {
+        element: <PublicLayout />,
+        // 公开分享页：**不套 RequireAuth**。访客通常没有账号，安全边界由
+        // 令牌与可选的访问密码承担，见 features/share/public-share-page.tsx。
+        children: [{ path: '/s/:token', element: <PublicSharePage /> }],
+      },
+      {
+        element: <RequireAuth />,
+        children: [
           {
-            path: '/maps/:uid',
-            lazy: async () => ({ Component: (await import('@/features/editor/editor-page')).EditorPage }),
+            lazy: async () => {
+              const { AppLayout } = await import('./shell');
+              return { Component: AppLayout };
+            },
+            children: [
+              { path: '/', element: <RecentPage /> },
+              { path: '/templates', element: <TemplatesPage /> },
+              { path: '/shares', element: <SharesPage /> },
+              { path: '/trash', element: <TrashPage /> },
+              { path: '/account', element: <AccountPage /> },
+              { element: <RequireAdmin />, children: adminRoutes },
+              {
+                path: '/maps/:uid',
+                lazy: async () => ({ Component: (await import('@/features/editor/editor-page')).EditorPage }),
+              },
+            ],
           },
         ],
       },
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
-  { path: '*', element: <Navigate to="/" replace /> },
 ]);

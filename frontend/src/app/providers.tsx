@@ -2,6 +2,7 @@ import { useState, type PropsWithChildren } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { useSystemThemeSync } from './theme-store';
+import { OfflineBanner } from './offline-banner';
 import { SiteHead } from '@/features/site/site-head';
 
 export function Providers({ children }: PropsWithChildren) {
@@ -24,6 +25,8 @@ export function Providers({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <SiteHead />
       {children}
+      {/* 断网提示挂在最外层：所有布局、所有页面共用一条，不各写一份。 */}
+      <OfflineBanner />
       <Toaster position="bottom-right" richColors />
     </QueryClientProvider>
   );
