@@ -24,6 +24,8 @@ import { Modal } from '@/components/ui/modal';
 import {
   DEFAULT_EXPORT_OPTIONS,
   buildExportContext,
+  isTextFormat,
+  type ExportFormat,
   type ExportOptions,
 } from '@/editor/export/context';
 import {
@@ -34,6 +36,7 @@ import {
 import { downloadBlob, downloadSvg } from '@/editor/export/download';
 import { checkRasterSize, rasterizeSvg } from '@/editor/export/raster';
 import { buildExportSvg, exportFileName, svgDataUrl } from '@/editor/export/svg';
+import { exportMarkdown, exportOpml } from '@/editor/export/text';
 import type { WmindDocument } from '@/editor/model/types';
 
 export interface ExportDialogProps {
@@ -48,21 +51,38 @@ const SCALES = [1, 2, 3, 4] as const;
 const PADDINGS = [0, 24, 40, 80] as const;
 
 /**
- * 格式选项。顺序即 UI 顺序：矢量在前，因为它是唯一无损的那个。
+ * 格式选项。顺序即 UI 顺序：矢量在前，因为它是唯一无损的那个；文本格式垫底，
+ * 因为它们丢样式——不该出现在第一眼看到的位置。
  *
  * `descriptionKey` 单独给而不是共用一句：SVG 说「可无损缩放」，PNG 说「按倍率
  * 栅格化」，JPEG 说「不支持透明」——三句话回答的是三个不同的问题，共用一句
  * 就等于两句是错的。
  */
 const FORMATS: {
-  id: ExportOptions['format'];
+  id: ExportFormat;
   labelKey: string;
   descriptionKey: string;
   ext: string;
+  /** 文本格式下载时用的 MIME；矢量/位图走各自的分支，这里留空。 */
+  mime?: string;
 }[] = [
   { id: 'svg', labelKey: 'editor.export.formatSvg', descriptionKey: 'editor.export.description', ext: 'svg' },
   { id: 'png', labelKey: 'editor.export.formatPng', descriptionKey: 'editor.export.descriptionPng', ext: 'png' },
   { id: 'jpeg', labelKey: 'editor.export.formatJpeg', descriptionKey: 'editor.export.descriptionJpeg', ext: 'jpg' },
+  {
+    id: 'md',
+    labelKey: 'editor.export.formatMd',
+    descriptionKey: 'editor.export.descriptionMd',
+    ext: 'md',
+    mime: 'text/markdown;charset=utf-8',
+  },
+  {
+    id: 'opml',
+    labelKey: 'editor.export.formatOpml',
+    descriptionKey: 'editor.export.descriptionOpml',
+    ext: 'opml',
+    mime: 'text/x-opml;charset=utf-8',
+  },
 ];
 
 export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDialogProps) {
@@ -73,12 +93,23 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
 
   const baseCtx = useMemo(() => buildExportContext(doc, sheetId, options), [doc, sheetId, options]);
 
+  const text = isTextFormat(options.format);
+
+  // 文本格式直接从文档模型序列化。布局上下文仍然会算（下面要用它的标题，
+  // 而且它本来就在每次改选项时重算），但**跳过了 SVG 构建与 base64 编码**——
+  // 一张巨型导图那两步要几百毫秒，而结果最后会被丢掉。
+  const textContent = useMemo(() => {
+    if (options.format === 'md') return exportMarkdown(doc, sheetId);
+    if (options.format === 'opml') return exportOpml(doc, sheetId);
+    return null;
+  }, [doc, sheetId, options.format]);
+
   // 图片地址（去重后）与它们的 `data:` URL 映射。
   //
   // 依赖用 `join` 后的字符串而不是数组本身：`collectImageSources` 每次返回
   // 新数组，拿数组当依赖会让 effect 在每次改选项时都重跑一遍。字符串相等时
   // 图片集合没变，也就没必要再抓。
-  const sourceList = useMemo(() => collectImageSources(baseCtx), [baseCtx]);
+  const sourceList = useMemo(() => (text ? [] : collectImageSources(baseCtx)), [baseCtx, text]);
   const sourceKey = sourceList.join('\n');
   const [dataUrls, setDataUrls] = useState<ReadonlyMap<string, string>>(() => new Map());
 
@@ -97,8 +128,8 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   }, [sourceKey]);
 
   const ctx = useMemo(() => applyImageSources(baseCtx, dataUrls), [baseCtx, dataUrls]);
-  const markup = useMemo(() => buildExportSvg(ctx), [ctx]);
-  const dataUrl = useMemo(() => svgDataUrl(markup), [markup]);
+  const markup = useMemo(() => (text ? '' : buildExportSvg(ctx)), [ctx, text]);
+  const dataUrl = useMemo(() => (markup === '' ? '' : svgDataUrl(markup)), [markup]);
 
   // 抓不回来的图（跨域被拒、外链失效、超时）在成品里仍是原地址。默默留着
   // 会让用户以为导出是完整的——所以如实说出来。
@@ -110,12 +141,22 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   // 位图的输出像素尺寸。SVG 没有这个上限——它是矢量的，再大也只是字符串长一点。
   const outputWidth = Math.round(ctx.width * ctx.scale);
   const outputHeight = Math.round(ctx.height * ctx.scale);
-  const rasterVerdict =
-    options.format === 'svg' ? { kind: 'ok' as const } : checkRasterSize(outputWidth, outputHeight);
+  // 只有 PNG / JPEG 需要过尺寸闸门。文本格式若也走一遍，一张巨型导图会被判成
+  // 「太大」并把「下载」按钮禁掉——导个 Markdown 而已。
+  const needsRaster = options.format === 'png' || options.format === 'jpeg';
+  const rasterVerdict = needsRaster ? checkRasterSize(outputWidth, outputHeight) : { kind: 'ok' as const };
 
   const [busy, setBusy] = useState(false);
 
   const download = async () => {
+    if (textContent !== null) {
+      // 文本是同步生成的字符串，没有异步失败路径，所以不必包 try/catch。
+      // 带上 charset：不带的话 Windows 上的编辑器会按 GBK 打开，中文全成乱码。
+      const blob = new Blob([textContent], { type: format.mime ?? 'text/plain;charset=utf-8' });
+      downloadBlob(blob, exportFileName(ctx.title, format.ext));
+      onClose();
+      return;
+    }
     if (options.format === 'svg') {
       downloadSvg(markup, exportFileName(ctx.title, 'svg'));
       onClose();
@@ -128,7 +169,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       const blob = await rasterizeSvg(markup, {
         width: outputWidth,
         height: outputHeight,
-        format: options.format,
+        format: options.format === 'jpeg' ? 'jpeg' : 'png',
         background: ctx.background,
       });
       downloadBlob(blob, exportFileName(ctx.title, format.ext));
@@ -152,7 +193,9 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 text-xs text-muted-foreground">
             <span>
-              {t('editor.export.size', { width: outputWidth, height: outputHeight })}
+              {textContent === null
+                ? t('editor.export.size', { width: outputWidth, height: outputHeight })
+                : t('editor.export.textSize', { count: textContent.length })}
             </span>
             {rasterVerdict.kind === 'too-large' ? (
               <span className="ml-2 text-destructive">
@@ -192,24 +235,40 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       }
     >
       <div className="flex flex-col gap-4 sm:flex-row">
-        {/* 预览：棋盘格底，透明背景时能直接看出来 */}
+        {/* 预览：棋盘格底，透明背景时能直接看出来。
+            文本格式换成等宽文本——那种格式没有「画出来」的样子，画一张图反而是骗人。 */}
         <div
-          className="flex max-h-[52vh] min-h-40 flex-1 items-center justify-center overflow-auto rounded-xl border border-border p-3"
-          style={{
-            backgroundColor: ctx.background ?? 'transparent',
-            backgroundImage:
-              ctx.background === null
-                ? 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)'
-                : undefined,
-            backgroundSize: ctx.background === null ? '16px 16px' : undefined,
-            backgroundPosition: ctx.background === null ? '0 0, 0 8px, 8px -8px, -8px 0' : undefined,
-          }}
+          className={`flex max-h-[52vh] min-h-40 flex-1 overflow-auto rounded-xl border border-border p-3 ${
+            textContent === null ? 'items-center justify-center' : 'items-start justify-start'
+          }`}
+          style={
+            textContent !== null
+              ? undefined
+              : {
+                  backgroundColor: ctx.background ?? 'transparent',
+                  backgroundImage:
+                    ctx.background === null
+                      ? 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)'
+                      : undefined,
+                  backgroundSize: ctx.background === null ? '16px 16px' : undefined,
+                  backgroundPosition: ctx.background === null ? '0 0, 0 8px, 8px -8px, -8px 0' : undefined,
+                }
+          }
         >
-          <img
-            src={dataUrl}
-            alt={t('editor.export.previewAlt')}
-            className="max-h-[46vh] max-w-full object-contain"
-          />
+          {textContent === null ? (
+            <img
+              src={dataUrl}
+              alt={t('editor.export.previewAlt')}
+              className="max-h-[46vh] max-w-full object-contain"
+            />
+          ) : (
+            <pre
+              data-testid="export-text-preview"
+              className="w-full whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-foreground"
+            >
+              {textContent}
+            </pre>
+          )}
         </div>
 
         <div className="flex w-full shrink-0 flex-col gap-3 sm:w-52">
@@ -230,87 +289,106 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             ))}
           </fieldset>
 
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-1 text-xs font-semibold text-foreground">
-              {t('editor.export.scope')}
-            </legend>
-            <label className="flex items-center gap-2 text-xs text-foreground">
-              <input
-                type="radio"
-                name="export-scope"
-                checked={options.scope === 'current'}
-                onChange={() => patch({ scope: 'current' })}
-              />
-              {t('editor.export.scopeCurrent')}
-            </label>
-            <label className="flex items-center gap-2 text-xs text-foreground">
-              <input
-                type="radio"
-                name="export-scope"
-                checked={options.scope === 'all'}
-                // 只有一张画布时「全部」与「当前」等价，禁用比让人选一个没差别的
-                // 选项更诚实。
-                disabled={!multiSheet}
-                onChange={() => patch({ scope: 'all' })}
-              />
-              {t('editor.export.scopeAll', { count: doc.sheets.length })}
-            </label>
-          </fieldset>
+          {textContent === null ? (
+            <>
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="mb-1 text-xs font-semibold text-foreground">
+                  {t('editor.export.scope')}
+                </legend>
+                <label className="flex items-center gap-2 text-xs text-foreground">
+                  <input
+                    type="radio"
+                    name="export-scope"
+                    checked={options.scope === 'current'}
+                    onChange={() => patch({ scope: 'current' })}
+                  />
+                  {t('editor.export.scopeCurrent')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-foreground">
+                  <input
+                    type="radio"
+                    name="export-scope"
+                    checked={options.scope === 'all'}
+                    // 只有一张画布时「全部」与「当前」等价，禁用比让人选一个没差别的
+                    // 选项更诚实。
+                    disabled={!multiSheet}
+                    onChange={() => patch({ scope: 'all' })}
+                  />
+                  {t('editor.export.scopeAll', { count: doc.sheets.length })}
+                </label>
+              </fieldset>
 
-          <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
-            {t('editor.export.scale')}
-            <select
-              value={options.scale}
-              onChange={(event) => patch({ scale: Number(event.target.value) })}
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
-            >
-              {SCALES.map((scale) => (
-                <option key={scale} value={scale}>
-                  {t('editor.export.scaleValue', { n: scale })}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
-            {t('editor.export.padding')}
-            <select
-              value={options.padding}
-              onChange={(event) => patch({ padding: Number(event.target.value) })}
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
-            >
-              {PADDINGS.map((padding) => (
-                <option key={padding} value={padding}>
-                  {padding === 0 ? t('editor.export.paddingNone') : `${padding}px`}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="flex flex-col gap-1.5">
-            {([
-              ['transparent', t('editor.export.transparent')],
-              ['border', t('editor.export.border')],
-              ['date', t('editor.export.date')],
-              ['brand', t('editor.export.brand')],
-            ] as const).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-xs text-foreground">
-                <input
-                  type="checkbox"
-                  checked={options[key]}
-                  onChange={(event) => patch({ [key]: event.target.checked })}
-                />
-                {label}
+              <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                {t('editor.export.scale')}
+                <select
+                  value={options.scale}
+                  onChange={(event) => patch({ scale: Number(event.target.value) })}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
+                >
+                  {SCALES.map((scale) => (
+                    <option key={scale} value={scale}>
+                      {t('editor.export.scaleValue', { n: scale })}
+                    </option>
+                  ))}
+                </select>
               </label>
-            ))}
-            {options.format === 'jpeg' && options.transparent ? (
-              // 勾着「透明背景」却导 JPEG，预览里是白底——不解释一句，用户会以为
-              // 透明选项失效了。
-              <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
-                {t('editor.export.jpegOpaque')}
+
+              <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                {t('editor.export.padding')}
+                <select
+                  value={options.padding}
+                  onChange={(event) => patch({ padding: Number(event.target.value) })}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
+                >
+                  {PADDINGS.map((padding) => (
+                    <option key={padding} value={padding}>
+                      {padding === 0 ? t('editor.export.paddingNone') : `${padding}px`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex flex-col gap-1.5">
+                {([
+                  ['transparent', t('editor.export.transparent')],
+                  ['border', t('editor.export.border')],
+                  ['date', t('editor.export.date')],
+                  ['brand', t('editor.export.brand')],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={options[key]}
+                      onChange={(event) => patch({ [key]: event.target.checked })}
+                    />
+                    {label}
+                  </label>
+                ))}
+                {options.format === 'jpeg' && options.transparent ? (
+                  // 勾着「透明背景」却导 JPEG，预览里是白底——不解释一句，用户会以为
+                  // 透明选项失效了。
+                  <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                    {t('editor.export.jpegOpaque')}
+                  </p>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            // 文本格式没有任何「样式」可言：倍率、留白、透明背景、边框、日期、品牌
+            // 全部不适用。与其把六个控件灰一屏，不如收起来，用一句话说清丢的是什么。
+            <div className="flex flex-col gap-1.5">
+              <p className="rounded-lg border border-amber-300/60 bg-amber-50 px-2.5 py-2 text-[11px] leading-snug text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                {t('editor.export.textWarning')}
               </p>
-            ) : null}
-          </div>
+              {multiSheet ? (
+                // 序列化器一次只吃一张画布，多画布必须说出来，否则用户以为
+                // 「全部」还在生效。
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  {t('editor.export.textSingleSheet')}
+                </p>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
     </Modal>

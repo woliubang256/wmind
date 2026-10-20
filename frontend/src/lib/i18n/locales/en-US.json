@@ -282,7 +282,14 @@
     "export.tooLarge": "{{width}}×{{height}} exceeds the browser limit ({{limit}}px per side). Lower the scale or use SVG.",
     "export.largeWarn": "{{width}}×{{height}} is large; generating may be slow",
     "export.jpegOpaque": "JPEG has no alpha channel; the background will be white",
-    "export.failed": "Could not generate the image. Try SVG or a lower scale."
+    "export.failed": "Could not generate the image. Try SVG or a lower scale.",
+    "export.formatMd": "Markdown (outline)",
+    "export.formatOpml": "OPML (outline)",
+    "export.descriptionMd": "The preview is exactly what you get. Markdown keeps text and hierarchy only.",
+    "export.descriptionOpml": "The preview is exactly what you get. OPML keeps text and hierarchy only.",
+    "export.textWarning": "Markdown and OPML carry no styling: re-importing loses colours, shapes, lines and layout.",
+    "export.textSingleSheet": "Text formats export the current sheet only.",
+    "export.textSize": "{{count}} characters"
   },
   "import": {
     "title": "Import",

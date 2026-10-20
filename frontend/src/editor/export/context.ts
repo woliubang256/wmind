@@ -15,6 +15,16 @@ import { layoutMindmap } from '../layout/mindmap';
 import type { LayoutResult, Rect } from '../layout/types';
 import type { Sheet, Theme, WmindDocument } from '../model/types';
 
+/** 会产出文件的导出格式。 */
+export type ExportFormat = 'svg' | 'png' | 'jpeg' | 'md' | 'opml';
+/** 纯文本格式：从文档模型直接序列化，不经过布局与渲染，因此没有尺寸、留白、背景。 */
+export type TextExportFormat = 'md' | 'opml';
+
+/** 是否是文本格式。对话框靠它决定隐藏哪些选项、预览换成文本。 */
+export function isTextFormat(format: ExportFormat): format is TextExportFormat {
+  return format === 'md' || format === 'opml';
+}
+
 export interface ExportOptions {
   /** 只导当前画布，还是把所有画布拼成一张。 */
   scope: 'current' | 'all';
@@ -25,7 +35,7 @@ export interface ExportOptions {
    * 通道，勾了「透明背景」也只能填白。如果背景在上下文里还是透明的、等到
    * 编码时才补白，预览与成品就会不一致——而预览与成品一致是这个功能的底线。
    */
-  format: 'svg' | 'png' | 'jpeg';
+  format: ExportFormat;
   /**
    * 输出倍率。
    *

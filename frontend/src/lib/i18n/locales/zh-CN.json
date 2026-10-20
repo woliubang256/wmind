@@ -282,7 +282,14 @@
     "export.tooLarge": "{{width}}×{{height}} 超过浏览器上限（单边 {{limit}}px），请降低倍率或改用 SVG",
     "export.largeWarn": "{{width}}×{{height}} 较大，生成可能较慢",
     "export.jpegOpaque": "JPEG 没有透明通道，将填充白色",
-    "export.failed": "生成图片失败，请改用 SVG 或降低倍率"
+    "export.failed": "生成图片失败，请改用 SVG 或降低倍率",
+    "export.formatMd": "Markdown（大纲）",
+    "export.formatOpml": "OPML（大纲）",
+    "export.descriptionMd": "预览即最终结果，Markdown 只保留文字与层级。",
+    "export.descriptionOpml": "预览即最终结果，OPML 只保留文字与层级。",
+    "export.textWarning": "Markdown 与 OPML 不承载样式信息，重新导入会丢失配色、形状、线条与布局。",
+    "export.textSingleSheet": "文本格式只导出当前画布。",
+    "export.textSize": "{{count}} 字符"
   },
   "import": {
     "title": "导入",

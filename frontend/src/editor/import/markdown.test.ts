@@ -82,6 +82,16 @@ describe('parseInline', () => {
     expect(inline.href).toBe('https://example.com');
     expect(inline.title).toBe('标题');
   });
+
+  it('行首的转义反斜杠被还原（导出再导入标题不多一个 \\）', () => {
+    // export/text.ts 给 `#`/`-` 开头的标题加了 `\`，按 CommonMark 这里该读成 `#`。
+    expect(parseInline('\\# 不是标题').title).toBe('# 不是标题');
+    expect(parseInline('\\- 不是列表').title).toBe('- 不是列表');
+    // 链接文字里的转义同样还原。
+    expect(parseInline('[\\# 标题](https://example.com)').title).toBe('# 标题');
+    // 只动行首：标题中间的 `\` 是用户自己写的，原样保留。
+    expect(parseInline('路径 C:\\temp').title).toBe('路径 C:\\temp');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -176,6 +186,18 @@ describe('标题模式建树', () => {
   it('连续同级标题是兄弟', () => {
     const { root } = parse('# A\n\n## B\n\n## C\n');
     expect(outline(root)).toEqual(['A', '  B', '  C']);
+  });
+
+  it('同一标题下的多个列表项是兄弟，不是父子', () => {
+    // 回归：listStack 弹空之后曾经拿 `current` 兜底，而 `current` 正是上一个列表项，
+    // 于是同级的第二个列表项被挂到了第一个下面——整棵树凭空多一层。
+    const { root } = parse('# 根\n\n## 分支\n\n- 甲\n- 乙\n- 丙\n');
+    expect(outline(root)).toEqual(['根', '  分支', '    甲', '    乙', '    丙']);
+  });
+
+  it('列表项下面缩进更深的仍然是子节点', () => {
+    const { root } = parse('# 根\n\n## 分支\n\n- 甲\n  - 甲一\n- 乙\n');
+    expect(outline(root)).toEqual(['根', '  分支', '    甲', '      甲一', '    乙']);
   });
 
   it('第一个标题之前的散文成为根备注', () => {

@@ -85,6 +85,19 @@ function convertOutline(element: XmlElement, ctx: ImportContext): Topic {
   const link = attr(element, '_link');
   if (link !== '') topic.href = link;
 
+  // `_labels` / `_collapse` 与本文件已有的 `_note` / `_status` / `_icon` 是同一套
+  // 下划线扩展，由 `export/text.ts` 写出。不读的话「导出 → 导入」会静默丢标签。
+  const labels = attr(element, '_labels');
+  if (labels !== '') {
+    topic.labels = labels
+      .split(',')
+      .map((label) => label.trim())
+      .filter((label) => label !== '')
+      .map((label) => ctx.title(label));
+  }
+
+  if (attr(element, '_collapse').trim().toLowerCase() === 'true') topic.collapsed = true;
+
   topic.markers = collectMarkers(element, ctx);
 
   for (const child of childrenNamed(element, 'outline')) {

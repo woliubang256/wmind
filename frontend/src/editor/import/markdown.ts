@@ -53,6 +53,20 @@ function stripEmphasis(text: string): string {
   return out;
 }
 
+/**
+ * 还原行首的转义反斜杠。
+ *
+ * 导出时会给 `#`/`-` 这类开头加 `\`（`export/text.ts` 的 `escapeLineStart`），
+ * 不还原的话「导出 → 再导入」标题会平白多出一个反斜杠。按 CommonMark，`\#`
+ * 本来就该读成 `#`，所以这不是迁就自己导出的特殊处理。
+ *
+ * 只处理行首：Markdown 里也只有行首这几个字符会被误读成语法，标题中间的 `\`
+ * 是用户自己写的，原样保留。
+ */
+function unescapeLineStart(text: string): string {
+  return text.replace(/^\\([#\-*+>])/, '$1');
+}
+
 export function parseInline(text: string): InlineResult {
   const labels: string[] = [];
   let href = '';
@@ -78,7 +92,8 @@ export function parseInline(text: string): InlineResult {
     },
   );
 
-  return { title: stripEmphasis(rest).trim(), href, labels, image };
+  // 先剥强调标记再还原转义：反过来的话 `\*a\*b` 会先变成 `*a*b`，被当成强调吃掉。
+  return { title: unescapeLineStart(stripEmphasis(rest).trim()), href, labels, image };
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +376,14 @@ function buildHeadingMode(tokens: Token[], fileName: string, state: BuildState):
         while (listStack.length > 0 && (listStack[listStack.length - 1]?.indent ?? 0) >= token.indent) {
           listStack.pop();
         }
-        const parent = listStack[listStack.length - 1]?.topic ?? current ?? root;
+        // 弹空之后回落到**当前标题**，而不是 `current`。
+        //
+        // `current` 是「备注/代码块该挂哪」的游标，此刻它正是上一个列表项——
+        // 拿它兜底会把同级的第二个列表项挂到第一个下面，整棵树凭空多一层。
+        // headingStack 里始终至少有根主题（列表开头时也会补一个），所以不会空。
+        const parent = listStack[listStack.length - 1]?.topic
+          ?? headingStack[headingStack.length - 1]?.topic
+          ?? root;
         const topic = newTopic(state, token.text);
         if (token.task !== null) pushTaskMarker(topic, token.task);
         parent.children.attached.push(topic);

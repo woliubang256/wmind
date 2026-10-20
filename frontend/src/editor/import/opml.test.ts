@@ -135,6 +135,16 @@ describe('属性映射', () => {
     expect(sheet!.rootTopic.href).toBe('https://example.com/x');
   });
 
+  it('_labels 按逗号拆成标签，空白项丢掉', () => {
+    const { sheet } = parse(wrap('<outline text="根" _labels="核心, P0 ,, "/>'));
+    expect(sheet!.rootTopic.labels).toEqual(['核心', 'P0']);
+  });
+
+  it('_collapse="true" 还原折叠状态，其它值不算', () => {
+    expect(parse(wrap('<outline text="根" _collapse="true"/>')).sheet!.rootTopic.collapsed).toBe(true);
+    expect(parse(wrap('<outline text="根" _collapse="false"/>')).sheet!.rootTopic.collapsed).toBe(false);
+  });
+
   it('_status 映射成任务标记', () => {
     const cases: Array<[string, string]> = [
       ['done', 'task-done'],
