@@ -90,13 +90,28 @@ export function RelationshipsLayer({ sheet, layout, theme }: { sheet: Sheet; lay
         const y1 = from.y + from.height / 2;
         const x2 = to.x + to.width / 2;
         const y2 = to.y + to.height / 2;
-        const midX = (x1 + x2) / 2;
-        const midY = (y1 + y2) / 2;
+
+        // 控制点从弦的中点沿法线外推，画出一段真正的弧。
+        //
+        // 直接用中点当控制点的话，二次贝塞尔退化成直线——两个节点横向相邻时，
+        // 直线正好穿过它们中间的那个节点，标题也跟着被压在节点下面看不见。
+        // 外推的幅度取弦长的四分之一并封顶 60px：太大会绕出画布，太小还是会
+        // 被节点盖住。
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const length = Math.hypot(dx, dy) || 1;
+        const bulge = Math.min(60, length * 0.25);
+        const controlX = (x1 + x2) / 2 - (dy / length) * bulge;
+        const controlY = (y1 + y2) / 2 + (dx / length) * bulge;
+
+        // 二次贝塞尔在 t = 0.5 处的点，标题放在这里而不是弦的中点。
+        const labelX = (x1 + 2 * controlX + x2) / 4;
+        const labelY = (y1 + 2 * controlY + y2) / 4;
 
         return (
           <g key={relationship.id} data-relationship-id={relationship.id}>
             <path
-              d={`M ${x1} ${y1} Q ${midX} ${midY} ${x2} ${y2}`}
+              d={`M ${x1} ${y1} Q ${controlX} ${controlY} ${x2} ${y2}`}
               fill="none"
               stroke={color}
               strokeWidth={width}
@@ -104,8 +119,8 @@ export function RelationshipsLayer({ sheet, layout, theme }: { sheet: Sheet; lay
             />
             {relationship.title ? (
               <text
-                x={midX}
-                y={midY - 6}
+                x={labelX}
+                y={labelY - 6}
                 textAnchor="middle"
                 stroke="#FFFFFF"
                 strokeWidth={3}

@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
@@ -30,7 +31,8 @@ import {
   collectImageSources,
   loadImageSources,
 } from '@/editor/export/assets';
-import { downloadSvg } from '@/editor/export/download';
+import { downloadBlob, downloadSvg } from '@/editor/export/download';
+import { checkRasterSize, rasterizeSvg } from '@/editor/export/raster';
 import { buildExportSvg, exportFileName, svgDataUrl } from '@/editor/export/svg';
 import type { WmindDocument } from '@/editor/model/types';
 
@@ -44,6 +46,24 @@ export interface ExportDialogProps {
 
 const SCALES = [1, 2, 3, 4] as const;
 const PADDINGS = [0, 24, 40, 80] as const;
+
+/**
+ * 格式选项。顺序即 UI 顺序：矢量在前，因为它是唯一无损的那个。
+ *
+ * `descriptionKey` 单独给而不是共用一句：SVG 说「可无损缩放」，PNG 说「按倍率
+ * 栅格化」，JPEG 说「不支持透明」——三句话回答的是三个不同的问题，共用一句
+ * 就等于两句是错的。
+ */
+const FORMATS: {
+  id: ExportOptions['format'];
+  labelKey: string;
+  descriptionKey: string;
+  ext: string;
+}[] = [
+  { id: 'svg', labelKey: 'editor.export.formatSvg', descriptionKey: 'editor.export.description', ext: 'svg' },
+  { id: 'png', labelKey: 'editor.export.formatPng', descriptionKey: 'editor.export.descriptionPng', ext: 'png' },
+  { id: 'jpeg', labelKey: 'editor.export.formatJpeg', descriptionKey: 'editor.export.descriptionJpeg', ext: 'jpg' },
+];
 
 export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDialogProps) {
   const { t } = useTranslation();
@@ -85,10 +105,40 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   const missingImages = sourceList.filter((src) => !dataUrls.has(src)).length;
 
   const multiSheet = doc.sheets.length > 1;
+  const format = FORMATS.find((item) => item.id === options.format) ?? FORMATS[0]!;
 
-  const download = () => {
-    downloadSvg(markup, exportFileName(ctx.title, 'svg'));
-    onClose();
+  // 位图的输出像素尺寸。SVG 没有这个上限——它是矢量的，再大也只是字符串长一点。
+  const outputWidth = Math.round(ctx.width * ctx.scale);
+  const outputHeight = Math.round(ctx.height * ctx.scale);
+  const rasterVerdict =
+    options.format === 'svg' ? { kind: 'ok' as const } : checkRasterSize(outputWidth, outputHeight);
+
+  const [busy, setBusy] = useState(false);
+
+  const download = async () => {
+    if (options.format === 'svg') {
+      downloadSvg(markup, exportFileName(ctx.title, 'svg'));
+      onClose();
+      return;
+    }
+    if (rasterVerdict.kind === 'too-large') return;
+
+    setBusy(true);
+    try {
+      const blob = await rasterizeSvg(markup, {
+        width: outputWidth,
+        height: outputHeight,
+        format: options.format,
+        background: ctx.background,
+      });
+      downloadBlob(blob, exportFileName(ctx.title, format.ext));
+      onClose();
+    } catch {
+      // 失败时留在对话框里：关掉再重开会丢掉用户刚调的选项。
+      toast.error(t('editor.export.failed'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -97,26 +147,45 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       onClose={onClose}
       size="lg"
       title={t('editor.export.title')}
-      description={t('editor.export.description')}
+      description={t(format.descriptionKey)}
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">
-            {t('editor.export.size', {
-              width: Math.round(ctx.width * ctx.scale),
-              height: Math.round(ctx.height * ctx.scale),
-            })}
+          <div className="min-w-0 text-xs text-muted-foreground">
+            <span>
+              {t('editor.export.size', { width: outputWidth, height: outputHeight })}
+            </span>
+            {rasterVerdict.kind === 'too-large' ? (
+              <span className="ml-2 text-destructive">
+                {t('editor.export.tooLarge', {
+                  width: outputWidth,
+                  height: outputHeight,
+                  limit: rasterVerdict.limit,
+                })}
+              </span>
+            ) : null}
+            {rasterVerdict.kind === 'warn' ? (
+              <span className="ml-2 text-amber-600 dark:text-amber-400">
+                {t('editor.export.largeWarn', { width: outputWidth, height: outputHeight })}
+              </span>
+            ) : null}
             {missingImages > 0 ? (
               <span className="ml-2 text-amber-600 dark:text-amber-400">
                 {t('editor.export.imageFailed', { count: missingImages })}
               </span>
             ) : null}
-          </span>
-          <div className="flex items-center gap-2">
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="ghost" size="sm" onClick={onClose}>
               {t('editor.export.cancel')}
             </Button>
-            <Button size="sm" onClick={download}>
-              {t('editor.export.download')}
+            <Button
+              size="sm"
+              onClick={() => void download()}
+              disabled={busy || rasterVerdict.kind === 'too-large'}
+            >
+              {busy
+                ? t('editor.export.generating')
+                : t('editor.export.downloadAs', { format: t(format.labelKey) })}
             </Button>
           </div>
         </div>
@@ -144,6 +213,23 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
         </div>
 
         <div className="flex w-full shrink-0 flex-col gap-3 sm:w-52">
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1 text-xs font-semibold text-foreground">
+              {t('editor.export.format')}
+            </legend>
+            {FORMATS.map((item) => (
+              <label key={item.id} className="flex items-center gap-2 text-xs text-foreground">
+                <input
+                  type="radio"
+                  name="export-format"
+                  checked={options.format === item.id}
+                  onChange={() => patch({ format: item.id })}
+                />
+                {t(item.labelKey)}
+              </label>
+            ))}
+          </fieldset>
+
           <fieldset className="flex flex-col gap-1.5">
             <legend className="mb-1 text-xs font-semibold text-foreground">
               {t('editor.export.scope')}
@@ -217,6 +303,13 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 {label}
               </label>
             ))}
+            {options.format === 'jpeg' && options.transparent ? (
+              // 勾着「透明背景」却导 JPEG，预览里是白底——不解释一句，用户会以为
+              // 透明选项失效了。
+              <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                {t('editor.export.jpegOpaque')}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

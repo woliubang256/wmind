@@ -19,6 +19,14 @@ export interface ExportOptions {
   /** 只导当前画布，还是把所有画布拼成一张。 */
   scope: 'current' | 'all';
   /**
+   * 输出格式。
+   *
+   * 放进选项而不是留给下载那一步，是因为它会影响**背景**：JPEG 没有 alpha
+   * 通道，勾了「透明背景」也只能填白。如果背景在上下文里还是透明的、等到
+   * 编码时才补白，预览与成品就会不一致——而预览与成品一致是这个功能的底线。
+   */
+  format: 'svg' | 'png' | 'jpeg';
+  /**
    * 输出倍率。
    *
    * SVG 是矢量，倍率只影响 `width` / `height` 属性（以及 PNG 的栅格化尺寸）；
@@ -39,6 +47,7 @@ export interface ExportOptions {
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   scope: 'current',
+  format: 'svg',
   scale: 2,
   padding: 40,
   transparent: false,
@@ -134,6 +143,21 @@ function pickSheets(document: WmindDocument, currentSheetId: string | null, scop
 }
 
 /**
+ * 导出画布的背景色；`null` 表示透明。
+ *
+ * JPEG 单独一条分支：它没有 alpha 通道，透明像素会被编码成黑色。勾了「透明
+ * 背景」再导 JPEG，唯一说得通的行为是**填白**——而且要在上下文里就填白，
+ * 这样预览里看到的白底就是拿到手的白底。
+ */
+function backgroundColor(theme: Theme, options: ExportOptions): string | null {
+  const themeBackground = theme.palette.backgroundColor ?? '#FFFFFF';
+  if (options.format === 'jpeg') {
+    return options.transparent ? '#FFFFFF' : themeBackground;
+  }
+  return options.transparent ? null : themeBackground;
+}
+
+/**
  * 构建导出上下文。
  *
  * `currentSheetId` 找不到时退回第一张画布：调用方传错 id 不该让「导出」直接
@@ -185,7 +209,7 @@ export function buildExportContext(
     sheets: exportSheets,
     width,
     height,
-    background: options.transparent ? null : (laid[0]?.theme.palette.backgroundColor ?? null),
+    background: backgroundColor(laid[0]?.theme ?? document.theme, options),
     border: options.border,
     date: options.date ? today(now) : null,
     brand: options.brand,
