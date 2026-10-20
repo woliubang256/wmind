@@ -15,6 +15,7 @@
  * 用户在 XMind 里看到的样子。
  */
 
+import { assertNotEncrypted } from '../encryption';
 import { ImportError, toImportError } from '../errors';
 import type { ImportAdapter, ImportContext, ImportInput } from '../types';
 import { looksLikeZip } from '../zip';
@@ -38,6 +39,10 @@ export const xmindAdapter: ImportAdapter = {
   parse(input: ImportInput, ctx: ImportContext) {
     const zip = input.zip();
     if (zip === null) throw new ImportError('NOT_A_ZIP');
+
+    // 加密判定必须早于任何内容解析：加密包的条目名齐全，探测分数照给，
+    // 不先判一次的话用户只会拿到「解析失败」，而真正的下一步是「去密码」。
+    assertNotEncrypted(zip);
 
     if (zip.has('content.json')) return parseModern(input, ctx);
 
