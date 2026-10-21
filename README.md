@@ -30,7 +30,7 @@
 | M4 导入导出：XMind 8/新版、Markdown、OPML；导出 SVG/PNG/JPEG/PDF/MD/OPML | ✅ PDF 走**栅格**路线（单页图片 + 手写容器），文字不可选中，界面已说明；矢量 PDF 需要 WOFF2→TTF 子集化工具，是独立工程，见 [docs/06](./docs/06-导入导出与主题系统.md) §3.5 |
 | M5 模板 / 多画布 / 大纲 / ZEN / 分享链接 | ✅ |
 | M6 无障碍、视口裁剪、错误兜底、备份与恢复 | ✅ 无障碍 23 条、裁剪 6 条、错误 3 条界面验收全过 |
-| 测试 | ✅ 前端 1015 条单测（62 个文件）；后端全绿；界面验收 143 条 / 8 套（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
+| 测试 | ✅ 前端 1015 条单测（62 个文件）；后端全绿；界面验收 155 条 / 9 套（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
 | 两套 Compose / Dockerfile / Nginx | 🟡 配置已写，**本机没有 Docker，镜像构建与编排未实跑** |
 | PostgreSQL 完整回归 | ⬜ 需要 CI 提供实例 |
 | 多语言 | ✅ zh-CN / en-US 双语约 860 个键，界面内可切换（跟随浏览器 / 中文 / English），`<html lang>` 同步；守卫测试比对 key、占位符与源码引用 |
@@ -133,7 +133,7 @@ wmind/
 │   │   └── pkg/              apperr / logger / id / reqid 等通用件
 │   └── db/                   两套迁移集、sqlc 配置与查询
 ├── frontend/                 React 前端（Vite + TypeScript + Tailwind v4，自建 UI 组件）
-│   └── e2e/                  界面验收脚本（六套 108 条，见 e2e/README.md）
+│   └── e2e/                  界面验收脚本（九套 155 条，见 e2e/README.md）
 ├── deploy/                   Compose、Dockerfile、Nginx 配置
 ├── docs/                     需求、架构、接口、部署文档
 └── .agents/                  架构决策笔记与校验脚本
