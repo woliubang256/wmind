@@ -39,6 +39,11 @@ type Deps struct {
 	// Auth 处理认证接口；Sessions 提供 RequireAuth 需要的令牌校验。
 	Auth     *handler.AuthHandler
 	Sessions *service.AuthService
+	// RegistrationOpen 报告站点是否开放注册。为 nil 时视为开放。
+	//
+	// 单独给一个函数而不是塞进 AuthHandler：这道闸门要在**限流器之前**执行，
+	// 而限流器是路由层挂的中间件，拿不到 handler 内部的服务实例。
+	RegistrationOpen func() bool
 	// Users 处理「我的」相关接口（资料、密码、头像）。
 	Users *handler.UserHandler
 	// Site 处理公开的站点配置；AdminSettings 处理管理员的设置读写。
@@ -296,7 +301,15 @@ func registerAuth(v1 *gin.RouterGroup, deps Deps, limiters authLimiters) {
 		return
 	}
 	g := v1.Group("/auth")
-	g.POST("/register", limiters.register.Middleware(middleware.ClientIPKey), deps.Auth.Register)
+	// 顺序是刻意的：先判「注册是否开放」，再进限流器。
+	//
+	// 反过来写的话，关站期间的每次探测都会消耗 3 次/小时的注册配额——用户点
+	// 三下就把自己的 IP 锁死一小时，而且拿到的错误是 RATE_LIMITED，看不出
+	// 真正的原因是站点关了注册。见 middleware.RequireRegistrationOpen。
+	g.POST("/register",
+		middleware.RequireRegistrationOpen(deps.RegistrationOpen),
+		limiters.register.Middleware(middleware.ClientIPKey),
+		deps.Auth.Register)
 	g.POST("/login", deps.Auth.Login)
 	g.POST("/refresh", limiters.refresh.Middleware(middleware.ClientIPKey), deps.Auth.Refresh)
 	g.POST("/logout", deps.Auth.Logout)

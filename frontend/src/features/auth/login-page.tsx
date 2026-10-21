@@ -14,7 +14,7 @@ import type { FieldErrors } from '@/lib/validation';
 
 export function LoginPage() {
   const { t } = useTranslation();
-  const { config } = useSiteConfig();
+  const { config, isLoading: siteLoading } = useSiteConfig({ fresh: true });
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -108,7 +108,12 @@ export function LoginPage() {
       {/* 一期没有自助找回：必须把人工路径说清楚，不能留到以后。 */}
       <p className="mt-5 text-center text-xs leading-5 text-muted-foreground">{t('auth.forgotPassword')}</p>
 
-      {config.registrationEnabled ? (
+      {/*
+        配置还没回来时不渲染这一块。`useSiteConfig` 的兜底值是
+        `registrationEnabled: false`，直接渲染会让开放注册的站点先闪一句
+        「本站暂未开放注册」再变成「立即注册」——正好把最关键的信息说反一次。
+      */}
+      {siteLoading ? null : config.registrationEnabled ? (
         <div className="mt-4 border-t border-border pt-4 text-center text-sm text-muted-foreground">
           {t('auth.noAccount')}{' '}
           <Link className="font-medium text-primary hover:underline" to="/register">

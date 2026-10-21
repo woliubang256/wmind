@@ -262,15 +262,18 @@ func run() error {
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: cfg, Logger: log, Ready: ready,
 		Auth: authHandler, Sessions: authSvc,
-		Users:         handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
-		Site:          handler.NewSiteHandler(settingsSvc, config.Version),
-		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
-		Admin:         handler.NewAdminHandler(adminSvc),
-		Maps:          handler.NewMapHandler(mapSvc),
-		Themes:        handler.NewThemeHandler(themeSvc),
-		Templates:     handler.NewTemplateHandler(templateSvc),
-		Files:         handler.NewFileHandler(fileSvc),
-		Shares:        handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
+		// 关闭注册时让 /auth/register 在限流器之前就返回 403：关站期间的
+		// 探测不该消耗 IP 的注册配额，也不该报成「请求太频繁」。
+		RegistrationOpen: settingsSvc.RegistrationEnabled,
+		Users:            handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Site:             handler.NewSiteHandler(settingsSvc, config.Version),
+		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
+		Admin:            handler.NewAdminHandler(adminSvc),
+		Maps:             handler.NewMapHandler(mapSvc),
+		Themes:           handler.NewThemeHandler(themeSvc),
+		Templates:        handler.NewTemplateHandler(templateSvc),
+		Files:            handler.NewFileHandler(fileSvc),
+		Shares:           handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

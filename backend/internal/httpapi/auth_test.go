@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -164,18 +165,19 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 			// 目录是同一个，否则上传成功但取不到文件。
 			Storage: config.Storage{Dir: uploads},
 		},
-		Logger:        logger,
-		Auth:          handler.NewAuthHandler(svc, cookie, nil),
-		Sessions:      svc,
-		Users:         handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
-		Site:          handler.NewSiteHandler(settingsSvc, "test-version"),
-		AdminSettings: handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
-		Admin:         handler.NewAdminHandler(adminSvc),
-		Maps:          handler.NewMapHandler(mapSvc),
-		Themes:        handler.NewThemeHandler(themeSvc),
-		Templates:     handler.NewTemplateHandler(templateSvc),
-		Files:         handler.NewFileHandler(fileSvc),
-		Shares:        handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
+		Logger:           logger,
+		Auth:             handler.NewAuthHandler(svc, cookie, nil),
+		Sessions:         svc,
+		RegistrationOpen: settingsSvc.RegistrationEnabled,
+		Users:            handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Site:             handler.NewSiteHandler(settingsSvc, "test-version"),
+		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
+		Admin:            handler.NewAdminHandler(adminSvc),
+		Maps:             handler.NewMapHandler(mapSvc),
+		Themes:           handler.NewThemeHandler(themeSvc),
+		Templates:        handler.NewTemplateHandler(templateSvc),
+		Files:            handler.NewFileHandler(fileSvc),
+		Shares:           handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
 
 	server := httptest.NewServer(router)
@@ -388,6 +390,54 @@ func TestRegisterRateLimit(t *testing.T) {
 	}
 	if body.Error.Details["retryAfter"] == nil {
 		t.Fatalf("限流响应应带 retryAfter: %#v", body.Error.Details)
+	}
+}
+
+// TestRegisterClosedOverHTTP 验「关站之后，注册入口与注册接口一起关掉」。
+//
+// 三条断言各自对应一个曾经会出错的点：
+//
+//  1. 公开配置要立刻反映 false，否则登录页还会挂着「立即注册」；
+//  2. 接口返回 REGISTRATION_CLOSED（403），而不是让它撞上限流器报 429；
+//  3. 关站期间的探测**不消耗**注册配额——重开之后第一次注册必须成功。
+//     这条是最容易漏的：把闸门挂在限流器后面，前两条都能过，只有这条会红。
+func TestRegisterClosedOverHTTP(t *testing.T) {
+	s := newAuthTestServer(t)
+
+	token := s.loginAs(testAdminEmail, testAdminPassword)
+	status, body := s.do(http.MethodPut, "/api/v1/admin/settings", token, map[string]any{
+		"auth.registration_enabled": false,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭注册 = %d %#v", status, body.Error)
+	}
+
+	_, site := s.do(http.MethodGet, "/api/v1/site/config", "", nil)
+	if site.Data["registrationEnabled"] != false {
+		t.Fatalf("关闭后公开配置仍为开放: %#v", site.Data["registrationEnabled"])
+	}
+
+	// 打 5 次：限流配额是 3 次/小时，只要闸门排在限流器之后，第 4 次就是 429。
+	for i := 1; i <= 5; i++ {
+		status, body := s.do(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+			"username": "closed" + strconv.Itoa(i), "email": "closed" + strconv.Itoa(i) + "@example.com",
+			"password": "correct-horse",
+		})
+		if status != http.StatusForbidden || body.Error.Code != "REGISTRATION_CLOSED" {
+			t.Fatalf("第 %d 次关站注册 = %d %#v; 期望 403 REGISTRATION_CLOSED", i, status, body.Error)
+		}
+	}
+
+	// 重新开站：配额没被上面的探测吃掉，第一次注册就该成功。
+	if status, body := s.do(http.MethodPut, "/api/v1/admin/settings", token, map[string]any{
+		"auth.registration_enabled": true,
+	}); status != http.StatusOK {
+		t.Fatalf("重新开放注册 = %d %#v", status, body.Error)
+	}
+	if status, body := s.do(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+		"username": "reopened", "email": "reopened@example.com", "password": "correct-horse",
+	}); status != http.StatusCreated {
+		t.Fatalf("重开注册后注册 = %d %#v; 关站期间的探测不该消耗限流配额", status, body.Error)
 	}
 }
 

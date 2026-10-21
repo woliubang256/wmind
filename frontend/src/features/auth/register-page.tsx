@@ -14,7 +14,7 @@ import { hasErrors, validateRegistration, type FieldErrors } from '@/lib/validat
 
 export function RegisterPage() {
   const { t } = useTranslation();
-  const { config, isLoading: siteLoading } = useSiteConfig();
+  const { config, isLoading: siteLoading } = useSiteConfig({ fresh: true });
   const { data: currentUser, isLoading: userLoading } = useCurrentUser();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
