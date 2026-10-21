@@ -49,12 +49,16 @@ const STRUCTURES: StructureClass[] = [
   'brace',
   'tree-table',
 ];
+/**
+ * 字重选项。`labelKey` 而不是 `label`：这张表在模块求值时就定下来了，
+ * 写死中文后切换语言不会跟着变。
+ */
 const WEIGHTS = [
-  { value: 300, label: '细 300' },
-  { value: 400, label: '常规 400' },
-  { value: 600, label: '中粗 600' },
-  { value: 700, label: '粗 700' },
-  { value: 800, label: '特粗 800' },
+  { value: 300, labelKey: 'editor.panel.weight300' },
+  { value: 400, labelKey: 'editor.panel.weight400' },
+  { value: 600, labelKey: 'editor.panel.weight600' },
+  { value: 700, labelKey: 'editor.panel.weight700' },
+  { value: 800, labelKey: 'editor.panel.weight800' },
 ];
 const LINE_WIDTHS = [1, 2, 3, 4, 5, 6];
 
@@ -157,7 +161,7 @@ export function StyleTab({
           <SelectField
             label={t('editor.panel.style.fontFamily')}
             value={style.fontFamily}
-            options={FONT_IDS.map((id) => ({ value: id, label: FONT_DEFINITIONS[id].label }))}
+            options={FONT_IDS.map((id) => ({ value: id, label: t(FONT_DEFINITIONS[id].labelKey) }))}
             onChange={(fontFamily: FontFamily) => onPatch({ fontFamily })}
           />
         </Field>
@@ -174,7 +178,7 @@ export function StyleTab({
             <SelectField
               label={t('editor.panel.style.fontWeight')}
               value={style.fontWeight}
-              options={WEIGHTS}
+              options={WEIGHTS.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
               onChange={(fontWeight) => onPatch({ fontWeight })}
             />
           </Field>
@@ -238,9 +242,9 @@ export function StyleTab({
             label={t('editor.panel.style.align')}
             value={style.textAlign}
             options={[
-              { value: 'left', label: '左' },
-              { value: 'center', label: '中' },
-              { value: 'right', label: '右' },
+              { value: 'left', label: t('editor.panel.alignLeft') },
+              { value: 'center', label: t('editor.panel.alignCenter') },
+              { value: 'right', label: t('editor.panel.alignRight') },
             ]}
             onChange={(textAlign) => onPatch({ textAlign })}
           />

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 import { Icon } from './icon';
@@ -22,6 +23,7 @@ interface ModalProps {
  * 都由浏览器负责，这些正是手写对话框最容易出错的地方。
  */
 export function Modal({ open, title, description, children, footer, onClose, dismissible = true, size = 'md' }: ModalProps) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export function Modal({ open, title, description, children, footer, onClose, dis
           {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {dismissible ? (
-          <Button variant="ghost" size="icon" aria-label="关闭" onClick={onClose} className="-mr-1 -mt-1 shrink-0">
+          <Button variant="ghost" size="icon" aria-label={t('common.close')} onClick={onClose} className="-mr-1 -mt-1 shrink-0">
             <Icon name="x" className="size-4" />
           </Button>
         ) : null}

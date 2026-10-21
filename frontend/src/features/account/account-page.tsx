@@ -8,8 +8,10 @@ import { TextField } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
 import { authKeys, useCurrentUser } from '@/app/auth';
 import { useSiteConfig } from '@/features/site/use-site-config';
+import { useLocaleStore } from '@/app/locale-store';
 import { useThemeStore } from '@/app/theme-store';
 import { THEME_ORDER, type ThemePreference } from '@/app/theme';
+import { LOCALE_ORDER, type LocalePreference } from '@/lib/i18n/preference';
 import { userApi } from '@/lib/api/endpoints';
 import type { User } from '@/lib/api/types';
 import { ApiError, codeToField, fieldErrorsFrom } from '@/lib/api/errors';
@@ -20,6 +22,19 @@ const THEME_LABEL_KEY: Record<ThemePreference, string> = {
   light: 'account.themeLight',
   dark: 'account.themeDark',
   system: 'account.themeSystem',
+};
+
+/**
+ * 语言的显示名。
+ *
+ * 不跟随界面语言：语言选择器里永远用**该语言自己的写法**（中文 / English），
+ * 否则英文界面下会看到「Chinese」和「English」，中文界面下看到「中文」和
+ * 「英文」——用户要在一堆自己看不懂的字里找自己看得懂的那一个。
+ */
+const LOCALE_LABEL: Record<LocalePreference, string> = {
+  system: 'locale.system',
+  'zh-CN': 'locale.zh-CN',
+  'en-US': 'locale.en-US',
 };
 
 const THEME_ICON: Record<ThemePreference, 'sun' | 'moon' | 'monitor'> = {
@@ -42,6 +57,7 @@ export function AccountPage() {
       <ProfileCard user={user} />
       <PasswordCard />
       <AppearanceCard />
+      <LanguageCard />
     </div>
   );
 }
@@ -282,6 +298,44 @@ function AppearanceCard() {
             >
               <Icon name={THEME_ICON[option]} className="size-4" />
               <span className="flex-1">{t(THEME_LABEL_KEY[option])}</span>
+              {active ? <Icon name="check" className="size-4" /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function LanguageCard() {
+  const { t } = useTranslation();
+  const preference = useLocaleStore((state) => state.preference);
+  const setPreference = useLocaleStore((state) => state.setPreference);
+
+  return (
+    <Card title={t('account.language')} description={t('account.languageHint')}>
+      <div role="radiogroup" aria-label={t('account.language')} className="grid gap-2 sm:grid-cols-3">
+        {LOCALE_ORDER.map((option) => {
+          const active = preference === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              // 语言名是**该语言自己的写法**，所以这一项不走 `t()` 之外的处理；
+              // 而「跟随浏览器」要跟着界面语言变，所以走 key。
+              lang={option === 'system' ? undefined : option}
+              onClick={() => setPreference(option)}
+              className={cn(
+                'flex items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition',
+                active
+                  ? 'border-primary bg-primary/10 font-medium text-primary'
+                  : 'border-border hover:bg-accent hover:text-accent-foreground',
+              )}
+            >
+              <Icon name={option === 'system' ? 'monitor' : 'globe'} className="size-4" />
+              <span className="flex-1">{t(LOCALE_LABEL[option])}</span>
               {active ? <Icon name="check" className="size-4" /> : null}
             </button>
           );

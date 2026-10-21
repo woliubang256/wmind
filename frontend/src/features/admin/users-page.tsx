@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -17,28 +18,25 @@ import { adminKeys } from './queries';
 
 const PAGE_SIZE = 20;
 
-const ROLE_LABEL: Record<Role, string> = { user: '普通用户', admin: '管理员' };
-
-const STATUS_META: Record<UserStatus, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
-  active: { label: '正常', tone: 'success' },
-  disabled: { label: '已禁用', tone: 'danger' },
-  pending: { label: '待激活', tone: 'warning' },
+/**
+ * 角色与状态的显示文案。
+ *
+ * 存 key 而不是文案：这两张表在模块求值时就定下来了，把中文写进来以后
+ * 切换语言不会跟着变——而它们出现在每一行的徽章里，是最容易被看见的那一处。
+ */
+const ROLE_LABEL_KEY: Record<Role, string> = {
+  user: 'admin.users.roleUser',
+  admin: 'admin.users.roleAdmin',
 };
 
-const ROLE_OPTIONS = [
-  { value: '', label: '全部角色' },
-  { value: 'user', label: ROLE_LABEL.user },
-  { value: 'admin', label: ROLE_LABEL.admin },
-];
-
-const STATUS_OPTIONS = [
-  { value: '', label: '全部状态' },
-  { value: 'active', label: STATUS_META.active.label },
-  { value: 'disabled', label: STATUS_META.disabled.label },
-  { value: 'pending', label: STATUS_META.pending.label },
-];
+const STATUS_META: Record<UserStatus, { labelKey: string; tone: 'success' | 'warning' | 'danger' }> = {
+  active: { labelKey: 'admin.users.statusActive', tone: 'success' },
+  disabled: { labelKey: 'admin.users.statusDisabled', tone: 'danger' },
+  pending: { labelKey: 'admin.users.statusPending', tone: 'warning' },
+};
 
 export function AdminUsersPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUser();
   const [search, setSearch] = useState('');
@@ -69,18 +67,31 @@ export function AdminUsersPage() {
     setFilters((prev) => ({ ...prev, ...patch, page: 1 }));
   };
 
+  const roleOptions = [
+    { value: '', label: t('admin.users.allRoles') },
+    { value: 'user', label: t(ROLE_LABEL_KEY.user) },
+    { value: 'admin', label: t(ROLE_LABEL_KEY.admin) },
+  ];
+
+  const statusOptions = [
+    { value: '', label: t('admin.users.allStatuses') },
+    { value: 'active', label: t(STATUS_META.active.labelKey) },
+    { value: 'disabled', label: t(STATUS_META.disabled.labelKey) },
+    { value: 'pending', label: t(STATUS_META.pending.labelKey) },
+  ];
+
   const items = users.data?.items ?? [];
   const pagination = users.data?.pagination;
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="用户管理"
-        description="创建、编辑、禁用账号，或为忘记密码的用户重置密码。"
+        title={t('admin.users.title')}
+        description={t('admin.users.description')}
         actions={
           <Button onClick={() => setCreating(true)}>
             <Icon name="plus" className="size-4" />
-            新建用户
+            {t('admin.users.create')}
           </Button>
         }
       />
@@ -91,8 +102,10 @@ export function AdminUsersPage() {
           pagination ? (
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>
-                共 {formatNumber(pagination.total)} 位用户
-                {pagination.totalPages > 1 ? ` · 第 ${pagination.page} / ${pagination.totalPages} 页` : ''}
+                {t('admin.users.total', { count: formatNumber(pagination.total) })}
+                {pagination.totalPages > 1
+                  ? ` · ${t('admin.users.page', { page: pagination.page, total: pagination.totalPages })}`
+                  : ''}
               </span>
               <div className="flex items-center gap-2">
                 <Button
@@ -102,7 +115,7 @@ export function AdminUsersPage() {
                   onClick={() => setFilters((prev) => ({ ...prev, page: (prev.page ?? 1) - 1 }))}
                 >
                   <Icon name="chevron-left" className="size-4" />
-                  上一页
+                  {t('admin.users.prev')}
                 </Button>
                 <Button
                   variant="outline"
@@ -110,7 +123,7 @@ export function AdminUsersPage() {
                   disabled={pagination.page >= pagination.totalPages}
                   onClick={() => setFilters((prev) => ({ ...prev, page: (prev.page ?? 1) + 1 }))}
                 >
-                  下一页
+                  {t('admin.users.next')}
                   <Icon name="chevron-right" className="size-4" />
                 </Button>
               </div>
@@ -123,32 +136,32 @@ export function AdminUsersPage() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索用户名、邮箱或昵称"
-              aria-label="搜索用户"
+              placeholder={t('admin.users.searchPlaceholder')}
+              aria-label={t('admin.users.searchLabel')}
             />
-            <Button type="submit" variant="outline" size="icon" aria-label="搜索">
+            <Button type="submit" variant="outline" size="icon" aria-label={t('admin.users.search')}>
               <Icon name="search" className="size-4" />
             </Button>
           </form>
           <Select
-            aria-label="按角色筛选"
+            aria-label={t('admin.users.filterRole')}
             value={filters.role ?? ''}
             onChange={(event) => patchFilter({ role: event.target.value || undefined })}
             className="w-36"
           >
-            {ROLE_OPTIONS.map((option) => (
+            {roleOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </Select>
           <Select
-            aria-label="按状态筛选"
+            aria-label={t('admin.users.filterStatus')}
             value={filters.status ?? ''}
             onChange={(event) => patchFilter({ status: event.target.value || undefined })}
             className="w-36"
           >
-            {STATUS_OPTIONS.map((option) => (
+            {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -160,11 +173,11 @@ export function AdminUsersPage() {
           <div className="p-5">
             <EmptyState
               icon="alert"
-              title="用户列表加载失败"
+              title={t('admin.users.loadFailed')}
               description={users.error instanceof Error ? users.error.message : undefined}
               action={
                 <Button variant="outline" size="sm" onClick={() => void users.refetch()}>
-                  重试
+                  {t('common.retry')}
                 </Button>
               }
             />
@@ -173,8 +186,16 @@ export function AdminUsersPage() {
           <div className="p-5">
             <EmptyState
               icon="users"
-              title={users.isLoading ? '正在加载…' : filters.keyword ? '没有匹配的用户' : '还没有用户'}
-              description={filters.keyword ? '换个关键词，或清空筛选条件。' : '新建的账号会出现在这里。'}
+              title={
+                users.isLoading
+                  ? t('common.loading')
+                  : filters.keyword
+                    ? t('admin.users.emptySearch')
+                    : t('admin.users.empty')
+              }
+              description={
+                filters.keyword ? t('admin.users.emptySearchHint') : t('admin.users.emptyHint')
+              }
             />
           </div>
         ) : (
@@ -182,12 +203,12 @@ export function AdminUsersPage() {
             <table className="w-full min-w-3xl border-collapse text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">用户</th>
-                  <th className="px-3 py-3 font-medium">角色</th>
-                  <th className="px-3 py-3 font-medium">状态</th>
-                  <th className="hidden px-3 py-3 font-medium md:table-cell">导图</th>
-                  <th className="hidden px-3 py-3 font-medium lg:table-cell">最近登录</th>
-                  <th className="px-5 py-3 text-right font-medium">操作</th>
+                  <th className="px-5 py-3 font-medium">{t('admin.users.colUser')}</th>
+                  <th className="px-3 py-3 font-medium">{t('admin.users.colRole')}</th>
+                  <th className="px-3 py-3 font-medium">{t('admin.users.colStatus')}</th>
+                  <th className="hidden px-3 py-3 font-medium md:table-cell">{t('admin.users.colMaps')}</th>
+                  <th className="hidden px-3 py-3 font-medium lg:table-cell">{t('admin.users.colLastLogin')}</th>
+                  <th className="px-5 py-3 text-right font-medium">{t('admin.users.colActions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/70">
@@ -208,17 +229,17 @@ export function AdminUsersPage() {
                           <div className="min-w-0">
                             <p className="truncate font-medium">
                               {user.nickname || user.username}
-                              {isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">（你）</span> : null}
+                              {isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">{t('admin.users.you')}</span> : null}
                             </p>
                             <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <Badge tone={user.role === 'admin' ? 'primary' : 'neutral'}>{ROLE_LABEL[user.role]}</Badge>
+                        <Badge tone={user.role === 'admin' ? 'primary' : 'neutral'}>{t(ROLE_LABEL_KEY[user.role])}</Badge>
                       </td>
                       <td className="px-3 py-3">
-                        <Badge tone={status.tone}>{status.label}</Badge>
+                        <Badge tone={status.tone}>{t(status.labelKey)}</Badge>
                       </td>
                       <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">{formatNumber(user.mapCount)}</td>
                       <td className="hidden px-3 py-3 text-muted-foreground lg:table-cell" title={formatDateTime(user.lastLoginAt)}>
@@ -226,14 +247,20 @@ export function AdminUsersPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" aria-label={`编辑 ${user.username}`} title="编辑" onClick={() => setEditing(user)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t('admin.users.editLabel', { name: user.username })}
+                            title={t('admin.users.edit')}
+                            onClick={() => setEditing(user)}
+                          >
                             <Icon name="pencil" className="size-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`重置 ${user.username} 的密码`}
-                            title={isSelf ? '不能重置自己的密码' : '重置密码'}
+                            aria-label={t('admin.users.resetLabel', { name: user.username })}
+                            title={isSelf ? t('admin.users.cannotResetSelf') : t('admin.users.resetPassword')}
                             disabled={isSelf}
                             onClick={() => setResetting(user)}
                           >
@@ -242,8 +269,8 @@ export function AdminUsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`删除 ${user.username}`}
-                            title={isSelf ? '不能删除自己' : '删除用户'}
+                            aria-label={t('admin.users.deleteLabel', { name: user.username })}
+                            title={isSelf ? t('admin.users.cannotDeleteSelf') : t('admin.users.delete')}
                             disabled={isSelf}
                             onClick={() => setDeleting(user)}
                             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -286,6 +313,7 @@ interface UserEditorProps {
 }
 
 function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
+  const { t } = useTranslation();
   const { config } = useSiteConfig();
   const isCreate = user === null;
   const [form, setForm] = useState(() => ({
@@ -317,7 +345,7 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
       });
     },
     onSuccess: () => {
-      toast.success(isCreate ? '用户已创建' : '用户已更新');
+      toast.success(isCreate ? t('admin.users.created') : t('admin.users.updated'));
       onSaved();
       onClose();
     },
@@ -334,7 +362,7 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
           return;
         }
       }
-      toast.error(error instanceof Error ? error.message : '保存失败');
+      toast.error(error instanceof Error ? error.message : t('admin.users.saveFailed'));
     },
   });
 
@@ -360,15 +388,15 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title={isCreate ? '新建用户' : `编辑 ${user?.username ?? ''}`}
-      description={isCreate ? '创建后即可用这个密码登录，建议提醒用户尽快修改。' : '用户名不可修改；改邮箱需要唯一。'}
+      title={isCreate ? t('admin.users.createTitle') : t('admin.users.editTitle', { name: user?.username ?? '' })}
+      description={isCreate ? t('admin.users.createDescription') : t('admin.users.editDescription')}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            取消
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="user-editor-form" disabled={save.isPending}>
-            {save.isPending ? '保存中…' : '保存'}
+            {save.isPending ? t('common.saving') : t('common.save')}
           </Button>
         </>
       }
@@ -376,18 +404,24 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
       <form id="user-editor-form" onSubmit={submit} className="space-y-4" noValidate>
         {isCreate ? (
           <TextField
-            label="用户名"
+            label={t('admin.users.username')}
             value={form.username}
             onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
             error={errors.username}
-            hint="3–32 位字母、数字、下划线或短横线，创建后不可修改。"
+            hint={t('admin.users.usernameHint')}
             autoComplete="off"
           />
         ) : (
-          <TextField label="用户名" value={form.username} readOnly disabled hint="用户名不可修改。" />
+          <TextField
+            label={t('admin.users.username')}
+            value={form.username}
+            readOnly
+            disabled
+            hint={t('admin.users.usernameReadonlyHint')}
+          />
         )}
         <TextField
-          label="邮箱"
+          label={t('admin.users.email')}
           type="email"
           value={form.email}
           onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
@@ -396,45 +430,45 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
         />
         {isCreate ? (
           <TextField
-            label="初始密码"
+            label={t('admin.users.initialPassword')}
             type="password"
             value={form.password}
             onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
             error={errors.password}
-            hint={`至少 ${config.passwordMinLength} 个字符。`}
+            hint={t('admin.users.passwordHint', { min: config.passwordMinLength })}
             autoComplete="new-password"
           />
         ) : null}
         <TextField
-          label="昵称"
+          label={t('admin.users.nickname')}
           value={form.nickname}
           onChange={(event) => setForm((prev) => ({ ...prev, nickname: event.target.value }))}
           error={errors.nickname}
-          hint="留空则显示用户名。"
+          hint={t('admin.users.nicknameHint')}
         />
         <SelectField
-          label="角色"
+          label={t('admin.users.role')}
           value={form.role}
           onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as Role }))}
           options={[
-            { value: 'user', label: ROLE_LABEL.user },
-            { value: 'admin', label: ROLE_LABEL.admin },
+            { value: 'user', label: t(ROLE_LABEL_KEY.user) },
+            { value: 'admin', label: t(ROLE_LABEL_KEY.admin) },
           ]}
           error={errors.role}
-          hint={form.role === 'admin' ? '管理员可以管理所有用户与站点设置。' : undefined}
+          hint={form.role === 'admin' ? t('admin.users.roleAdminHint') : undefined}
         />
         {isCreate ? null : (
           <SelectField
-            label="状态"
+            label={t('admin.users.status')}
             value={form.status}
             onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as UserStatus }))}
             options={[
-              { value: 'active', label: STATUS_META.active.label },
-              { value: 'disabled', label: STATUS_META.disabled.label },
-              { value: 'pending', label: STATUS_META.pending.label },
+              { value: 'active', label: t(STATUS_META.active.labelKey) },
+              { value: 'disabled', label: t(STATUS_META.disabled.labelKey) },
+              { value: 'pending', label: t(STATUS_META.pending.labelKey) },
             ]}
             error={errors.status}
-            hint="设为禁用会立刻踢下线，已签发的访问令牌全部失效。"
+            hint={t('admin.users.statusDisabledHint')}
           />
         )}
       </form>
@@ -443,6 +477,7 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
 }
 
 function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onClose: () => void; onDone: () => void }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<'generate' | 'custom'>('generate');
   const [password, setPassword] = useState('');
   const [result, setResult] = useState<{ password: string; generated: boolean } | null>(null);
@@ -454,7 +489,7 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
       onDone();
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : '重置失败');
+      toast.error(error instanceof Error ? error.message : t('admin.users.resetFailed'));
     },
   });
 
@@ -467,10 +502,10 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
     if (!result) return;
     try {
       await navigator.clipboard.writeText(result.password);
-      toast.success('密码已复制');
+      toast.success(t('admin.users.passwordCopied'));
     } catch {
       // 非 HTTPS 或权限被拒时 clipboard 不可用：让用户手动选中复制。
-      toast.error('复制失败，请手动选中密码复制。');
+      toast.error(t('admin.users.copyFailed'));
     }
   };
 
@@ -480,28 +515,24 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
       onClose={close}
       // 新密码只在这次响应里出现，关掉就查不到了：必须让用户先复制。
       dismissible={result === null}
-      title={result ? '新密码已生成' : `重置 ${user?.username ?? ''} 的密码`}
-      description={
-        result
-          ? '这是本次唯一一次显示明文密码。关闭后只能重新重置。'
-          : '重置后该用户的所有登录会话会立即失效。'
-      }
+      title={result ? t('admin.users.resetDoneTitle') : t('admin.users.resetTitle', { name: user?.username ?? '' })}
+      description={result ? t('admin.users.resetDoneDescription') : t('admin.users.resetDescription')}
       footer={
         result ? (
           <>
             <Button variant="outline" onClick={() => void copy()}>
               <Icon name="copy" className="size-4" />
-              复制密码
+              {t('admin.users.copyPassword')}
             </Button>
-            <Button onClick={close}>我已保存</Button>
+            <Button onClick={close}>{t('admin.users.savedPassword')}</Button>
           </>
         ) : (
           <>
             <Button variant="ghost" onClick={close}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button disabled={reset.isPending || (mode === 'custom' && password.length === 0)} onClick={() => reset.mutate()}>
-              {reset.isPending ? '处理中…' : '重置密码'}
+              {reset.isPending ? t('admin.users.processing') : t('admin.users.resetPassword')}
             </Button>
           </>
         )
@@ -515,7 +546,8 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
           </div>
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Icon name="alert" className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-            {result.generated ? '密码由服务端随机生成。' : '密码为你手动指定的值。'}请通过可信渠道转交给用户，并提醒其登录后立即修改。
+            {result.generated ? t('admin.users.generatedNote') : t('admin.users.customNote')}
+            {t('admin.users.handoverHint')}
           </p>
         </div>
       ) : (
@@ -523,8 +555,8 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
           <div className="grid gap-2 sm:grid-cols-2">
             {(
               [
-                { value: 'generate', label: '随机生成', hint: '16 位，去掉易混字符' },
-                { value: 'custom', label: '手动指定', hint: '需要满足密码策略' },
+                { value: 'generate', labelKey: 'admin.users.modeGenerate', hintKey: 'admin.users.modeGenerateHint' },
+                { value: 'custom', labelKey: 'admin.users.modeCustom', hintKey: 'admin.users.modeCustomHint' },
               ] as const
             ).map((option) => (
               <button
@@ -538,14 +570,14 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
                     : 'border-border hover:bg-accent hover:text-accent-foreground'
                 }`}
               >
-                <span className="block">{option.label}</span>
-                <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{option.hint}</span>
+                <span className="block">{t(option.labelKey)}</span>
+                <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{t(option.hintKey)}</span>
               </button>
             ))}
           </div>
           {mode === 'custom' ? (
             <TextField
-              label="新密码"
+              label={t('admin.users.newPassword')}
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -559,17 +591,18 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
 }
 
 function DeleteUserDialog({ user, onClose, onDone }: { user: User | null; onClose: () => void; onDone: () => void }) {
+  const { t } = useTranslation();
   const [strategy, setStrategy] = useState<'delete' | 'keep'>('delete');
 
   const remove = useMutation({
     mutationFn: () => adminApi.deleteUser(user!.uid, strategy),
     onSuccess: () => {
-      toast.success('用户已删除');
+      toast.success(t('admin.users.deleted'));
       onDone();
       onClose();
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : '删除失败');
+      toast.error(error instanceof Error ? error.message : t('admin.users.deleteFailed'));
     },
   });
 
@@ -577,28 +610,28 @@ function DeleteUserDialog({ user, onClose, onDone }: { user: User | null; onClos
     <Modal
       open={Boolean(user)}
       onClose={onClose}
-      title={`删除 ${user?.username ?? ''}？`}
-      description="账号与登录会话会被立即移除，此操作不可撤销。"
+      title={t('admin.users.deleteTitle', { name: user?.username ?? '' })}
+      description={t('admin.users.deleteDescription')}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            取消
+            {t('common.cancel')}
           </Button>
           <Button variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate()}>
-            {remove.isPending ? '删除中…' : '确认删除'}
+            {remove.isPending ? t('admin.users.deleting') : t('admin.users.confirmDelete')}
           </Button>
         </>
       }
     >
       <SelectField
-        label="该用户的导图"
+        label={t('admin.users.mapsLabel')}
         value={strategy}
         onChange={(event) => setStrategy(event.target.value as 'delete' | 'keep')}
         options={[
-          { value: 'delete', label: '一并删除' },
-          { value: 'keep', label: '保留（转为无主）' },
+          { value: 'delete', label: t('admin.users.mapsDelete') },
+          { value: 'keep', label: t('admin.users.mapsKeep') },
         ]}
-        hint="导图数据将在 M2 引入；当前两种选择效果相同。"
+        hint={t('admin.users.mapsHint')}
       />
     </Modal>
   );

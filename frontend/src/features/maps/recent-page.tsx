@@ -93,7 +93,7 @@ export function RecentPage() {
   const createMap = async () => {
     setCreating(true);
     try {
-      const created = await mapApi.create({ title: '未命名导图', document: createStarterDocument() });
+      const created = await mapApi.create({ title: t('editor.untitledMap'), document: createStarterDocument() });
       navigate(`/maps/${created.uid}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('maps.error'));

@@ -1,3 +1,4 @@
+import i18n from '@/lib/i18n';
 import { ApiError, type ApiErrorEnvelope } from './errors';
 import type { Paged, Pagination } from './types';
 
@@ -97,7 +98,7 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
       credentials: 'include',
     });
   } catch (cause) {
-    throw new Error('无法连接服务器，请检查网络后重试。', { cause });
+    throw new Error(i18n.t('network.offline'), { cause });
   }
 
   if (response.status === 401 && auth && retryAuth && path !== '/auth/refresh') {
@@ -115,7 +116,7 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
   try {
     payload = await response.json();
   } catch {
-    throw new Error(`服务器返回了无法识别的响应（HTTP ${response.status}）。`);
+    throw new Error(i18n.t('network.unreadable', { status: response.status }));
   }
 
   if (!response.ok) {
@@ -123,11 +124,11 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
     if (errorPayload?.error?.code && errorPayload.error.message) {
       throw new ApiError(errorPayload, response.status);
     }
-    throw new Error(`请求失败（HTTP ${response.status}）。`);
+    throw new Error(i18n.t('network.failed', { status: response.status }));
   }
 
   if (typeof payload !== 'object' || payload === null || !('data' in payload)) {
-    throw new Error('服务器响应格式无效。');
+    throw new Error(i18n.t('network.invalidBody'));
   }
   return payload as ApiEnvelope<T>;
 }

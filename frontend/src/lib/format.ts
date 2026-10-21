@@ -4,17 +4,46 @@
  * 集中在一处而不是散落各页：同一个「最近登录」在用户表里用相对时间、
  * 在详情里用绝对时间，两者必须对同一个空值给出同样的占位符——分散写时
  * 总有一处漏掉 null 分支，页面上就会出现 "Invalid Date"。
+ *
+ * **locale 跟着界面语言走，不写死。** 这里原先是三个 `new Intl.*('zh-CN')`
+ * 模块级常量：切到 en-US 后日期照旧是 `2026/10/21`，相对时间照旧是「3 分钟前」，
+ * 而这一层没有任何组件能补救——调用方拿到的已经是一个拼好的字符串。
+ * 改成按语言缓存格式化器：语言变了重建，同语言复用（`Intl.DateTimeFormat`
+ * 构造一次约 0.1ms，每次调用都新建会拖慢长列表）。
  */
 
-const DATE = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
-const DATE_TIME = new Intl.DateTimeFormat('zh-CN', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-const NUMBER = new Intl.NumberFormat('zh-CN');
+import i18n from '@/lib/i18n';
+
+interface Formatters {
+  date: Intl.DateTimeFormat;
+  dateTime: Intl.DateTimeFormat;
+  dayMonth: Intl.DateTimeFormat;
+  number: Intl.NumberFormat;
+  list: Intl.ListFormat;
+}
+
+const cache = new Map<string, Formatters>();
+
+function formatters(): Formatters {
+  const locale = i18n.language || 'zh-CN';
+  const hit = cache.get(locale);
+  if (hit !== undefined) return hit;
+  const built: Formatters = {
+    date: new Intl.DateTimeFormat(locale, { year: 'numeric', month: '2-digit', day: '2-digit' }),
+    dateTime: new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    dayMonth: new Intl.DateTimeFormat(locale, { month: '2-digit', day: '2-digit' }),
+    number: new Intl.NumberFormat(locale),
+    list: new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }),
+  };
+  cache.set(locale, built);
+  return built;
+}
 
 /** 空值占位符。全站统一用它，避免有的地方是 "-"、有的是 "暂无"。 */
 export const PLACEHOLDER = '—';
@@ -27,12 +56,25 @@ function toDate(value: string | null | undefined): Date | null {
 
 export function formatDate(value: string | null | undefined): string {
   const date = toDate(value);
-  return date ? DATE.format(date) : PLACEHOLDER;
+  return date ? formatters().date.format(date) : PLACEHOLDER;
 }
 
 export function formatDateTime(value: string | null | undefined): string {
   const date = toDate(value);
-  return date ? DATE_TIME.format(date) : PLACEHOLDER;
+  return date ? formatters().dateTime.format(date) : PLACEHOLDER;
+}
+
+/**
+ * 只到「月-日」的短日期。
+ *
+ * 审计列表那一列用 `formatDateTime(...).slice(5, 11)` 截出来的，那是照着
+ * `2026/10/21 14:19` 的固定宽度写死的——en-US 下同一串是
+ * `10/21/2026, 2:19 PM`，截出来变成 `2026, `。格式化必须在 Intl 里做，
+ * 不能在字符串上做。
+ */
+export function formatDayMonth(value: string | null | undefined): string {
+  const date = toDate(value);
+  return date ? formatters().dayMonth.format(date) : PLACEHOLDER;
 }
 
 /**
@@ -50,10 +92,10 @@ export function formatRelative(value: string | null | undefined, now: number = D
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
-  if (diff < minute) return '刚刚';
-  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`;
-  if (diff < day) return `${Math.floor(diff / hour)} 小时前`;
-  if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`;
+  if (diff < minute) return i18n.t('format.justNow');
+  if (diff < hour) return i18n.t('format.minutesAgo', { count: Math.floor(diff / minute) });
+  if (diff < day) return i18n.t('format.hoursAgo', { count: Math.floor(diff / hour) });
+  if (diff < 7 * day) return i18n.t('format.daysAgo', { count: Math.floor(diff / day) });
   return formatDate(value);
 }
 
@@ -78,5 +120,16 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatNumber(value: number): string {
-  return Number.isFinite(value) ? NUMBER.format(value) : PLACEHOLDER;
+  return Number.isFinite(value) ? formatters().number.format(value) : PLACEHOLDER;
+}
+
+/**
+ * 把一组标识拼成人话。
+ *
+ * 中文用顿号、英文用逗号加 and——这不该由调用方 `join('、')` 决定，
+ * 那样英文界面上会出现 `avatar、email、password`。
+ */
+export function formatList(items: readonly string[]): string {
+  if (items.length === 0) return '';
+  return formatters().list.format(items);
 }

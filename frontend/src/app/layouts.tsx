@@ -66,7 +66,7 @@ export function AppLayout() {
     try {
       await api.post('/auth/logout');
     } catch {
-      toast.error('服务器未能确认登出；本地登录状态已清除。');
+      toast.error(t('app.logoutUnconfirmed'));
     } finally {
       setAccessToken(null);
       queryClient.clear();

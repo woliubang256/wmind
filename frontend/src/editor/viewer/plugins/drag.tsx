@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Point, Rect } from '../../layout/types';
 import { useViewer } from '../viewer-context';
 import { useLatest } from './use-latest';
@@ -43,14 +44,21 @@ interface DragView {
   candidate: DropCandidate | null;
 }
 
-const REASON_TEXT: Record<DropRejection, string> = {
-  self: '不能放到自己身上',
-  descendant: '不能放到自己的子节点里',
-  root: '中心主题不能移动',
-  'floating-target': '自由主题不能作为父节点',
+/**
+ * 拒绝原因 → i18n key。
+ *
+ * 文案要跟着界面语言走：拖拽时的红字提示是**唯一**告诉用户「为什么不行」的
+ * 地方，只变颜色对色盲用户无效，写成中文则对英文用户无效。
+ */
+const REASON_KEY: Record<DropRejection, string> = {
+  self: 'editor.drag.self',
+  descendant: 'editor.drag.descendant',
+  root: 'editor.drag.root',
+  'floating-target': 'editor.drag.floatingTarget',
 };
 
 export function DragPlugin() {
+  const { t } = useTranslation();
   const { svgRef, layout } = useViewer();
   const latest = useLatest(useViewer());
 
@@ -283,7 +291,7 @@ export function DragPlugin() {
             strokeWidth={3}
             paintOrder="stroke"
           >
-            {candidate.reason ? REASON_TEXT[candidate.reason] : '不可放置'}
+            {candidate.reason ? t(REASON_KEY[candidate.reason]) : t('editor.drag.invalid')}
           </text>
         </>
       ) : null}
@@ -298,7 +306,7 @@ export function DragPlugin() {
           strokeWidth={3}
           paintOrder="stroke"
         >
-          松开转为自由主题
+          {t('editor.drag.toFloating')}
         </text>
       ) : null}
 
@@ -311,7 +319,7 @@ export function DragPlugin() {
           strokeWidth={3}
           paintOrder="stroke"
         >
-          {view.ids.length} 个主题
+          {t('editor.drag.selectedCount', { count: view.ids.length })}
         </text>
       ) : null}
     </g>

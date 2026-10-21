@@ -1,21 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { Badge, EmptyState, PageHeader, Panel } from '@/components/ui/panel';
 import { adminApi } from '@/lib/api/endpoints';
 import type { AuditLog } from '@/lib/api/types';
-import { formatBytes, formatDateTime, formatNumber, formatRelative } from '@/lib/format';
+import { formatBytes, formatDateTime, formatDayMonth, formatList, formatNumber, formatRelative } from '@/lib/format';
 import { adminKeys } from './queries';
 
+/**
+ * 审计动作 → i18n key。
+ *
+ * 不写成 `t('admin.audit.' + action)`：动作名本身带点（`user.create`），拼出来
+ * 的键要先按分隔符切开再逐级找，找不到还得回退到扁平查找——中间任何一步的
+ * 行为差异都会让某个动作在某种语言下露出原始英文动作名。显式映射查不到时
+ * 直接退回动作名，行为可预期。
+ */
 const ACTION_LABEL: Record<string, string> = {
-  'user.create': '创建用户',
-  'user.update': '修改用户',
-  'user.disable': '禁用用户',
-  'user.enable': '启用用户',
-  'user.delete': '删除用户',
-  'user.role': '调整角色',
-  'user.reset_password': '重置密码',
-  'settings.update': '修改设置',
+  'user.create': 'admin.audit.createUser',
+  'user.update': 'admin.audit.updateUser',
+  'user.disable': 'admin.audit.disableUser',
+  'user.enable': 'admin.audit.enableUser',
+  'user.delete': 'admin.audit.deleteUser',
+  'user.role': 'admin.audit.changeRole',
+  'user.reset_password': 'admin.audit.resetPassword',
+  'settings.update': 'admin.audit.updateSettings',
 };
 
 const ACTION_TONE: Record<string, 'primary' | 'warning' | 'danger' | 'neutral'> = {
@@ -27,6 +36,7 @@ const ACTION_TONE: Record<string, 'primary' | 'warning' | 'danger' | 'neutral'> 
 };
 
 export function AdminOverviewPage() {
+  const { t } = useTranslation();
   const stats = useQuery({ queryKey: adminKeys.stats, queryFn: adminApi.stats });
   const auditQuery = { page: 1, pageSize: 8 };
   const audit = useQuery({
@@ -39,12 +49,12 @@ export function AdminOverviewPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="管理概览"
-        description="站点规模与最近的管理操作。"
+        title={t('admin.overview.title')}
+        description={t('admin.overview.description')}
         actions={
           <Button variant="outline" size="sm" onClick={() => void stats.refetch()} disabled={stats.isFetching}>
             <Icon name="clock" className="size-4" />
-            {stats.isFetching ? '刷新中…' : '刷新'}
+            {stats.isFetching ? t('admin.overview.refreshing') : t('admin.overview.refresh')}
           </Button>
         }
       />
@@ -52,43 +62,57 @@ export function AdminOverviewPage() {
       {stats.isError ? (
         <EmptyState
           icon="alert"
-          title="统计数据加载失败"
+          title={t('admin.overview.statsFailed')}
           description={stats.error instanceof Error ? stats.error.message : undefined}
           action={
             <Button variant="outline" size="sm" onClick={() => void stats.refetch()}>
-              重试
+              {t('common.retry')}
             </Button>
           }
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard icon="users" label="用户总数" value={formatNumber(data?.userCount ?? 0)} />
-          <StatCard icon="check" label="活跃用户" value={formatNumber(data?.activeUserCount ?? 0)} />
-          <StatCard icon="waypoints" label="导图总数" value={formatNumber(data?.mapCount ?? 0)} hint="导图功能在 M2 接入" />
-          <StatCard icon="image" label="存储占用" value={formatBytes(data?.storageUsedBytes ?? 0)} />
+          <StatCard icon="users" label={t('admin.overview.userCount')} value={formatNumber(data?.userCount ?? 0)} />
+          <StatCard
+            icon="check"
+            label={t('admin.overview.activeUserCount')}
+            value={formatNumber(data?.activeUserCount ?? 0)}
+          />
+          <StatCard icon="waypoints" label={t('admin.overview.mapCount')} value={formatNumber(data?.mapCount ?? 0)} />
+          <StatCard
+            icon="image"
+            label={t('admin.overview.storageUsed')}
+            value={formatBytes(data?.storageUsedBytes ?? 0)}
+          />
         </div>
       )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel
-          title="近 14 天新增"
-          description={data ? `今日新增 ${formatNumber(data.mapCountToday)} 张导图` : '正在加载…'}
+          title={t('admin.overview.trendTitle')}
+          description={
+            data
+              ? t('admin.overview.trendToday', { count: formatNumber(data.mapCountToday) })
+              : t('common.loading')
+          }
         >
           <TrendChart points={data?.trend ?? []} />
         </Panel>
 
         <Panel
-          title="最近操作"
-          description="审计日志只增不改，记录谁在什么时候改了什么。"
+          title={t('admin.overview.auditTitle')}
+          description={t('admin.overview.auditDescription')}
           actions={
-            <Badge tone="neutral">{formatNumber(audit.data?.pagination.total ?? 0)} 条</Badge>
+            <Badge tone="neutral">
+              {t('admin.overview.auditCount', { count: formatNumber(audit.data?.pagination.total ?? 0) })}
+            </Badge>
           }
           bodyClassName="p-0"
         >
           {audit.isError ? (
-            <p className="px-5 py-8 text-center text-sm text-muted-foreground">审计日志加载失败。</p>
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t('admin.overview.auditFailed')}</p>
           ) : (audit.data?.items.length ?? 0) === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-muted-foreground">还没有管理操作记录。</p>
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t('admin.overview.auditEmpty')}</p>
           ) : (
             <ul className="divide-y divide-border/70">
               {audit.data?.items.map((log) => (
@@ -123,8 +147,9 @@ function StatCard({ icon, label, value, hint }: { icon: IconName; label: string;
  * 否则用户会误以为两条柱一样高就等于数值一样。
  */
 function TrendChart({ points }: { points: { date: string; newUsers: number; newMaps: number }[] }) {
+  const { t } = useTranslation();
   if (points.length === 0) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">暂无数据。</p>;
+    return <p className="py-10 text-center text-sm text-muted-foreground">{t('admin.overview.trendEmpty')}</p>;
   }
   const max = Math.max(1, ...points.map((point) => Math.max(point.newUsers, point.newMaps)));
 
@@ -132,7 +157,15 @@ function TrendChart({ points }: { points: { date: string; newUsers: number; newM
     <div className="space-y-3">
       <div className="flex items-end gap-1.5" style={{ height: 132 }}>
         {points.map((point) => (
-          <div key={point.date} className="group flex h-full flex-1 flex-col justify-end gap-1" title={`${point.date}：新增用户 ${point.newUsers}，新增导图 ${point.newMaps}`}>
+          <div
+            key={point.date}
+            className="group flex h-full flex-1 flex-col justify-end gap-1"
+            title={t('admin.overview.trendTooltip', {
+              date: point.date,
+              users: formatNumber(point.newUsers),
+              maps: formatNumber(point.newMaps),
+            })}
+          >
             <div className="flex h-full items-end justify-center gap-0.5">
               <span
                 className="w-1/2 max-w-2 rounded-t bg-primary/80 transition-colors group-hover:bg-primary"
@@ -150,10 +183,12 @@ function TrendChart({ points }: { points: { date: string; newUsers: number; newM
         <span>{points[0]?.date}</span>
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <i className="size-2 rounded-full bg-primary/80" aria-hidden="true" />用户
+            <i className="size-2 rounded-full bg-primary/80" aria-hidden="true" />
+            {t('admin.overview.legendUsers')}
           </span>
           <span className="flex items-center gap-1">
-            <i className="size-2 rounded-full bg-emerald-500/70" aria-hidden="true" />导图
+            <i className="size-2 rounded-full bg-emerald-500/70" aria-hidden="true" />
+            {t('admin.overview.legendMaps')}
           </span>
         </span>
         <span>{points.at(-1)?.date}</span>
@@ -163,7 +198,9 @@ function TrendChart({ points }: { points: { date: string; newUsers: number; newM
 }
 
 function AuditRow({ log }: { log: AuditLog }) {
-  const label = ACTION_LABEL[log.action] ?? log.action;
+  const { t } = useTranslation();
+  const labelKey = ACTION_LABEL[log.action];
+  const label = labelKey === undefined ? log.action : t(labelKey);
   const tone = ACTION_TONE[log.action] ?? 'neutral';
   const detail = summarizeDetail(log);
 
@@ -175,11 +212,11 @@ function AuditRow({ log }: { log: AuditLog }) {
           {detail ? <span className="truncate text-sm">{detail}</span> : null}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {log.ip || '未知来源'} · {formatRelative(log.createdAt)}
+          {log.ip || t('admin.overview.unknownSource')} · {formatRelative(log.createdAt)}
         </p>
       </div>
       <time className="shrink-0 text-xs text-muted-foreground" dateTime={log.createdAt} title={formatDateTime(log.createdAt)}>
-        {formatDateTime(log.createdAt).slice(5, 11)}
+        {formatDayMonth(log.createdAt)}
       </time>
     </li>
   );
@@ -190,13 +227,13 @@ function summarizeDetail(log: AuditLog): string {
   const detail = log.detail ?? {};
   const keys = (detail as { keys?: unknown }).keys;
   if (Array.isArray(keys) && keys.length > 0) {
-    return keys.map(String).join('、');
+    return formatList(keys.map(String));
   }
   const username = (detail as { username?: unknown }).username;
   if (typeof username === 'string' && username) return username;
   const changes = (detail as { changes?: unknown }).changes;
   if (changes && typeof changes === 'object') {
-    return Object.keys(changes as Record<string, unknown>).join('、');
+    return formatList(Object.keys(changes as Record<string, unknown>));
   }
   if (log.targetId) return log.targetId;
   return '';

@@ -9,6 +9,7 @@
  * 所有取舍都是围绕这一条做的，下面每处都写清了原因。
  */
 
+import i18n from '@/lib/i18n';
 import type { Sheet, Topic, WmindDocument } from '../model/types';
 
 /** 一层缩进。两格：Markdown 里 2 空格足以区分层级，4 格会让深层内容跑得很远。 */
@@ -41,7 +42,7 @@ function labelText(label: string): string {
  * 但为了不让标题凭空消失，链接写成 `[标题](href)` 而不是只留 href。
  */
 function inlineOf(topic: Topic): string {
-  const title = escapeLineStart(topic.title) || '(未命名)';
+  const title = escapeLineStart(topic.title) || i18n.t('editor.export.untitledTopic');
   const parts: string[] = [];
 
   if (topic.href !== null && topic.href !== '') {
@@ -104,7 +105,9 @@ function markdownTree(topic: Topic, depth: number, out: string[]): void {
 /** 游离主题追加在末尾，用一个小标题隔开：它们本来就不在树上。 */
 function markdownFloating(sheet: Sheet, out: string[]): void {
   if (sheet.floatingTopics.length === 0) return;
-  out.push('## 游离主题');
+  // 小标题进的是**导出文件**，所以跟随界面语言：中文用户拿到的 Markdown
+  // 里不该出现英文小标题，反之亦然。
+  out.push(`## ${i18n.t('editor.export.floatingSection')}`);
   out.push('');
   for (const topic of sheet.floatingTopics) {
     out.push(`- ${inlineOf(topic)}`);
@@ -119,7 +122,7 @@ function markdownFloating(sheet: Sheet, out: string[]): void {
  */
 export function exportMarkdown(document: WmindDocument, sheetId: string | null): string {
   const sheet = document.sheets.find((item) => item.id === sheetId) ?? document.sheets[0];
-  if (sheet === undefined) return `# ${escapeLineStart(document.title) || '(未命名导图)'}\n`;
+  if (sheet === undefined) return `# ${escapeLineStart(document.title) || i18n.t('editor.untitledMap')}\n`;
 
   const out: string[] = [];
   markdownTree(sheet.rootTopic, 0, out);
@@ -142,7 +145,7 @@ function escapeXml(value: string): string {
 
 function opmlOutline(topic: Topic, depth: number, out: string[]): void {
   const indent = INDENT.repeat(depth + 2);
-  const attributes = [`text="${escapeXml(topic.title || '(未命名)')}"`];
+  const attributes = [`text="${escapeXml(topic.title || i18n.t('editor.export.untitledTopic'))}"`];
 
   const note = topic.notes?.plain?.trim() ?? '';
   if (note !== '') attributes.push(`_note="${escapeXml(note)}"`);
@@ -175,7 +178,7 @@ function opmlOutline(topic: Topic, depth: number, out: string[]): void {
  */
 export function exportOpml(document: WmindDocument, sheetId: string | null): string {
   const sheet = document.sheets.find((item) => item.id === sheetId) ?? document.sheets[0];
-  const title = escapeXml(document.title || sheet?.title || '(未命名导图)');
+  const title = escapeXml(document.title || sheet?.title || i18n.t('editor.untitledMap'));
 
   const body: string[] = [];
   if (sheet !== undefined) {

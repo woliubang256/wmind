@@ -14,8 +14,14 @@ import type { FontFamily } from '../model/types';
 
 export interface FontDefinition {
   id: FontFamily;
-  /** 界面里显示的名字。 */
-  label: string;
+  /**
+   * 界面里显示的名字（i18n key）。
+   *
+   * 存 key 而不是名字：这张表是模块级常量，写死中文后切换语言不会跟着变。
+   * 注意**不要**把这里当成字体名——真正的字体名在 `stack` 里，`labelKey`
+   * 只给下拉框看。
+   */
+  labelKey: string;
   /** CSS font-family 值，含完整的回退链。 */
   stack: string;
   /** 是否随应用分发字体文件（决定首屏是否需要等 `document.fonts.load`）。 */
@@ -40,7 +46,7 @@ export interface FontDefinition {
 export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
   sans: {
     id: 'sans',
-    label: '思源黑体',
+    labelKey: 'editor.font.sans',
     stack: "'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif",
     bundled: true,
     cssPath: '/fonts/sans.css',
@@ -49,7 +55,7 @@ export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
   },
   system: {
     id: 'system',
-    label: '跟随系统',
+    labelKey: 'editor.font.system',
     stack: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
     bundled: false,
     cssPath: null,
@@ -57,7 +63,7 @@ export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
   },
   serif: {
     id: 'serif',
-    label: '思源宋体',
+    labelKey: 'editor.font.serif',
     stack: "'Noto Serif SC', 'Songti SC', SimSun, Georgia, serif",
     bundled: true,
     cssPath: '/fonts/serif.css',
@@ -65,7 +71,7 @@ export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
   },
   mono: {
     id: 'mono',
-    label: '等宽',
+    labelKey: 'editor.font.mono',
     stack: "'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
     bundled: true,
     cssPath: '/fonts/mono.css',

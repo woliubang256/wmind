@@ -16,6 +16,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/ui/icon';
 
 function subscribe(onChange: () => void): () => void {
@@ -37,6 +38,7 @@ export function useOnline(): boolean {
 }
 
 export function OfflineBanner() {
+  const { t } = useTranslation();
   const online = useOnline();
   if (online) return null;
 
@@ -48,9 +50,7 @@ export function OfflineBanner() {
     >
       <div className="pointer-events-auto flex max-w-md items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 shadow-sm backdrop-blur dark:text-amber-300">
         <Icon name="alert" className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          网络已断开。改动会先留在本地草稿里，恢复连接后自动继续；这期间「保存失败」是预期的。
-        </span>
+        <span>{t('offline.message')}</span>
       </div>
     </div>
   );

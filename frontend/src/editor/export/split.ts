@@ -13,6 +13,7 @@
  */
 
 import { strToU8, zipSync } from 'fflate';
+import i18n from '@/lib/i18n';
 import type { Sheet, Topic, WmindDocument } from '../model/types';
 import { buildExportContext, type ExportContext, type ExportOptions } from './context';
 import { buildExportSvg } from './svg';
@@ -58,7 +59,7 @@ function isolate(sheet: Sheet, branch: Topic): Sheet {
 
 /** 文件名里不能出现的字符。与 `svg.ts` 的 `exportFileName` 同一套规则。 */
 function safeName(value: string): string {
-  return value.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || '未命名';
+  return value.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || i18n.t('editor.export.untitledFile');
 }
 
 /**
@@ -73,7 +74,7 @@ export function planBranches(document: WmindDocument, sheetId: string | null): B
 
   const used = new Map<string, number>();
   return sheet.rootTopic.children.attached.map((branch) => {
-    const base = safeName(branch.title || '未命名');
+    const base = safeName(branch.title || i18n.t('editor.export.untitledFile'));
     const seen = used.get(base) ?? 0;
     used.set(base, seen + 1);
     return {

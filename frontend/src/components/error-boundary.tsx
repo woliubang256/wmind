@@ -20,14 +20,34 @@
  * 2. **必须能报障**：错误编号 + 原始消息放在可折叠的详情里，用户复制给维护者
  *    就能对上控制台里那条日志。编号用随机短串而不是自增，避免泄露「这是第几次
  *    崩溃」这种无从解释的信息。
- * 3. **文案不走 i18n**：这一页要在「i18n 初始化也挂了」的情况下还能渲染，
- *    把 `t()` 引进来等于给它加一条新的崩溃路径。
+ * 3. **文案不能成为新的崩溃路径**：这一页要在「别的代码都挂了」的情况下还能
+ *    渲染。原先的做法是整页写死中文——安全，但英文用户看到的是中文报错页。
+ *    现在走 `tr()`：内部是 `i18n.t` 包一层 try/catch，取不到翻译就退回中文
+ *    字面量。i18n 正常时跟随语言，i18n 自己坏了时与从前行为一致，两条路都
+ *    不会抛。
  */
 
 import { Component, useEffect, useState, type ErrorInfo, type PropsWithChildren } from 'react';
 import { useRouteError } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import i18n from '@/lib/i18n';
+
+/**
+ * 取一条翻译，取不到就用中文兜底。
+ *
+ * 两个兜底都要：`i18n.t` 在 i18n 未初始化时会抛（`isInitialized` 检查），
+ * 而 `returnNull: false` 时找不到键会把键原样返回——那会让报错页上出现
+ * `crash.title` 这种比中文更难懂的东西。
+ */
+function tr(key: string, fallback: string, options?: Record<string, unknown>): string {
+  try {
+    const text = i18n.t(key, options);
+    return typeof text === 'string' && text !== '' && text !== key ? text : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 /** 本次崩溃的短编号：同时打进控制台与界面，用户报障时对得上。 */
 function newIncidentId(): string {
@@ -38,7 +58,7 @@ function newIncidentId(): string {
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
-  return '未知错误（错误对象不是 Error 实例）';
+  return tr('crash.unknown', '未知错误（错误对象不是 Error 实例）');
 }
 
 interface CrashViewProps {
@@ -54,22 +74,24 @@ function CrashView({ error, incident, componentStack }: CrashViewProps) {
         <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-destructive/10 text-destructive">
           <Icon name="alert" className="size-5" />
         </span>
-        <h1 className="mt-4 text-center text-lg font-semibold">页面出错了</h1>
+        <h1 className="mt-4 text-center text-lg font-semibold">{tr('crash.title', '页面出错了')}</h1>
         <p className="mt-2 text-center text-sm leading-6 text-muted-foreground">
-          刚才这一步没能完成，页面已经停下以免弄坏你的数据。刷新通常就能恢复；
-          如果反复出现，请把下面的错误编号一并反馈。
+          {tr(
+            'crash.body',
+            '刚才这一步没能完成，页面已经停下以免弄坏你的数据。刷新通常就能恢复；如果反复出现，请把下面的错误编号一并反馈。',
+          )}
         </p>
 
         <div className="mt-4 flex justify-center gap-2">
-          <Button onClick={() => window.location.reload()}>刷新页面</Button>
+          <Button onClick={() => window.location.reload()}>{tr('crash.reload', '刷新页面')}</Button>
           <Button variant="outline" onClick={() => window.location.assign('/')}>
-            返回首页
+            {tr('crash.home', '返回首页')}
           </Button>
         </div>
 
         <details className="mt-6 rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-xs">
           <summary className="cursor-pointer select-none text-muted-foreground">
-            错误详情（编号 {incident}）
+            {tr('crash.details', '错误详情（编号 {{incident}}）', { incident })}
           </summary>
           <p className="mt-2 break-words font-medium text-foreground">{errorMessage(error)}</p>
           {componentStack ? (
@@ -78,8 +100,10 @@ function CrashView({ error, incident, componentStack }: CrashViewProps) {
             </pre>
           ) : null}
           <p className="mt-2 text-muted-foreground">
-            未保存的修改可能还在本地草稿里：回到编辑器时若出现「发现本地修改」的提示，
-            选择恢复即可。
+            {tr(
+              'crash.draftHint',
+              '未保存的修改可能还在本地草稿里：回到编辑器时若出现「发现本地修改」的提示，选择恢复即可。',
+            )}
           </p>
         </details>
       </div>

@@ -16,6 +16,7 @@
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
+import i18n from '@/lib/i18n';
 import type { ExportContext } from './context';
 import { ExportCanvas } from './export-canvas';
 
@@ -51,6 +52,6 @@ export function exportFileName(title: string, extension: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 80);
-  const base = cleaned === '' ? '未命名导图' : cleaned;
+  const base = cleaned === '' ? i18n.t('editor.untitledMap') : cleaned;
   return `${base}.${extension}`;
 }

@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useBlocker, useNavigate } from 'react-router';
+import i18n from '@/lib/i18n';
 import { mapApi } from '@/lib/api/maps';
 import type { WmindDocument } from '@/editor/model/types';
 import type { EditorStore, EditorState } from '@/editor/store/editor-store';
@@ -31,7 +32,7 @@ export function hasUnsavedWork(state: EditorState): boolean {
 
 function messageOf(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
-  return '保存失败，请稍后重试。';
+  return i18n.t('editor.save.failedGeneric');
 }
 
 export interface UseAutosaveResult {
@@ -237,7 +238,7 @@ export function useAutosave({ uid, store, enabled = true }: UseAutosaveOptions):
     try {
       const state = store.getState();
       const copy = await mapApi.create({
-        title: `${state.doc.title} - 副本`,
+        title: `${state.doc.title} - ${i18n.t('editor.duplicateSuffix')}`,
         document: state.doc,
       });
       // 内容已经安全落到新导图上：把状态标成已保存，路由拦截才不会拦自己。

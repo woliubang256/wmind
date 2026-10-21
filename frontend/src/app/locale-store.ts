@@ -1,0 +1,64 @@
+import { useEffect } from 'react';
+import { create } from 'zustand';
+import {
+  applyLocale,
+  browserLanguages,
+  persistLocalePreference,
+  readLocalePreference,
+  resolveLocale,
+  type LocalePreference,
+  type SupportedLocale,
+} from '@/lib/i18n/preference';
+import i18n from '@/lib/i18n';
+
+interface LocaleState {
+  preference: LocalePreference;
+  /** 当前实际生效的语言。 */
+  locale: SupportedLocale;
+  setPreference: (preference: LocalePreference) => void;
+  /** 浏览器语言变化（极少见，但用户装了语言切换插件时会发生）。 */
+  syncWithBrowser: () => void;
+}
+
+/**
+ * 语言状态放在模块级 store 里，理由与 `theme-store` 一样：设置页与（将来可能
+ * 有的）页头入口是两个入口，各自持 state 会出现「设置里换了，别处没变」。
+ *
+ * 初始值取自 i18n 实例而不是重新读一遍 localStorage：`lib/i18n/index.ts` 在
+ * 模块加载时已经解析过一次，再算一次等于给「两处判定不一致」留了口子。
+ */
+export const useLocaleStore = create<LocaleState>((set, get) => ({
+  preference: readLocalePreference(),
+  locale: i18n.language === 'en-US' ? 'en-US' : 'zh-CN',
+
+  setPreference: (preference) => {
+    const locale = resolveLocale(preference, browserLanguages());
+    persistLocalePreference(preference);
+    applyLocale(locale);
+    void i18n.changeLanguage(locale);
+    set({ preference, locale });
+  },
+
+  syncWithBrowser: () => {
+    if (get().preference !== 'system') return;
+    const locale = resolveLocale('system', browserLanguages());
+    if (locale === get().locale) return;
+    applyLocale(locale);
+    void i18n.changeLanguage(locale);
+    set({ locale });
+  },
+}));
+
+/**
+ * 跟随系统档下，浏览器语言变了要跟着切。
+ *
+ * 只在 `system` 档生效；显式选了语言的人不该被浏览器的变化打断。
+ */
+export function useBrowserLocaleSync() {
+  const syncWithBrowser = useLocaleStore((state) => state.syncWithBrowser);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('languagechange', syncWithBrowser);
+    return () => window.removeEventListener('languagechange', syncWithBrowser);
+  }, [syncWithBrowser]);
+}

@@ -7,6 +7,11 @@ import type { SettingsValue } from '@/lib/api/types';
  * 后端校验，这里只负责「怎么显示」——所以重复是必要的：后端不该知道
  * 「这个开关在界面上叫什么」。
  *
+ * **只存 i18n key，不存文案。** 这里是一张模块级常量表，在模块求值时就固定
+ * 下来了；把中文写进来，切换语言后整张表不会跟着变——而这张表恰好覆盖了
+ * 20 个字段的标题、说明与单位，是最显眼的一屏。文案统一在 `admin.settings.*`
+ * 下，由 `settings-page.tsx` 在渲染时 `t()`。
+ *
  * 顺序即分组内的显示顺序。
  */
 
@@ -14,86 +19,152 @@ export type SettingKind = 'string' | 'text' | 'bool' | 'int' | 'enum';
 
 export interface SettingField {
   key: string;
-  label: string;
+  labelKey: string;
   kind: SettingKind;
-  hint?: string;
+  hintKey?: string;
   placeholder?: string;
   min?: number;
   max?: number;
-  unit?: string;
-  options?: { value: string; label: string }[];
+  unitKey?: string;
+  options?: { value: string; labelKey: string }[];
 }
 
 export interface SettingGroup {
   id: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   fields: SettingField[];
 }
 
 export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: 'site',
-    title: '站点信息',
-    description: '显示在浏览器标题、登录页与分享页页脚。',
+    titleKey: 'admin.settings.groupSiteTitle',
+    descriptionKey: 'admin.settings.groupSiteDescription',
     fields: [
-      { key: 'site.name', label: '站点名称', kind: 'string', placeholder: 'wmind' },
-      { key: 'site.logo', label: 'Logo 地址', kind: 'string', hint: '留空则使用默认图标。' },
-      { key: 'site.description', label: '站点描述', kind: 'text', hint: '一句话介绍，出现在登录页与分享页。' },
-      { key: 'site.icp', label: 'ICP 备案号', kind: 'string', hint: '留空则不显示备案信息。' },
-      { key: 'site.base_url', label: '站点地址', kind: 'string', hint: '用于拼接分享链接的绝对地址；留空则按请求头推断。' },
+      { key: 'site.name', labelKey: 'admin.settings.fieldSiteName', kind: 'string', placeholder: 'wmind' },
+      { key: 'site.logo', labelKey: 'admin.settings.fieldSiteLogo', kind: 'string', hintKey: 'admin.settings.hintSiteLogo' },
+      {
+        key: 'site.description',
+        labelKey: 'admin.settings.fieldSiteDescription',
+        kind: 'text',
+        hintKey: 'admin.settings.hintSiteDescription',
+      },
+      { key: 'site.icp', labelKey: 'admin.settings.fieldSiteIcp', kind: 'string', hintKey: 'admin.settings.hintSiteIcp' },
+      {
+        key: 'site.base_url',
+        labelKey: 'admin.settings.fieldSiteBaseUrl',
+        kind: 'string',
+        hintKey: 'admin.settings.hintSiteBaseUrl',
+      },
     ],
   },
   {
     id: 'auth',
-    title: '注册与登录',
-    description: '关闭注册后，注册页不可访问，接口返回 403。',
+    titleKey: 'admin.settings.groupAuthTitle',
+    descriptionKey: 'admin.settings.groupAuthDescription',
     fields: [
-      { key: 'auth.registration_enabled', label: '开放注册', kind: 'bool', hint: '关闭后任何人都无法自助注册，只能由管理员创建账号。' },
+      {
+        key: 'auth.registration_enabled',
+        labelKey: 'admin.settings.fieldRegistrationEnabled',
+        kind: 'bool',
+        hintKey: 'admin.settings.hintRegistrationEnabled',
+      },
       {
         key: 'auth.default_role',
-        label: '新用户默认角色',
+        labelKey: 'admin.settings.fieldDefaultRole',
         kind: 'enum',
-        hint: '设为管理员等于「所有注册者都是管理员」，请谨慎。',
+        hintKey: 'admin.settings.hintDefaultRole',
         options: [
-          { value: 'user', label: '普通用户' },
-          { value: 'admin', label: '管理员' },
+          { value: 'user', labelKey: 'admin.settings.roleUser' },
+          { value: 'admin', labelKey: 'admin.settings.roleAdmin' },
         ],
       },
-      { key: 'auth.password_min_length', label: '密码最小长度', kind: 'int', min: 8, max: 128, unit: '字符' },
-      { key: 'auth.login_max_attempts', label: '登录失败上限', kind: 'int', min: 1, max: 100, unit: '次', hint: '连续失败达到该次数后锁定账号。' },
-      { key: 'auth.login_lock_minutes', label: '锁定时长', kind: 'int', min: 1, max: 1440, unit: '分钟' },
+      {
+        key: 'auth.password_min_length',
+        labelKey: 'admin.settings.fieldPasswordMinLength',
+        kind: 'int',
+        min: 8,
+        max: 128,
+        unitKey: 'admin.settings.unitChars',
+      },
+      {
+        key: 'auth.login_max_attempts',
+        labelKey: 'admin.settings.fieldLoginMaxAttempts',
+        kind: 'int',
+        min: 1,
+        max: 100,
+        unitKey: 'admin.settings.unitTimes',
+        hintKey: 'admin.settings.hintLoginMaxAttempts',
+      },
+      {
+        key: 'auth.login_lock_minutes',
+        labelKey: 'admin.settings.fieldLoginLockMinutes',
+        kind: 'int',
+        min: 1,
+        max: 1440,
+        unitKey: 'admin.settings.unitMinutes',
+      },
     ],
   },
   {
     id: 'limit',
-    title: '资源限制',
-    description: '0 表示不限制。',
+    titleKey: 'admin.settings.groupLimitTitle',
+    descriptionKey: 'admin.settings.groupLimitDescription',
     fields: [
-      { key: 'limit.maps_per_user', label: '单用户导图上限', kind: 'int', min: 0, max: 1000000, unit: '张' },
-      { key: 'limit.upload_max_mb', label: '单文件上传上限', kind: 'int', min: 1, max: 1024, unit: 'MB' },
+      {
+        key: 'limit.maps_per_user',
+        labelKey: 'admin.settings.fieldMapsPerUser',
+        kind: 'int',
+        min: 0,
+        max: 1000000,
+        unitKey: 'admin.settings.unitMaps',
+      },
+      {
+        key: 'limit.upload_max_mb',
+        labelKey: 'admin.settings.fieldUploadMaxMb',
+        kind: 'int',
+        min: 1,
+        max: 1024,
+        unitKey: 'admin.settings.unitMb',
+      },
     ],
   },
   {
     id: 'feature',
-    title: '功能开关',
-    description: '影响导入导出与自定义模板的可用性。',
+    titleKey: 'admin.settings.groupFeatureTitle',
+    descriptionKey: 'admin.settings.groupFeatureDescription',
     fields: [
-      { key: 'feature.import_enabled', label: '允许导入', kind: 'bool' },
-      { key: 'feature.export_enabled', label: '允许导出', kind: 'bool' },
-      { key: 'feature.user_template_enabled', label: '允许保存自定义模板', kind: 'bool' },
+      { key: 'feature.import_enabled', labelKey: 'admin.settings.fieldImportEnabled', kind: 'bool' },
+      { key: 'feature.export_enabled', labelKey: 'admin.settings.fieldExportEnabled', kind: 'bool' },
+      { key: 'feature.user_template_enabled', labelKey: 'admin.settings.fieldUserTemplateEnabled', kind: 'bool' },
     ],
   },
   {
     id: 'share',
-    title: '分享',
-    description: '关闭公开链接后，已存在的分享链接全部失效。',
+    titleKey: 'admin.settings.groupShareTitle',
+    descriptionKey: 'admin.settings.groupShareDescription',
     fields: [
-      { key: 'share.public_link_enabled', label: '允许创建分享链接', kind: 'bool' },
-      { key: 'share.default_expire_days', label: '默认有效期', kind: 'int', min: 0, max: 3650, unit: '天', hint: '0 表示永久有效。' },
-      { key: 'share.default_allow_download', label: '默认允许访问者导出', kind: 'bool' },
-      { key: 'share.require_password', label: '强制分享链接设置密码', kind: 'bool' },
-      { key: 'share.max_links_per_map', label: '单张导图分享上限', kind: 'int', min: 1, max: 1000, unit: '个' },
+      { key: 'share.public_link_enabled', labelKey: 'admin.settings.fieldPublicLinkEnabled', kind: 'bool' },
+      {
+        key: 'share.default_expire_days',
+        labelKey: 'admin.settings.fieldDefaultExpireDays',
+        kind: 'int',
+        min: 0,
+        max: 3650,
+        unitKey: 'admin.settings.unitDays',
+        hintKey: 'admin.settings.hintDefaultExpireDays',
+      },
+      { key: 'share.default_allow_download', labelKey: 'admin.settings.fieldDefaultAllowDownload', kind: 'bool' },
+      { key: 'share.require_password', labelKey: 'admin.settings.fieldRequirePassword', kind: 'bool' },
+      {
+        key: 'share.max_links_per_map',
+        labelKey: 'admin.settings.fieldMaxLinksPerMap',
+        kind: 'int',
+        min: 1,
+        max: 1000,
+        unitKey: 'admin.settings.unitLinks',
+      },
     ],
   },
 ];

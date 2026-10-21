@@ -226,7 +226,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
         <SelectField
           label={t('editor.panel.canvas.fontFamily')}
           value={theme.global.fontFamily}
-          options={FONT_IDS.map((id) => ({ value: id, label: FONT_DEFINITIONS[id].label }))}
+          options={FONT_IDS.map((id) => ({ value: id, label: t(FONT_DEFINITIONS[id].labelKey) }))}
           onChange={(fontFamily) => onChange({ ...theme, global: { ...theme.global, fontFamily } })}
         />
         <SelectField

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -14,22 +15,20 @@ import { diffSettings, SETTING_GROUPS, type SettingField } from './settings-sche
 import { adminKeys } from './queries';
 
 export function AdminSettingsPage() {
+  const { t } = useTranslation();
   const settings = useQuery({ queryKey: adminKeys.settings, queryFn: adminApi.getSettings });
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="网站设置"
-        description="改动保存后立即生效，无需重启服务。部分设置会影响已登录用户，请留意提示。"
-      />
+      <PageHeader title={t('admin.settings.title')} description={t('admin.settings.description')} />
       {settings.isError ? (
         <EmptyState
           icon="alert"
-          title="设置加载失败"
+          title={t('admin.settings.loadFailed')}
           description={settings.error instanceof Error ? settings.error.message : undefined}
           action={
             <Button variant="outline" size="sm" onClick={() => void settings.refetch()}>
-              重试
+              {t('common.retry')}
             </Button>
           }
         />
@@ -38,22 +37,27 @@ export function AdminSettingsPage() {
         // 用户还没保存的改动抹掉，所以这里不随 refetch 重建。
         <SettingsForm initial={settings.data} />
       ) : (
-        <EmptyState icon="settings" title="正在加载设置…" />
+        <EmptyState icon="settings" title={t('admin.settings.loading')} />
       )}
     </div>
   );
 }
 
 /** 数值字段在本地先校验一遍，避免为了一个明显越界的数字跑一趟后端。 */
-function fieldError(field: SettingField, value: SettingsValue | undefined): string | undefined {
+function fieldError(
+  field: SettingField,
+  value: SettingsValue | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string | undefined {
   if (field.kind !== 'int' || typeof value !== 'number') return undefined;
-  if (!Number.isInteger(value)) return '应为整数';
-  if (field.min !== undefined && value < field.min) return `不能小于 ${field.min}`;
-  if (field.max !== undefined && value > field.max) return `不能大于 ${field.max}`;
+  if (!Number.isInteger(value)) return t('admin.settings.intOnly');
+  if (field.min !== undefined && value < field.min) return t('admin.settings.min', { min: field.min });
+  if (field.max !== undefined && value > field.max) return t('admin.settings.max', { max: field.max });
   return undefined;
 }
 
 function SettingsForm({ initial }: { initial: SettingsMap }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<SettingsMap>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -69,7 +73,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
       void queryClient.invalidateQueries({ queryKey: siteKeys.config });
       setDraft(updated);
       setErrors({});
-      toast.success(`已保存 ${dirtyKeys.length} 项设置`);
+      toast.success(t('admin.settings.saved', { count: dirtyKeys.length }));
     },
     onError: (error) => {
       if (error instanceof ApiError) {
@@ -79,7 +83,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
           return;
         }
       }
-      toast.error(error instanceof Error ? error.message : '保存失败');
+      toast.error(error instanceof Error ? error.message : t('admin.settings.saveFailed'));
     },
   });
 
@@ -98,12 +102,12 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
     event.preventDefault();
     const nextErrors: Record<string, string> = {};
     for (const field of SETTING_GROUPS.flatMap((group) => group.fields)) {
-      const message = fieldError(field, draft[field.key]);
+      const message = fieldError(field, draft[field.key], t);
       if (message) nextErrors[field.key] = message;
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
-      toast.error('有设置项的取值不合法，请检查标红的字段。');
+      toast.error(t('admin.settings.invalid'));
       return;
     }
     if (dirtyKeys.length === 0) return;
@@ -113,7 +117,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
   return (
     <form onSubmit={submit} className="space-y-5" noValidate>
       {SETTING_GROUPS.map((group) => (
-        <Panel key={group.id} title={group.title} description={group.description}>
+        <Panel key={group.id} title={t(group.titleKey)} description={t(group.descriptionKey)}>
           <div className="divide-y divide-border/70">
             {group.fields.map((field) => (
               <SettingRow
@@ -134,14 +138,16 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
       <div className="sticky bottom-4 z-10">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/95 px-4 py-3 shadow-lg backdrop-blur">
           <p className="text-sm text-muted-foreground">
-            {dirtyKeys.length > 0 ? `有 ${dirtyKeys.length} 项未保存的改动` : '所有改动已保存'}
+            {dirtyKeys.length > 0
+              ? t('admin.settings.dirty', { count: dirtyKeys.length })
+              : t('admin.settings.clean')}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" disabled={dirtyKeys.length === 0 || save.isPending} onClick={() => { setDraft(initial); setErrors({}); }}>
-              放弃更改
+              {t('admin.settings.discard')}
             </Button>
             <Button type="submit" size="sm" disabled={dirtyKeys.length === 0 || save.isPending}>
-              {save.isPending ? '保存中…' : '保存设置'}
+              {save.isPending ? t('common.saving') : t('admin.settings.save')}
             </Button>
           </div>
         </div>
@@ -161,7 +167,10 @@ function SettingRow({
   error?: string;
   onChange: (value: SettingsValue) => void;
 }) {
-  const hint = error ? <p role="alert" className="mt-1 text-xs text-destructive">{error}</p> : field.hint ? <p className="mt-1 text-xs text-muted-foreground">{field.hint}</p> : null;
+  const { t } = useTranslation();
+  const label = t(field.labelKey);
+  const hintText = field.hintKey === undefined ? undefined : t(field.hintKey);
+  const hint = error ? <p role="alert" className="mt-1 text-xs text-destructive">{error}</p> : hintText ? <p className="mt-1 text-xs text-muted-foreground">{hintText}</p> : null;
 
   if (field.kind === 'bool') {
     return (
@@ -169,8 +178,8 @@ function SettingRow({
         <Switch
           checked={value === true}
           onCheckedChange={onChange}
-          label={field.label}
-          description={error ?? field.hint}
+          label={label}
+          description={error ?? hintText}
         />
         {error ? (
           <p role="alert" className="mt-1 text-xs text-destructive">
@@ -183,10 +192,10 @@ function SettingRow({
 
   const control =
     field.kind === 'enum' ? (
-      <Select value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} aria-label={field.label} className="max-w-56">
+      <Select value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} aria-label={label} className="max-w-56">
         {(field.options ?? []).map((option) => (
           <option key={option.value} value={option.value}>
-            {option.label}
+            {t(option.labelKey)}
           </option>
         ))}
       </Select>
@@ -194,7 +203,7 @@ function SettingRow({
       <Textarea
         value={String(value ?? '')}
         onChange={(event) => onChange(event.target.value)}
-        aria-label={field.label}
+        aria-label={label}
         placeholder={field.placeholder}
         aria-invalid={error ? true : undefined}
       />
@@ -207,16 +216,16 @@ function SettingRow({
           max={field.max}
           value={typeof value === 'number' ? value : ''}
           onChange={(event) => onChange(event.target.value === '' ? 0 : Number(event.target.value))}
-          aria-label={field.label}
+          aria-label={label}
           aria-invalid={error ? true : undefined}
         />
-        {field.unit ? <span className="shrink-0 text-sm text-muted-foreground">{field.unit}</span> : null}
+        {field.unitKey ? <span className="shrink-0 text-sm text-muted-foreground">{t(field.unitKey)}</span> : null}
       </div>
     ) : (
       <Input
         value={String(value ?? '')}
         onChange={(event) => onChange(event.target.value)}
-        aria-label={field.label}
+        aria-label={label}
         placeholder={field.placeholder}
         aria-invalid={error ? true : undefined}
       />
@@ -224,7 +233,7 @@ function SettingRow({
 
   return (
     <div className="py-4 first:pt-0 last:pb-0">
-      <label className="block text-sm font-medium">{field.label}</label>
+      <label className="block text-sm font-medium">{label}</label>
       <div className="mt-2">{control}</div>
       {hint}
     </div>
@@ -238,24 +247,25 @@ function SettingRow({
  * 所以在分组底部给一句明确的告警——值是从草稿算出来的，改回安全值提示就消失。
  */
 function GroupWarning({ groupId, draft }: { groupId: string; draft: SettingsMap }) {
-  const warning = (() => {
+  const { t } = useTranslation();
+  const warningKey = (() => {
     if (groupId === 'auth' && draft['auth.default_role'] === 'admin') {
-      return '新用户默认角色被设为管理员：此后每个自助注册的账号都拥有全部管理权限。';
+      return 'admin.settings.warnDefaultAdmin';
     }
     if (groupId === 'auth' && draft['auth.registration_enabled'] === false) {
-      return '注册已关闭：现有用户不受影响，新用户只能由管理员在「用户管理」中创建。';
+      return 'admin.settings.warnRegistrationClosed';
     }
     if (groupId === 'share' && draft['share.public_link_enabled'] === false) {
-      return '公开分享已关闭：已创建的分享链接会全部失效。';
+      return 'admin.settings.warnShareDisabled';
     }
     return null;
   })();
 
-  if (!warning) return null;
+  if (warningKey === null) return null;
   return (
     <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-400">
       <Icon name="alert" className="mt-0.5 size-3.5 shrink-0" />
-      {warning}
+      {t(warningKey)}
     </p>
   );
 }

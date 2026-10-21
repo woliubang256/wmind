@@ -11,6 +11,7 @@
  */
 
 import { useId, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
 export function Field({
@@ -185,6 +186,7 @@ export function ColorField({
   onNone?: () => void;
   hint?: string;
 }) {
+  const { t } = useTranslation();
   const fallback = typeof value === 'string' ? value : '#FFFFFF';
   return (
     <Field label={label} hint={hint}>
@@ -192,13 +194,13 @@ export function ColorField({
       <div className="flex items-center gap-1.5">
         <input
           type="color"
-          aria-label={`${label}（自定义）`}
+          aria-label={t('editor.panel.customColor', { label })}
           value={/^#[0-9a-f]{6}$/i.test(fallback) ? fallback : '#FFFFFF'}
           onChange={(event) => onChange(event.target.value.toUpperCase())}
           className="h-7 w-9 cursor-pointer rounded-md border border-input bg-background p-0.5"
         />
         <span className="font-mono text-[11px] text-muted-foreground">
-          {value === undefined ? '继承' : (value ?? '无填充')}
+          {value === undefined ? t('editor.panel.inherit') : (value ?? t('editor.panel.noFill'))}
         </span>
         <div className="ml-auto flex gap-1">
           {onNone ? (
@@ -207,7 +209,7 @@ export function ColorField({
               onClick={onNone}
               className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
-              无填充
+              {t('editor.panel.noFill')}
             </button>
           ) : null}
           {onInherit ? (
@@ -216,7 +218,7 @@ export function ColorField({
               onClick={onInherit}
               className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
-              继承主题
+              {t('editor.panel.inheritTheme')}
             </button>
           ) : null}
         </div>
