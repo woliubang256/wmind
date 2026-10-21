@@ -38,6 +38,8 @@ type authTestServer struct {
 	t      *testing.T
 	server *httptest.Server
 	client *http.Client
+	// router 是装配出来的真实路由，OpenAPI 对等性测试要枚举它。
+	router http.Handler
 	// uploads 是头像落盘的目录，测试用来断言「文件真的写出来了」。
 	uploads string
 }
@@ -188,7 +190,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("创建 Cookie jar: %v", err)
 	}
 	return &authTestServer{
-		t: t, server: server, uploads: uploads,
+		t: t, server: server, router: router, uploads: uploads,
 		client: &http.Client{Jar: jar, Timeout: 10 * time.Second},
 	}
 }

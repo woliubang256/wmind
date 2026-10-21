@@ -1,0 +1,1752 @@
+openapi: 3.1.0
+info:
+  title: wmind API
+  version: 1.0.0
+  description: |
+    wmind 自托管思维导图的 HTTP 接口。
+
+    **这是一份契约，不是营销材料。** 路径与方法由 `backend/internal/httpapi` 的
+    真实路由生成，并由 `internal/httpapi/openapi_test.go` 逐条比对——路由表里多一条
+    或少一条，测试就会红。字段形状与 `docs/04-后端设计与API规范.md` §5 以及前端
+    `src/lib/api/types.ts` 对齐。
+
+    ## 信封
+
+    成功：
+
+    ```json
+    { "data": {}, "pagination": {}, "requestId": "01J..." }
+    ```
+
+    `pagination` 只在列表接口出现；`requestId` 用于和日志对账。
+
+    失败：
+
+    ```json
+    { "error": { "code": "MAP_NOT_FOUND", "message": "...", "details": {} }, "requestId": "01J..." }
+    ```
+
+    `code` 是稳定契约（见 `components/schemas/ErrorCode`），`message` 是给人看的
+    默认中文文案，**客户端应优先按 `code` 分支**——`message` 会随界面语言变化。
+
+    ## 认证
+
+    两种凭据，用途不同：
+
+    - **Access Token**：`Authorization: Bearer <jwt>`，15 分钟。放在响应体里，
+      客户端自己保存（不落 Cookie，避免 CSRF）。
+    - **Refresh Token**：`wmind_refresh` Cookie，7 天，`Path=/api/v1/auth`、
+      `HttpOnly`、`SameSite=Lax`。只有 `/auth/refresh`、`/auth/logout` 用得到。
+
+    401 分两种：`AUTH_TOKEN_EXPIRED` 应当静默刷新后重试；`AUTH_TOKEN_INVALID`
+    应当直接跳登录页。并发请求同时 401 时，客户端必须把刷新合并成一次。
+
+    ## 分页
+
+    列表接口一律 `?page=1&page_size=20`，响应里带 `pagination`。`page_size` 上限
+    由服务端收敛，传大了不会报错，只会被夹到上限。
+servers:
+  - url: /
+    description: 同源部署（生产由 Nginx 反代 `/api`）
+  - url: http://127.0.0.1:8080
+    description: 本地开发
+tags:
+  - name: health
+    description: 探针，不需要认证
+  - name: site
+    description: 公开站点配置
+  - name: auth
+    description: 注册、登录、刷新、登出、当前用户
+  - name: users
+    description: 当前用户的资料、密码、头像
+  - name: maps
+    description: 导图增删改查、缩略图、复制
+  - name: trash
+    description: 回收站
+  - name: shares
+    description: 分享链接（属主视角）
+  - name: public
+    description: 分享链接的匿名访问
+  - name: themes
+    description: 用户自定义主题
+  - name: templates
+    description: 用户模板（内置 8 个模板在前端包里，不走接口）
+  - name: files
+    description: 图片上传
+  - name: admin
+    description: 管理后台
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/health/live:
+    get:
+      tags: [health]
+      summary: 存活探针
+      description: 进程活着就 200，**不检查任何依赖**。查数据库会让一次抖动变成编排器反复重启。
+      security: []
+      responses:
+        '200':
+          description: 进程存活
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [status]
+                        properties:
+                          status: { type: string, const: ok }
+
+  /api/v1/health/ready:
+    get:
+      tags: [health]
+      summary: 就绪探针
+      description: 任一依赖不可用即 503，逐项结果在 `error.details.checks` 里，运维不必翻日志就知道哪一项挂了。
+      security: []
+      responses:
+        '200':
+          description: 全部依赖正常
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [status, checks]
+                        properties:
+                          status: { type: string, const: ok }
+                          checks:
+                            type: object
+                            additionalProperties: { type: string, enum: [ok, error] }
+        '503':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/site/config:
+    get:
+      tags: [site]
+      summary: 公开站点配置
+      description: |
+        未登录可读——登录页要在拿到令牌之前就知道「注册开不开放、密码至少几位」。
+
+        读不到时客户端应回落到「注册关闭」这一侧：把开关默认成开放，等于在一次
+        网络故障里把注册入口放出来。
+      security: []
+      responses:
+        '200':
+          description: 站点配置
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SiteConfig' }
+
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: 注册
+      description: |
+        注册即生效，直接下发会话（一期不做邮箱验证，见 ADR-012）。
+
+        关站时的判定**排在限流器之前**：关闭注册期间连打多次都拿到 403
+        `REGISTRATION_CLOSED`，不会消耗 3 次/小时的注册配额，也不会退化成 429。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201':
+          description: 注册成功，已登录
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AuthSession' }
+        '403':
+          $ref: '#/components/responses/RegistrationClosed'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: 登录
+      description: |
+        `identifier` 同时接受邮箱与用户名。
+
+        失败一律 `AUTH_INVALID_CREDENTIALS`，不区分「用户不存在」与「密码错误」
+        ——区分开等于免费提供账号枚举接口。连续失败达到阈值后返回 429
+        `AUTH_TOO_MANY_ATTEMPTS`，锁定期内**正确密码也会被拒**。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AuthSession' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: 刷新 Access Token
+      description: |
+        用 `wmind_refresh` Cookie 换新的 Access Token，并**轮换**刷新令牌。
+
+        已撤销的刷新令牌再次出现视为泄露信号：服务端会撤销该用户全部会话。
+        并发刷新只会有一次成功，其余拿到 `AUTH_REFRESH_INVALID`——客户端必须
+        把并发刷新合并成一次。
+      security:
+        - refreshCookie: []
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AuthSession' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: 登出
+      description: 撤销当前刷新令牌。幂等：令牌无效或已撤销也返回 204。
+      security:
+        - refreshCookie: []
+      responses:
+        '204':
+          description: 已登出
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: 当前用户
+      description: 用户状态每次从数据库读（外层 60 秒缓存）：JWT 里不带 status，否则「禁用账号」要等令牌过期才生效。
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/User' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/users/me:
+    patch:
+      tags: [users]
+      summary: 改资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname: { type: string, maxLength: 32 }
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: 更新后的用户
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/User' }
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/users/me/password:
+    post:
+      tags: [users]
+      summary: 改密码
+      description: 改密后撤销**除当前设备外**的全部会话——否则用户改完密码就把自己踢出去。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPassword, newPassword]
+              properties:
+                oldPassword: { type: string }
+                newPassword: { type: string }
+      responses:
+        '204':
+          description: 已修改
+        '401':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/users/me/avatar:
+    post:
+      tags: [users]
+      summary: 上传头像
+      description: 服务端按**解码结果**判定类型，不看 `Content-Type` 与文件名。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 更新后的用户
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/User' }
+        '413':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/maps:
+    get:
+      tags: [maps]
+      summary: 我的导图列表
+      description: 列表项**不含 document**——一页 20 张图就是 20 MB。
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: q
+          in: query
+          description: 标题子串匹配
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [updated, title, created], default: updated }
+      responses:
+        '200':
+          description: 导图列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/MapSummary' }
+    post:
+      tags: [maps]
+      summary: 新建导图
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMapInput' }
+      responses:
+        '201':
+          description: 新建的导图（含完整文档）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MapDetail' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/maps/{uid}:
+    parameters:
+      - $ref: '#/components/parameters/MapUid'
+    get:
+      tags: [maps]
+      summary: 导图详情
+      description: 不是自己的导图一律 404，不是 403——403 会告诉对方「这张图存在」。
+      responses:
+        '200':
+          description: 导图详情（含完整文档）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MapDetail' }
+        '404':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [maps]
+      summary: 保存导图
+      description: |
+        乐观锁：请求必须带上客户端手里那份的 `version`，与服务端不一致时返回 409
+        `MAP_VERSION_CONFLICT`，`details` 里带服务端当前的版本与更新时间。
+
+        响应只有版本号与计数——自动保存每几秒一次，把 1 MB 的文档原样回传是纯浪费。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, title, document]
+              properties:
+                version: { type: integer, minimum: 1 }
+                title: { type: string, maxLength: 200 }
+                document: { $ref: '#/components/schemas/WmindDocument' }
+      responses:
+        '200':
+          description: 保存结果
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SaveResult' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    patch:
+      tags: [maps]
+      summary: 改名
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: 更新后的摘要
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MapSummary' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [maps]
+      summary: 移入回收站
+      responses:
+        '204':
+          description: 已移入回收站
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/maps/{uid}/duplicate:
+    parameters:
+      - $ref: '#/components/parameters/MapUid'
+    post:
+      tags: [maps]
+      summary: 复制导图
+      responses:
+        '201':
+          description: 副本（含完整文档）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MapDetail' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/maps/{uid}/thumbnail:
+    parameters:
+      - $ref: '#/components/parameters/MapUid'
+    put:
+      tags: [maps]
+      summary: 写入缩略图地址
+      description: |
+        与保存分开：自动保存手里没有缩略图，合进保存路径的话两边会互相覆盖。
+
+        只接受站内相对路径（以单个 `/` 开头）。传空串表示清除。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [thumbnailUrl]
+              properties:
+                thumbnailUrl: { type: string }
+      responses:
+        '204':
+          description: 已写入
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/trash:
+    get:
+      tags: [trash]
+      summary: 回收站列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 已删除的导图
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/MapSummary' }
+    delete:
+      tags: [trash]
+      summary: 清空回收站
+      responses:
+        '204':
+          description: 已清空
+
+  /api/v1/trash/{uid}:
+    parameters:
+      - $ref: '#/components/parameters/MapUid'
+    delete:
+      tags: [trash]
+      summary: 彻底删除
+      description: 不可恢复。
+      responses:
+        '204':
+          description: 已删除
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/trash/{uid}/restore:
+    parameters:
+      - $ref: '#/components/parameters/MapUid'
+    post:
+      tags: [trash]
+      summary: 恢复
+      responses:
+        '200':
+          description: 恢复后的摘要
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MapSummary' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/maps/{uid}/shares:
+    parameters:
+      - $ref: '#/components/parameters/MapUid'
+    get:
+      tags: [shares]
+      summary: 某张导图的全部分享链接
+      description: 含已撤销的。上限由站点设置约束，因此**不分页**。
+      responses:
+        '200':
+          description: 分享链接列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ShareLink' }
+        '404':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [shares]
+      summary: 新建分享链接
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateShareInput' }
+      responses:
+        '201':
+          description: 新建的链接
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ShareLink' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/shares:
+    get:
+      tags: [shares]
+      summary: 我的分享
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: map_uid
+          in: query
+          description: 只看某张导图的
+          schema: { type: string }
+      responses:
+        '200':
+          description: 分享链接列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ShareLink' }
+
+  /api/v1/shares/{uid}:
+    parameters:
+      - name: uid
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [shares]
+      summary: 改分享设置
+      description: |
+        `password` 的三态是刻意的：传字符串表示设置，传 `null` 表示清除，
+        **不传表示不改**。「字段缺失」与「显式 null」必须区分开。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateShareInput' }
+      responses:
+        '200':
+          description: 更新后的链接
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ShareLink' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [shares]
+      summary: 撤销
+      description: 撤销后的链接仍留在列表里，以便保留访问统计。
+      responses:
+        '204':
+          description: 已撤销
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/public/shares/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string }
+      - name: X-Share-Access
+        in: header
+        description: 密码校验通过后拿到的访问凭证（来自 `/verify`）
+        schema: { type: string }
+    get:
+      tags: [public]
+      summary: 匿名读取分享内容
+      description: |
+        **不含**属主的 uid 与邮箱。`show_notes=false` 时服务端直接剥离备注，
+        不是靠前端不渲染——前端不渲染的字段仍然躺在响应体里。
+
+        失效四态（不存在 / 已撤销 / 已过期 / 导图已删除）返回**同一个** 404 与
+        同一段文案：区分它们等于告诉拿链接的人「这张图曾经存在」。
+      security: []
+      responses:
+        '200':
+          description: 分享内容
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PublicShare' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/public/shares/{token}/verify:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [public]
+      summary: 校验分享密码
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        '200':
+          description: 访问凭证
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ShareAccess' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/themes:
+    get:
+      tags: [themes]
+      summary: 我的主题
+      description: 10 套内置配色是前端包内静态资源，**不走这里**。
+      responses:
+        '200':
+          description: 自定义主题列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CustomTheme' }
+    post:
+      tags: [themes]
+      summary: 新建主题
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ThemeInput' }
+      responses:
+        '201':
+          description: 新建的主题
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CustomTheme' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/themes/{uid}:
+    parameters:
+      - name: uid
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [themes]
+      summary: 覆盖主题
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ThemeInput' }
+      responses:
+        '200':
+          description: 更新后的主题
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CustomTheme' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [themes]
+      summary: 删除主题
+      responses:
+        '204':
+          description: 已删除
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/templates:
+    get:
+      tags: [templates]
+      summary: 我的模板
+      description: 内置 8 个模板编译在前端包里，这里只列用户「另存为」的。
+      responses:
+        '200':
+          description: 模板列表（不含 document）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TemplateSummary' }
+    post:
+      tags: [templates]
+      summary: 从导图另存为模板
+      description: 文档与缩略图由服务端从源导图复制，客户端只给名字。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, mapUid]
+              properties:
+                name: { type: string, maxLength: 100 }
+                mapUid: { type: string }
+      responses:
+        '201':
+          description: 新建的模板（含完整文档）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TemplateDetail' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/templates/{uid}:
+    parameters:
+      - name: uid
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [templates]
+      summary: 模板详情
+      description: 列表不带 document，真要用某个模板建图时单独取一次。
+      responses:
+        '200':
+          description: 模板（含完整文档）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TemplateDetail' }
+        '404':
+          $ref: '#/components/responses/Error'
+    patch:
+      tags: [templates]
+      summary: 改模板名
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        '200':
+          description: 更新后的摘要
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TemplateSummary' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [templates]
+      summary: 删除模板
+      responses:
+        '204':
+          description: 已删除
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/files:
+    post:
+      tags: [files]
+      summary: 上传图片
+      description: 导入与节点图片用。服务端按解码结果判定格式，**不看** `Content-Type` 与文件名。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: 上传结果
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UploadedFile' }
+        '413':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/users:
+    get:
+      tags: [admin]
+      summary: 用户列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: q
+          in: query
+          description: 用户名 / 邮箱 / 昵称子串
+          schema: { type: string }
+        - name: role
+          in: query
+          schema: { type: string, enum: [user, admin] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, disabled, pending] }
+      responses:
+        '200':
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/User' }
+        '403':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [admin]
+      summary: 管理员建号
+      description: 注册被限流或关闭时的兜底路径。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username: { type: string }
+                email: { type: string, format: email }
+                password: { type: string }
+                nickname: { type: string }
+                role: { type: string, enum: [user, admin] }
+      responses:
+        '201':
+          description: 新建的用户
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/User' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/admin/users/{uid}:
+    parameters:
+      - name: uid
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [admin]
+      summary: 改用户
+      description: 改角色或状态后立刻失效该用户的认证缓存，禁用即时生效。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname: { type: string }
+                email: { type: string, format: email }
+                role: { type: string, enum: [user, admin] }
+                status: { type: string, enum: [active, disabled] }
+      responses:
+        '200':
+          description: 更新后的用户
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/User' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [admin]
+      summary: 删除用户
+      parameters:
+        - name: map_strategy
+          in: query
+          description: 该用户的导图怎么处理
+          schema: { type: string, enum: [delete, keep], default: delete }
+      responses:
+        '204':
+          description: 已删除
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/users/{uid}/reset-password:
+    parameters:
+      - name: uid
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [admin]
+      summary: 重置密码
+      description: |
+        不传 `password` 时服务端随机生成。返回的明文**只此一次**，关掉对话框后
+        无法再次查看。重置会踢掉目标用户的全部会话。
+
+        不能重置自己：对自己执行返回 409 `ADMIN_CANNOT_RESET_SELF`。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: { type: string }
+      responses:
+        '200':
+          description: 一次性新密码
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ResetPasswordResult' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/admin/stats:
+    get:
+      tags: [admin]
+      summary: 概览统计
+      responses:
+        '200':
+          description: 统计
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminStats' }
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [admin]
+      summary: 审计日志
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: actor_uid
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: 审计日志
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AuditLog' }
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/settings:
+    get:
+      tags: [admin]
+      summary: 全量站点设置
+      description: 返回全量键值（含敏感项），前端据此渲染分组表单。
+      responses:
+        '200':
+          description: 设置项
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SettingsMap' }
+        '403':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [admin]
+      summary: 部分更新站点设置
+      description: |
+        只校验并写入请求里出现的键，未出现的保持原值。
+
+        关掉 `auth.registration_enabled` 会让 `/auth/register` 立刻返回 403
+        `REGISTRATION_CLOSED`，并在限流器之前生效。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SettingsMap' }
+      responses:
+        '200':
+          description: 更新后的全量设置
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SettingsMap' }
+        '403':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access Token，15 分钟。放在响应体里由客户端保存，不落 Cookie（避免 CSRF）。
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: wmind_refresh
+      description: 刷新令牌，7 天，`HttpOnly` + `SameSite=Lax` + `Path=/api/v1/auth`。
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      description: 上限由服务端收敛，传大了不会报错，只会被夹到上限。
+      schema: { type: integer, minimum: 1, default: 20 }
+    MapUid:
+      name: uid
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: 统一错误信封
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RegistrationClosed:
+      description: 站点已关闭注册。**不会**因为连打多次而变成 429——关站判定在限流器之前。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ValidationFailed:
+      description: 字段校验失败，`error.details.fields` 里是「字段名 → 一句话」
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RateLimited:
+      description: 触发限流，`error.details.retryAfter` 是建议等待秒数，同时带 `Retry-After` 头
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    TooManyAttempts:
+      description: 连续登录失败后的锁定。锁定期内**正确密码也会被拒**。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  schemas:
+    Envelope:
+      type: object
+      required: [data]
+      properties:
+        data: {}
+        requestId: { type: string, description: ULID，用于和日志对账 }
+
+    PagedEnvelope:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: {}
+        pagination: { $ref: '#/components/schemas/Pagination' }
+        requestId: { type: string }
+
+    Pagination:
+      type: object
+      required: [page, pageSize, total, totalPages]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer, format: int64 }
+        totalPages: { type: integer }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message:
+              type: string
+              description: 给人看的默认文案（中文）。客户端应优先按 `code` 分支——这句话会随界面语言变化。
+            details:
+              type: object
+              additionalProperties: true
+        requestId: { type: string }
+
+    ErrorCode:
+      type: string
+      description: 稳定契约。完整表见 `docs/04-后端设计与API规范.md` §3.2。
+      enum:
+        - BAD_REQUEST
+        - VALIDATION_FAILED
+        - RESOURCE_NOT_FOUND
+        - INTERNAL_ERROR
+        - SERVICE_UNAVAILABLE
+        - RATE_LIMITED
+        - AUTH_INVALID_CREDENTIALS
+        - AUTH_TOKEN_EXPIRED
+        - AUTH_TOKEN_INVALID
+        - AUTH_REFRESH_INVALID
+        - AUTH_ACCOUNT_PENDING
+        - AUTH_ACCOUNT_DISABLED
+        - AUTH_FORBIDDEN
+        - AUTH_EMAIL_TAKEN
+        - AUTH_USERNAME_TAKEN
+        - AUTH_TOO_MANY_ATTEMPTS
+        - REGISTRATION_CLOSED
+        - MAP_LIMIT_REACHED
+        - MAP_NOT_FOUND
+        - MAP_VERSION_CONFLICT
+        - SHARE_DISABLED
+        - SHARE_LIMIT_REACHED
+        - SHARE_PASSWORD_REQUIRED
+        - SHARE_PASSWORD_INVALID
+        - SHARE_NOT_FOUND
+        - TEMPLATE_NOT_FOUND
+        - TEMPLATE_BUILTIN_READONLY
+        - THEME_NOT_FOUND
+        - THEME_BUILTIN_READONLY
+        - THEME_LIMIT_REACHED
+        - FILE_NOT_FOUND
+        - FILE_TOO_LARGE
+        - FILE_TYPE_NOT_ALLOWED
+        - DOCUMENT_TOO_LARGE
+        - DOCUMENT_INVALID
+        - IMPORT_FORMAT_UNSUPPORTED
+        - IMPORT_PARSE_FAILED
+        - EXPORT_DISABLED
+        - EXPORT_RENDER_FAILED
+        - SETTINGS_INVALID
+        - ADMIN_LAST_ADMIN
+        - ADMIN_CANNOT_DELETE_SELF
+        - ADMIN_CANNOT_RESET_SELF
+        - MAIL_SEND_FAILED
+        - MAIL_NOT_CONFIGURED
+        - ENCRYPTION_KEY_MISSING
+
+    SiteConfig:
+      type: object
+      required:
+        - siteName
+        - registrationEnabled
+        - passwordMinLength
+        - shareEnabled
+        - version
+      properties:
+        siteName: { type: string }
+        logoUrl: { type: string }
+        description: { type: string }
+        icp: { type: string }
+        registrationEnabled: { type: boolean }
+        passwordMinLength: { type: integer }
+        importEnabled: { type: boolean }
+        exportEnabled: { type: boolean }
+        userTemplateEnabled: { type: boolean }
+        shareEnabled: { type: boolean }
+        shareDefaultExpireDays:
+          type: integer
+          description: 新建分享链接时的默认有效期（天）；0 表示永久
+        shareDefaultAllowDownload: { type: boolean }
+        version: { type: string }
+
+    RegisterInput:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]{3,32}$'
+          description: 允许字母、数字、下划线与短横线——它要出现在 URL 里
+        email: { type: string, format: email }
+        password:
+          type: string
+          description: 长度下限由站点设置 `auth.password_min_length` 决定，上限受 bcrypt 72 字节约束
+        nickname: { type: string, maxLength: 32 }
+
+    LoginInput:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier: { type: string, description: 邮箱或用户名 }
+        password: { type: string }
+
+    AuthSession:
+      type: object
+      required: [accessToken, expiresIn, user]
+      properties:
+        accessToken: { type: string }
+        expiresIn: { type: integer, description: 秒 }
+        user: { $ref: '#/components/schemas/User' }
+
+    User:
+      type: object
+      required: [uid, username, email, role, status, createdAt]
+      properties:
+        uid: { type: string }
+        username: { type: string }
+        email: { type: string }
+        nickname: { type: string }
+        avatarUrl: { type: string }
+        role: { type: string, enum: [user, admin] }
+        status: { type: string, enum: [active, disabled, pending] }
+        mapCount: { type: integer }
+        storageUsedBytes: { type: integer, format: int64 }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    WmindDocument:
+      type: object
+      description: |
+        自有文档格式，结构对齐 XMind `content.json`。完整规范见
+        `docs/03-数据模型与文件格式.md` §2；这里只钉住最外层，内部字段随编辑器
+        演进，客户端应以那份文档为准。
+      required: [format, version, title, sheets]
+      properties:
+        format: { type: string, const: wmind }
+        version: { type: integer }
+        title: { type: string }
+        themeId: { type: string }
+        meta:
+          type: object
+          properties:
+            createdAt: { type: integer }
+            updatedAt: { type: integer }
+        sheets:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    MapSummary:
+      type: object
+      required: [uid, title, version, deleted, createdAt, updatedAt]
+      properties:
+        uid: { type: string }
+        title: { type: string }
+        thumbnailUrl: { type: string, description: 站内相对路径；空串表示没有 }
+        nodeCount: { type: integer }
+        sizeBytes: { type: integer, format: int64 }
+        version: { type: integer }
+        deleted: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    MapDetail:
+      allOf:
+        - $ref: '#/components/schemas/MapSummary'
+        - type: object
+          required: [document]
+          properties:
+            document: { $ref: '#/components/schemas/WmindDocument' }
+
+    CreateMapInput:
+      type: object
+      required: [title, document]
+      properties:
+        title: { type: string, maxLength: 200 }
+        document: { $ref: '#/components/schemas/WmindDocument' }
+
+    SaveResult:
+      type: object
+      required: [uid, version, nodeCount, updatedAt]
+      properties:
+        uid: { type: string }
+        version: { type: integer }
+        nodeCount: { type: integer }
+        updatedAt: { type: string, format: date-time }
+
+    ShareLink:
+      type: object
+      required: [uid, token, url, mapUid, hasPassword, allowDownload, showNotes, createdAt]
+      properties:
+        uid: { type: string }
+        token: { type: string }
+        url:
+          type: string
+          description: |
+            完整链接或站内相对路径。站点没配 `site.base_url` 时只回 `/s/<token>`，
+            由客户端用当前 origin 补全——服务端在反代后面看到的 Host 常常不是
+            用户访问的那个域名。
+        mapUid: { type: string }
+        mapTitle: { type: string }
+        hasPassword: { type: boolean }
+        allowDownload: { type: boolean }
+        showNotes: { type: boolean }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        viewCount: { type: integer }
+        lastViewedAt: { type: [string, 'null'], format: date-time }
+        revokedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 非空表示已撤销。撤销后的链接仍留在列表里，以便保留访问统计。
+        createdAt: { type: string, format: date-time }
+
+    CreateShareInput:
+      type: object
+      properties:
+        password: { type: string, description: 省略或空串表示不设密码 }
+        expiresInDays: { type: integer, minimum: 0, description: 0 或省略表示永久 }
+        allowDownload: { type: boolean }
+        showNotes: { type: boolean }
+
+    UpdateShareInput:
+      type: object
+      properties:
+        password:
+          type: [string, 'null']
+          description: 传字符串表示设置，`null` 表示清除，不传表示不改
+        expiresInDays: { type: integer, minimum: 0 }
+        allowDownload: { type: boolean }
+        showNotes: { type: boolean }
+
+    PublicShare:
+      type: object
+      required: [title, document, allowDownload, showNotes, siteName]
+      description: 刻意不含属主的 uid 与邮箱。
+      properties:
+        title: { type: string }
+        document: { $ref: '#/components/schemas/WmindDocument' }
+        allowDownload: { type: boolean }
+        showNotes: { type: boolean }
+        siteName: { type: string }
+        logoUrl: { type: string }
+        ownerNickname: { type: string }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+
+    ShareAccess:
+      type: object
+      required: [accessToken, expiresIn]
+      properties:
+        accessToken: { type: string }
+        expiresIn: { type: integer, description: 秒 }
+
+    CustomTheme:
+      type: object
+      required: [uid, name, config, createdAt, updatedAt]
+      properties:
+        uid: { type: string }
+        name: { type: string }
+        category: { type: string, description: 一期恒为 custom }
+        config:
+          type: object
+          description: 一整份 Theme 对象（调色板 + 全局字体字号 + 各角色样式 + 彩虹开关 + 布局开关），不是只有调色板
+          additionalProperties: true
+        sortOrder: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ThemeInput:
+      type: object
+      required: [name, config]
+      properties:
+        name: { type: string, maxLength: 60 }
+        config:
+          type: object
+          additionalProperties: true
+
+    TemplateSummary:
+      type: object
+      required: [uid, name, structure, isBuiltin, createdAt, updatedAt]
+      properties:
+        uid: { type: string }
+        name: { type: string }
+        category: { type: string, description: 一期恒为 user }
+        structure:
+          type: string
+          enum: [mindmap, logic, brace, org, tree, timeline, fishbone, table]
+        thumbnailUrl: { type: string }
+        isBuiltin: { type: boolean, description: 一期恒为 false }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TemplateDetail:
+      allOf:
+        - $ref: '#/components/schemas/TemplateSummary'
+        - type: object
+          required: [document]
+          properties:
+            document: { $ref: '#/components/schemas/WmindDocument' }
+
+    UploadedFile:
+      type: object
+      required: [uid, url, width, height, format, bytes]
+      properties:
+        uid: { type: string }
+        url: { type: string, description: 站内相对路径 }
+        width: { type: integer }
+        height: { type: integer }
+        format: { type: string, enum: [png, jpeg, gif, webp] }
+        bytes: { type: integer, format: int64 }
+
+    ResetPasswordResult:
+      type: object
+      required: [password, generated]
+      properties:
+        password: { type: string, description: 明文，只此一次 }
+        generated: { type: boolean, description: true 表示服务端随机生成 }
+
+    AdminStats:
+      type: object
+      required: [userCount, activeUserCount, mapCount, mapCountToday, storageUsedBytes, trend]
+      properties:
+        userCount: { type: integer }
+        activeUserCount: { type: integer }
+        mapCount: { type: integer }
+        mapCountToday: { type: integer }
+        storageUsedBytes: { type: integer, format: int64 }
+        trend:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string, format: date }
+              newUsers: { type: integer }
+              newMaps: { type: integer }
+
+    AuditLog:
+      type: object
+      required: [id, action, targetType, targetId, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        actorId: { type: [integer, 'null'], format: int64 }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: string }
+        detail:
+          type: object
+          additionalProperties: true
+        ip: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    SettingsMap:
+      type: object
+      description: |
+        键值对，值是字符串 / 数字 / 布尔。键表见 `docs/03-数据模型与文件格式.md`
+        §4.6；常用键：`site.name`、`auth.registration_enabled`、
+        `auth.password_min_length`、`share.public_link_enabled`、
+        `feature.import_enabled`、`feature.export_enabled`。
+      additionalProperties:
+        type: [string, integer, boolean]

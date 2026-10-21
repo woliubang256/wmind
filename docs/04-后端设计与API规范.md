@@ -256,6 +256,12 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 ## 5. 接口清单
 
+> **机器可读版本是 [openapi.yaml](./openapi.yaml)**（OpenAPI 3.1，49 个操作、34 条路径）。
+> 本节是给人读的说明：为什么这么设计、字段背后的取舍。两份文档都由
+> `internal/httpapi/openapi_test.go` 钉住——路由表里多一条或少一条、yaml 里
+> 拼错一个 `$ref`，测试就会红。改接口时**三处一起改**：`router.go`、
+> 本节、`openapi.yaml`。
+
 ### 5.1 公开接口
 
 #### `GET /api/v1/health/live`
