@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Input, Select, Textarea } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { EmptyState, PageHeader, Panel } from '@/components/ui/panel';
 import { Switch } from '@/components/ui/switch';
 import { siteKeys } from '@/features/site/use-site-config';
@@ -192,13 +193,13 @@ function SettingRow({
 
   const control =
     field.kind === 'enum' ? (
-      <Select value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} aria-label={label} className="max-w-56">
-        {(field.options ?? []).map((option) => (
-          <option key={option.value} value={option.value}>
-            {t(option.labelKey)}
-          </option>
-        ))}
-      </Select>
+      <Select
+        value={String(value ?? '')}
+        onChange={onChange}
+        aria-label={label}
+        className="max-w-56"
+        options={(field.options ?? []).map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+      />
     ) : field.kind === 'text' ? (
       <Textarea
         value={String(value ?? '')}

@@ -20,7 +20,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Input, Select, TextField } from '@/components/ui/input';
+import { Input, TextField } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { EmptyState, PageHeader } from '@/components/ui/panel';
 import { mapApi, type MapSort, type MapSummary } from '@/lib/api/maps';
@@ -238,22 +239,17 @@ export function RecentPage() {
           对不齐），所以这里自己补一个 chevron。不补的话，排序控件看起来像
           一个写着「最近修改」的标签，没人会想到去点它。
         */}
-        <div className="relative">
-          <Select
-            value={sort}
-            onChange={(event) => setSort(event.target.value as MapSort)}
-            aria-label={t('maps.sort')}
-            className="h-10 w-auto pr-9"
-          >
-            <option value="updated">{t('maps.sort.updated')}</option>
-            <option value="title">{t('maps.sort.title')}</option>
-            <option value="created">{t('maps.sort.created')}</option>
-          </Select>
-          <Icon
-            name="chevron-down"
-            className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-        </div>
+        <Select
+          value={sort}
+          onChange={(next) => setSort(next as MapSort)}
+          aria-label={t('maps.sort')}
+          className="h-10 w-auto"
+          options={[
+            { value: 'updated', label: t('maps.sort.updated') },
+            { value: 'title', label: t('maps.sort.title') },
+            { value: 'created', label: t('maps.sort.created') },
+          ]}
+        />
         <span className="ml-auto text-sm text-muted-foreground">
           {maps.isPending ? t('common.loading') : t('maps.count', { count: formatNumber(total) })}
         </span>

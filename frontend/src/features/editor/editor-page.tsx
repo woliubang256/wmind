@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { Select } from '@/components/ui/select';
 import { countSheetNodes, findTopicInSheet, sheetById } from '@/editor/model/traverse';
 import { newSheetId } from '@/editor/model/ids';
 import { parseDocument } from '@/editor/model/validate';
@@ -779,26 +780,21 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </Button>
         </div>
 
-        {/*
-          结构切换。用原生 <select>：一共四个选项，为它引入一个下拉组件
-          （焦点陷阱、键盘导航、定位）不划算，而原生控件在键盘与读屏上
-          本来就是最好的。
-        */}
+        {/* 结构切换。四个选项，用紧凑型自绘下拉，和工具栏其它按钮同一套观感。 */}
         {!preview ? (
-          <select
+          <Select
             aria-label={t('editor.structure')}
+            size="sm"
+            className="h-9 w-auto min-w-28 text-sm"
+            // 触发器只有「思维导图」四个字宽，而选项里「逻辑图（向右）」要长一倍，
+            // 不铺开弹层就会看到一串「逻辑图（…」。
+            menuMinWidth={200}
             value={sheet.structure}
-            onChange={(event) =>
-              store.getState().dispatch(changeStructureCommand(event.target.value as StructureClass))
+            options={STRUCTURES.map((value) => ({ value, label: t(`editor.structures.${value}`) }))}
+            onChange={(next) =>
+              store.getState().dispatch(changeStructureCommand(next as StructureClass))
             }
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
-          >
-            {STRUCTURES.map((value) => (
-              <option key={value} value={value}>
-                {t(`editor.structures.${value}`)}
-              </option>
-            ))}
-          </select>
+          />
         ) : null}
 
         {!preview ? (

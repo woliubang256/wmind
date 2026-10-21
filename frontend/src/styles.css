@@ -87,6 +87,62 @@ button, input { font: inherit; }
 ::selection { background: color-mix(in srgb, var(--primary) 24%, transparent); }
 
 /* ------------------------------------------------------------------ */
+/* 滚动条                                                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * 全局换成细的圆角滚动条。
+ *
+ * 为什么不用 `<ScrollArea>` 组件：那类组件要把原生滚动条藏掉（`scrollbar-width:
+ * none`），再用一个绝对定位的 thumb 跟滚动位置同步、自己处理拖拽与惯性。
+ * 代价是每一个滚动容器都得包一层、每一个 `overflow` 都要重新审一遍，而且
+ * 触屏与触控板的动量滚动会变得可疑。这里只改**画法**、不动滚动机制：
+ * 滚轮、触控板、键盘、`scrollIntoView` 全部还是浏览器原生的。
+ *
+ * 颜色取 `--foreground` 的透明混合而不是写死灰：深色主题下要淡、浅色主题下
+ * 也要淡，同一个 `color-mix` 比例在两边都合适；`--border` 在浅色下几乎看不见。
+ *
+ * `scrollbar-width` / `scrollbar-color` 是 Firefox 与新版 Chromium 的标准属性，
+ * `::-webkit-scrollbar` 那条给 Safari 与旧 Chromium 兜底——两套都要写，
+ * 只写一套的话另一半浏览器还是原生方角。
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 22%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  /* 透明边框 + `background-clip: content-box` 是让 thumb「变细」的标准做法：
+     直接调 width 会把轨道也一起变窄，内容区随之抖动。 */
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--foreground) 22%, transparent);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--foreground) 38%, transparent);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 横向滚动条经常出现在表格与页签条上，高度与纵向对齐，别一个 10px 一个 6px。 */
+::-webkit-scrollbar-thumb:horizontal {
+  border-width: 3px;
+}
+
+/* ------------------------------------------------------------------ */
 /* 导图画布                                                            */
 /* ------------------------------------------------------------------ */
 

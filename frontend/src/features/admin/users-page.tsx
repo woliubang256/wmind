@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Input, Select, SelectField, TextField } from '@/components/ui/input';
+import { Input, SelectField, TextField } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Badge, EmptyState, PageHeader, Panel } from '@/components/ui/panel';
 import { useCurrentUser } from '@/app/auth';
@@ -146,27 +147,17 @@ export function AdminUsersPage() {
           <Select
             aria-label={t('admin.users.filterRole')}
             value={filters.role ?? ''}
-            onChange={(event) => patchFilter({ role: event.target.value || undefined })}
+            options={roleOptions}
+            onChange={(next) => patchFilter({ role: next || undefined })}
             className="w-36"
-          >
-            {roleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+          />
           <Select
             aria-label={t('admin.users.filterStatus')}
             value={filters.status ?? ''}
-            onChange={(event) => patchFilter({ status: event.target.value || undefined })}
+            options={statusOptions}
+            onChange={(next) => patchFilter({ status: next || undefined })}
             className="w-36"
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+          />
         </div>
 
         {users.isError ? (
@@ -449,7 +440,7 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
         <SelectField
           label={t('admin.users.role')}
           value={form.role}
-          onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as Role }))}
+          onChange={(role) => setForm((prev) => ({ ...prev, role }))}
           options={[
             { value: 'user', label: t(ROLE_LABEL_KEY.user) },
             { value: 'admin', label: t(ROLE_LABEL_KEY.admin) },
@@ -461,7 +452,7 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
           <SelectField
             label={t('admin.users.status')}
             value={form.status}
-            onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as UserStatus }))}
+            onChange={(status) => setForm((prev) => ({ ...prev, status }))}
             options={[
               { value: 'active', label: t(STATUS_META.active.labelKey) },
               { value: 'disabled', label: t(STATUS_META.disabled.labelKey) },
@@ -626,7 +617,7 @@ function DeleteUserDialog({ user, onClose, onDone }: { user: User | null; onClos
       <SelectField
         label={t('admin.users.mapsLabel')}
         value={strategy}
-        onChange={(event) => setStrategy(event.target.value as 'delete' | 'keep')}
+        onChange={setStrategy}
         options={[
           { value: 'delete', label: t('admin.users.mapsDelete') },
           { value: 'keep', label: t('admin.users.mapsKeep') },

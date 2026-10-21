@@ -80,11 +80,11 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `a11y.mjs` | 23 | 画布是不是一棵可读的树（`role=tree` / `treeitem` / `aria-level` / `aria-expanded`）、方向键后 `aria-activedescendant` 换人、播报文案、只读预览降级成一个 `img`、两个键盘陷阱 |
 | `export.mjs` | 24 | 六种格式都在、PDF 能下且结构合法（`%PDF` / `DCTDecode` / `MediaBox` 与页脚毫米对得上 / `startxref` 指对）、SVG 分支没被带坏、切英文后导航与导出对话框整块无中文、刷新后语言保持、**站点关掉导出后编辑器不再有「导出」按钮** |
 | `register.mjs` | 11 | 关闭注册后登录页没有入口、`/register` 拿不到表单、接口返回 403 `REGISTRATION_CLOSED` 而不是 429、关站期间连打 5 次不退化、重开后不再返回 `REGISTRATION_CLOSED` |
-| `locale.mjs` | 12 | 登录/注册页右上角有语言选择器、几何位置确实在右上角、**第一个 Tab 就落在它上面**、切英文后整块卡片零残留中文、`html[lang]` 与 `localStorage` 同步、刷新后保持、关站提示页也有入口、切回中文 |
+| `locale.mjs` | 14 | 登录/注册页右上角有语言选择器、几何位置确实在右上角、**第一个 Tab 就落在它上面**、切英文后整块卡片零残留中文、`html[lang]` 与 `localStorage` 同步、刷新后保持、关站提示页也有入口、**自绘下拉的方向键 / Esc 还焦点 / Enter 确认三条键盘断言**、切回中文 |
 | `culling.mjs` | 6 | 2001 个节点时只渲染视口附近、放大后是子集、缩回来不丢、选中节点离开视口仍渲染 |
 | `errors.mjs` | 3 | 断网提示条出现与消失、首帧就离线时也带提示条 |
 
-合计 155 条。
+合计 157 条。
 
 ## 几处不显然的地方
 
@@ -122,3 +122,19 @@ context，Cookie 还在，但 React Query 缓存是新的）。
 
 **`culling.mjs` 自己造压测文档。** 2001 个节点（40 个分支 × 50 个叶子 + 根）走
 `POST /maps` 现造，不再依赖手工灌库的固定 uid——那样换台机器就跑不了。
+
+**下拉 / 复选 / 单选不是原生元素，Playwright 那三个便利 API 全用不了。** 自绘之后：
+
+| 原来怎么写 | 现在怎么写 |
+| --- | --- |
+| `select.selectOption('2')` | 点 `role=combobox` 触发器 → 等 `role=listbox` 出现 → 点 `role=option` → 等弹层卸载 |
+| `radio.check()` / `uncheck()` | `.click()`（没有 `input`，`check()` 会直接抛错） |
+| `select.inputValue()` | `getAttribute('data-value')`（触发器上挂着当前值） |
+
+读可见文字来判断选中态在导出对话框里会翻车：选项文字会被翻译、会被 `truncate`
+截断，所以一律读 `data-value`。
+
+**`getByLabel` 是子串匹配。** `getByLabel('边框')` 在导出对话框里能匹配到 8 个
+（编辑器面板的「边框宽度」「边框颜色」也算），改成 `getByRole('combobox', { name: '边框', exact: true })`。
+`<label>` 包着自绘下拉时，可访问名会变成「标签文字 + 当前值」拼在一起，
+所以这几个控件的可访问名都显式写在 `aria-label` 上。

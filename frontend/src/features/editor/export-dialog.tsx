@@ -20,7 +20,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Modal } from '@/components/ui/modal';
+import { RadioGroup } from '@/components/ui/radio-group';
+import { Select } from '@/components/ui/select';
 import {
   DEFAULT_EXPORT_OPTIONS,
   SCALE_MAX,
@@ -475,17 +478,12 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             <legend className="mb-1 text-xs font-semibold text-foreground">
               {t('editor.export.format')}
             </legend>
-            {FORMATS.map((item) => (
-              <label key={item.id} className="flex items-center gap-2 text-xs text-foreground">
-                <input
-                  type="radio"
-                  name="export-format"
-                  checked={options.format === item.id}
-                  onChange={() => patch({ format: item.id })}
-                />
-                {t(item.labelKey)}
-              </label>
-            ))}
+            <RadioGroup
+              label={t('editor.export.format')}
+              value={options.format}
+              options={FORMATS.map((item) => ({ value: item.id, label: t(item.labelKey) }))}
+              onChange={(format) => patch({ format })}
+            />
           </fieldset>
 
           {textContent === null ? (
@@ -494,55 +492,50 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 <legend className="mb-1 text-xs font-semibold text-foreground">
                   {t('editor.export.scope')}
                 </legend>
-                <label className="flex items-center gap-2 text-xs text-foreground">
-                  <input
-                    type="radio"
-                    name="export-scope"
-                    checked={options.scope === 'current'}
-                    onChange={() => patch({ scope: 'current' })}
-                  />
-                  {t('editor.export.scopeCurrent')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-foreground">
-                  <input
-                    type="radio"
-                    name="export-scope"
-                    checked={options.scope === 'all'}
+                <RadioGroup
+                  label={t('editor.export.scope')}
+                  value={options.scope}
+                  options={[
+                    { value: 'current', label: t('editor.export.scopeCurrent') },
                     // 只有一张画布时「全部」与「当前」等价，禁用比让人选一个没差别的
                     // 选项更诚实。
-                    disabled={!multiSheet}
-                    onChange={() => patch({ scope: 'all' })}
-                  />
-                  {t('editor.export.scopeAll', { count: doc.sheets.length })}
-                </label>
+                    {
+                      value: 'all',
+                      label: t('editor.export.scopeAll', { count: doc.sheets.length }),
+                      disabled: !multiSheet,
+                    },
+                  ]}
+                  onChange={(scope) => patch({ scope })}
+                />
               </fieldset>
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 {t('editor.export.scale')}
                 <div className="flex items-center gap-1.5">
-                  <select
+                  <Select
+                    aria-label={t('editor.export.scale')}
+                    size="sm"
+                    className="min-w-0 flex-1"
                     value={customScale ? 'custom' : String(options.scale)}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (value === 'custom') {
+                    options={[
+                      ...SCALES.map((scale) => ({
+                        value: String(scale),
+                        label: t('editor.export.scaleValue', { n: scale }),
+                      })),
+                      { value: 'custom', label: t('editor.export.scaleCustom') },
+                    ]}
+                    onChange={(next) => {
+                      if (next === 'custom') {
                         setCustomScale(true);
                         // 保持当前倍率不动：直接跳到某个默认值会让用户以为他选的
                         // 倍率被改掉了。
                         patch({ scale: clampScale(options.scale) });
                       } else {
                         setCustomScale(false);
-                        patch({ scale: Number(value) });
+                        patch({ scale: Number(next) });
                       }
                     }}
-                    className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
-                  >
-                    {SCALES.map((scale) => (
-                      <option key={scale} value={scale}>
-                        {t('editor.export.scaleValue', { n: scale })}
-                      </option>
-                    ))}
-                    <option value="custom">{t('editor.export.scaleCustom')}</option>
-                  </select>
+                  />
                   {customScale ? (
                     <input
                       type="number"
@@ -566,52 +559,42 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 {t('editor.export.padding')}
-                <select
-                  value={options.padding}
-                  onChange={(event) => patch({ padding: Number(event.target.value) })}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
-                >
-                  {PADDINGS.map((padding) => (
-                    <option key={padding} value={padding}>
-                      {padding === 0 ? t('editor.export.paddingNone') : `${padding}px`}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label={t('editor.export.padding')}
+                  size="sm"
+                  value={String(options.padding)}
+                  options={PADDINGS.map((padding) => ({
+                    value: String(padding),
+                    label: padding === 0 ? t('editor.export.paddingNone') : `${padding}px`,
+                  }))}
+                  onChange={(next) => patch({ padding: Number(next) })}
+                />
               </label>
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 {t('editor.export.aspect')}
-                <select
+                <Select
+                  aria-label={t('editor.export.aspect')}
+                  size="sm"
                   value={options.aspect}
-                  onChange={(event) => patch({ aspect: event.target.value as AspectRatioId })}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
-                >
-                  {ASPECT_ORDER.map((id) => (
-                    <option key={id} value={id}>
-                      {t(ASPECT_LABELS[id])}
-                    </option>
-                  ))}
-                </select>
+                  options={ASPECT_ORDER.map((id) => ({ value: id, label: t(ASPECT_LABELS[id]) }))}
+                  onChange={(aspect) => patch({ aspect })}
+                />
               </label>
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 {t('editor.export.border')}
-                <select
+                <Select
+                  aria-label={t('editor.export.border')}
+                  size="sm"
                   value={options.border}
-                  onChange={(event) => {
-                    const next = event.target.value as BorderStyleId;
+                  options={BORDER_ORDER.map((id) => ({ value: id, label: t(BORDER_LABELS[id]) }))}
+                  onChange={(next) => {
                     // 带底色的预设与「透明背景」互斥：选中时顺手把透明关掉，
                     // 免得留下「勾着透明却是绿底」这种自相矛盾的状态。
                     patch({ border: next, ...(presetHasFill(next) ? { transparent: false } : {}) });
                   }}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal text-foreground"
-                >
-                  {BORDER_ORDER.map((id) => (
-                    <option key={id} value={id}>
-                      {t(BORDER_LABELS[id])}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
 
               <div className="flex flex-col gap-1.5">
@@ -620,16 +603,14 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                   ['date', t('editor.export.date')],
                   ['brand', t('editor.export.brand')],
                 ] as const).map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 text-xs text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={options[key]}
-                      // 带底色的预设自带背景，透明背景在这时没有意义。
-                      disabled={key === 'transparent' && presetHasFill(options.border)}
-                      onChange={(event) => patch({ [key]: event.target.checked })}
-                    />
-                    {label}
-                  </label>
+                  <Checkbox
+                    key={key}
+                    label={label}
+                    checked={options[key]}
+                    // 带底色的预设自带背景，透明背景在这时没有意义。
+                    disabled={key === 'transparent' && presetHasFill(options.border)}
+                    onCheckedChange={(checked) => patch({ [key]: checked })}
+                  />
                 ))}
                 {options.format === 'jpeg' && options.transparent ? (
                   // 勾着「透明背景」却导 JPEG，预览里是白底——不解释一句，用户会以为
@@ -640,14 +621,11 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 ) : null}
                 {/* 只有一个分支时拆分没有意义：拆出来就是整张图。 */}
                 {branches.length > 1 ? (
-                  <label className="flex items-center gap-2 text-xs text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={split}
-                      onChange={(event) => setSplit(event.target.checked)}
-                    />
-                    {t('editor.export.split', { count: branches.length })}
-                  </label>
+                  <Checkbox
+                    label={t('editor.export.split', { count: branches.length })}
+                    checked={split}
+                    onCheckedChange={setSplit}
+                  />
                 ) : null}
               </div>
             </>

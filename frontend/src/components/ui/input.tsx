@@ -3,10 +3,10 @@ import {
   useId,
   type InputHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
 import { cn } from '@/lib/utils';
+import { Select, type SelectOption } from './select';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (
@@ -80,6 +80,15 @@ export function TextField({ label, error, hint, className, ...props }: TextField
   );
 }
 
+/**
+ * 多行输入。
+ *
+ * 这里仍然是原生 `<textarea>`——**这不是偷懒**：shadcn 的 `Textarea` 也是原生
+ * 元素加自定义样式。多行文本的输入法、选区、撤销栈、自动滚动全在浏览器内核里，
+ * 换成 contenteditable 之后中文输入法的候选框定位与撤销行为都会变差。
+ * 「不要原生」针对的是**原生外观**（系统绘制的方角、系统滚动条、系统 resize 角），
+ * 这些都已经在这一层覆盖掉了。
+ */
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
   ({ className, rows = 3, ...props }, ref) => (
     <textarea
@@ -98,23 +107,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 );
 Textarea.displayName = 'Textarea';
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ className, ...props }, ref) => (
-    <select
-      ref={ref}
-      className={cn(
-        'h-11 w-full appearance-none rounded-xl border border-input bg-background px-3 font-normal outline-none transition',
-        'focus-visible:ring-2 focus-visible:ring-ring',
-        'aria-[invalid=true]:border-destructive aria-[invalid=true]:ring-destructive/30',
-        'disabled:cursor-not-allowed disabled:opacity-60',
-        className,
-      )}
-      {...props}
-    />
-  ),
-);
-Select.displayName = 'Select';
-
 type TextareaFieldProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'> & {
   label: string;
   error?: string;
@@ -130,29 +122,50 @@ export function TextareaField({ label, error, hint, className, ...props }: Texta
   );
 }
 
-export interface SelectOption {
-  value: string;
+type SelectFieldProps<T extends string> = {
   label: string;
-}
-
-type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id' | 'children'> & {
-  label: string;
-  options: SelectOption[];
+  value: T;
+  options: readonly SelectOption<T>[];
+  onChange: (value: T) => void;
   error?: string;
   hint?: ReactNode;
+  className?: string;
+  id?: string;
+  disabled?: boolean;
+  placeholder?: string;
 };
 
-export function SelectField({ label, options, error, hint, className, ...props }: SelectFieldProps) {
-  const id = useId();
+/**
+ * 带标签的下拉。
+ *
+ * `onChange` 直接给**值**而不是事件对象：调用方九成只想 `setX(value)`，
+ * 拿事件的人得自己 `event.target.value` 再断言类型，每次都要写一遍。
+ */
+export function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  error,
+  hint,
+  className,
+  id,
+  disabled,
+  placeholder,
+}: SelectFieldProps<T>) {
+  const generatedId = useId();
+  const selectId = id ?? generatedId;
   return (
-    <Field label={label} error={error} hint={hint} htmlFor={id} className={className}>
-      <Select id={id} aria-invalid={error ? true : undefined} {...props}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </Select>
+    <Field label={label} error={error} hint={hint} htmlFor={selectId} className={className}>
+      <Select
+        id={selectId}
+        value={value}
+        options={options}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder={placeholder}
+        invalid={error !== undefined}
+      />
     </Field>
   );
 }

@@ -1,6 +1,6 @@
-import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/ui/icon';
+import { Select } from '@/components/ui/select';
 import { useLocaleStore } from '@/app/locale-store';
 import { LOCALE_LABEL, LOCALE_ORDER, type LocalePreference } from '@/lib/i18n/preference';
 import { cn } from '@/lib/utils';
@@ -14,13 +14,9 @@ import { cn } from '@/lib/utils';
  * 设置页，也读不懂「用户名」两个字，只能硬着头皮猜。所以入口必须放在这里，
  * 而且必须排在这些文字之前。
  *
- * 为什么是原生 `<select>` 而不是按钮 + 弹出层：
- *
- * - 三个选项，不需要分组、搜索、多选，弹出层能做的它都能做；
- * - 键盘、读屏、触摸、移动端选择器全部由浏览器负责，不用自己管焦点陷阱与
- *   `Escape`；
- * - `color-scheme` 已经在 `styles.css` 里按 light/dark 设过，原生下拉在深色
- *   主题下也是深色，不会出现「白底白字」。
+ * 为什么是自绘下拉而不是原生 `<select>`：原生弹层由操作系统绘制，深色主题下
+ * 会在卡片上盖一块系统色的方角面板，和整个界面不是一套语言。自绘的下拉与
+ * 设置页、编辑器面板里的是同一个组件，三处观感一致。
  *
  * 选项文字用 `LOCALE_LABEL`：具体语言永远用该语言自己的写法（中文 / English），
  * 只有「跟随浏览器」跟着界面语言变。
@@ -29,35 +25,23 @@ export function LocaleSwitcher({ className }: { className?: string }) {
   const { t } = useTranslation();
   const preference = useLocaleStore((state) => state.preference);
   const setPreference = useLocaleStore((state) => state.setPreference);
-  const id = useId();
 
   return (
     <div className={cn('flex items-center gap-1 text-muted-foreground', className)}>
       <Icon name="globe" className="size-3.5 shrink-0" aria-hidden="true" />
-      <label htmlFor={id} className="sr-only">
-        {t('account.language')}
-      </label>
-      <select
-        id={id}
+      <Select
+        aria-label={t('account.language')}
+        size="sm"
         value={preference}
-        onChange={(event) => setPreference(event.target.value as LocalePreference)}
-        className={cn(
-          'cursor-pointer rounded-md bg-transparent py-0.5 pr-1 text-xs font-medium text-foreground/75',
-          'transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        )}
-      >
-        {LOCALE_ORDER.map((option) => (
-          <option
-            key={option}
-            value={option}
-            // 语言名用该语言自己的写法，`lang` 一并标对：读屏会按这个语言发音，
-            // 否则英文语音包念「中文」两个字会念成拼音。
-            lang={option === 'system' ? undefined : option}
-          >
-            {t(LOCALE_LABEL[option])}
-          </option>
-        ))}
-      </select>
+        options={LOCALE_ORDER.map((option) => ({
+          value: option,
+          label: t(LOCALE_LABEL[option]),
+        }))}
+        onChange={(next) => setPreference(next as LocalePreference)}
+        // 触发器只有「中文」两个字宽，弹层至少 8rem，否则「跟随浏览器」会被截。
+        menuMinWidth={128}
+        className="h-7 w-auto gap-1 border-transparent bg-transparent px-1 hover:bg-accent/60"
+      />
     </div>
   );
 }

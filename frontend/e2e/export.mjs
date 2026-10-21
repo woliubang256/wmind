@@ -114,17 +114,21 @@ async function main() {
 
     // ── 1. 导出对话框里有 PDF ────────────────────────────────
     let dialog = await openExportDialog(page, uid);
-    const formats = await dialog.locator('input[name="export-format"]').count();
+    // 单选是自绘的 `role="radio"` 按钮，不是 `<input type="radio">`——按角色数，
+    // 不能按 `input[name=...]` 找。先定位到「格式」那一组，否则会把「内容」那组
+    // 也算进来（6 + 2 = 8）。
+    const formats = await dialog
+      .getByRole('radiogroup', { name: '格式' })
+      .getByRole('radio')
+      .count();
     check('IE-M7-01 导出对话框列出六个格式', formats === 6, `实际 ${formats}`);
-    // 单选按钮的可见文字包在 `<label>` 里，input 自身没有文本——所以按角色名匹配，
-    // 不能拿 `hasText` 过滤 input。
     check(
       'IE-M7-02 格式列表含 PDF',
       (await dialog.getByRole('radio', { name: 'PDF' }).count()) === 1,
     );
 
     // ── 2. 选 PDF：预览仍在，页脚改报毫米 ────────────────────
-    await dialog.getByRole('radio', { name: 'PDF' }).check();
+    await dialog.getByRole('radio', { name: 'PDF' }).click();
     await page.waitForTimeout(400);
     check('IE-M7-03 选 PDF 后仍有预览图', (await dialog.locator('img').count()) === 1);
 
@@ -178,7 +182,7 @@ async function main() {
     await waitClosed(page);
     dialog = await openExportDialog(page, uid);
     // 选项状态在组件里，关掉再开还停在 PDF 上——这正是要验的：换格式必须能换。
-    await dialog.getByRole('radio', { name: /^SVG/ }).check();
+    await dialog.getByRole('radio', { name: /^SVG/ }).click();
     await page.waitForTimeout(300);
     const [svgDownload] = await Promise.all([
       page.waitForEvent('download', { timeout: 60000 }),
@@ -213,7 +217,7 @@ async function main() {
     const enDialog = await openExportDialog(page, uid, 'Export');
     // 选项状态会跟着组件留到下一次打开（上一步停在 SVG），所以这里要重新选 PDF：
     // 否则验不到 PDF 那条说明与「页面 … mm」页脚在英文下的样子。
-    await enDialog.getByRole('radio', { name: 'PDF' }).check();
+    await enDialog.getByRole('radio', { name: 'PDF' }).click();
     await page.waitForTimeout(400);
     const enText = (await enDialog.textContent()) ?? '';
     check('IE-M7-17 英文下对话框标题是 Export map', enText.includes('Export map'));

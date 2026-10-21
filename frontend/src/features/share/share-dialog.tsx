@@ -174,7 +174,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
                 value={expiresInDays}
                 options={expiryOptions}
                 error={createError.expiresInDays}
-                onChange={(event) => setExpiresInDays(event.target.value)}
+                onChange={setExpiresInDays}
               />
             </div>
 

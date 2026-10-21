@@ -1,18 +1,21 @@
 /**
  * 画布面板的共享控件。
  *
- * 全部用原生元素：`<input type="color">`、`<select>`、`<button aria-pressed>`。
- * 没有自绘的弹层与拖拽把手——自绘控件要自己补焦点陷阱、方向键导航、Esc 关闭，
- * 而这些恰恰是键盘用户最先撞上的地方。原生控件在键盘与读屏上本来就是对的。
+ * 下拉与复选框走 `components/ui` 里的自绘组件（`Select` / `Checkbox`），
+ * 不用原生控件：面板是深色的，而原生下拉的弹层由操作系统绘制，配色、圆角、
+ * 阴影一概不跟主题走，弹出来像另一个程序的东西。
  *
- * `input[type=color]` 是这里唯一「不得不依赖系统」的控件：浏览器的取色器各平台
- * 长相不同，但都能用键盘打开、用方向键调值。旁边永远并排放着预设色块，用户
- * 不想进系统取色器时可以直接点。
+ * `input[type=color]` 是这里唯一还依赖系统的控件：浏览器取色器各平台长相不同，
+ * 但都能用键盘打开、用方向键调值；自己造一个 HSV 取色盘要处理色域、无障碍、
+ * 触屏拖拽，代价远大于收益。旁边永远并排放着预设色块，不想进系统取色器时
+ * 可以直接点。
  */
 
 import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select } from '@/components/ui/select';
 
 export function Field({
   label,
@@ -85,7 +88,7 @@ export function Segmented<T extends string>({
   );
 }
 
-/** 原生下拉。选项少、纯文字时比自绘下拉更省心。 */
+/** 紧凑型下拉。选项少、纯文字，用面板尺寸（28px 高）而不是表单尺寸。 */
 export function SelectField<T extends string | number>({
   label,
   value,
@@ -100,22 +103,17 @@ export function SelectField<T extends string | number>({
   disabled?: boolean;
 }) {
   return (
-    <select
+    <Select
       aria-label={label}
-      value={String(value)}
+      size="sm"
+      value={value}
+      options={options}
       disabled={disabled}
-      onChange={(event) => {
-        const next = options.find((option) => String(option.value) === event.target.value);
-        if (next) onChange(next.value);
-      }}
-      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-    >
-      {options.map((option) => (
-        <option key={String(option.value)} value={String(option.value)}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+      onChange={onChange}
+      // 面板最窄时触发器只有 ~110px，「Open Sans」这类字体名会被截到看不出
+      // 区别，所以弹层至少 160px 宽。
+      menuMinWidth={160}
+    />
   );
 }
 
@@ -227,7 +225,7 @@ export function ColorField({
   );
 }
 
-/** 复选开关。用原生 checkbox，读屏与键盘都不用额外适配。 */
+/** 复选开关。自绘方框，键盘与读屏由 `role="checkbox"` 承担。 */
 export function ToggleField({
   label,
   checked,
@@ -239,24 +237,7 @@ export function ToggleField({
   onChange: (checked: boolean) => void;
   hint?: string;
 }) {
-  const id = useId();
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onChange(event.target.checked)}
-          className="size-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-        <label htmlFor={id} className="text-xs text-foreground">
-          {label}
-        </label>
-      </div>
-      {hint ? <p className="pl-6 text-[11px] leading-snug text-muted-foreground/80">{hint}</p> : null}
-    </div>
-  );
+  return <Checkbox label={label} checked={checked} onCheckedChange={onChange} hint={hint} />;
 }
 
 /** 分节标题，给长面板分组用。 */

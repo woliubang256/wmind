@@ -41,18 +41,34 @@ function cardTextWithoutSwitcher(page) {
     const card = document.querySelector('section');
     if (card === null) return '';
     const clone = card.cloneNode(true);
-    clone.querySelectorAll('select').forEach((node) => node.remove());
+    // 摘掉下拉触发器：它上面写着当前语言（中文 / English），不摘的话中文那一次
+    // 扫描永远命中「中文」两个字，断言就变成了摆设。
+    clone.querySelectorAll('[role="combobox"]').forEach((node) => node.remove());
     return (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
   });
+}
+
+/**
+ * 打开语言下拉并选一项。
+ *
+ * 自绘下拉不是 `<select>`，`selectOption()` 用不了——这也正是它存在的意义：
+ * 原生弹层由操作系统绘制，管不了配色与圆角。这里走的是真实交互路径：
+ * 点触发器 → 等弹层 → 点选项。
+ */
+async function pickLocale(page, label, option) {
+  await page.getByLabel(label).click();
+  await page.getByRole('listbox').waitFor({ timeout: 10000 });
+  await page.getByRole('option', { name: option, exact: true }).click();
+  await page.getByRole('listbox').waitFor({ state: 'detached', timeout: 10000 });
 }
 
 /** 选择器相对卡片的右上角距离（px）。 */
 function switcherOffset(page) {
   return page.evaluate(() => {
-    const select = document.querySelector('select');
-    const card = select?.closest('section');
-    if (select === null || card === null || card === undefined) return null;
-    const s = select.getBoundingClientRect();
+    const trigger = document.querySelector('section [role="combobox"]');
+    const card = trigger?.closest('section');
+    if (trigger === undefined || card === null || card === undefined) return null;
+    const s = trigger.getBoundingClientRect();
     const c = card.getBoundingClientRect();
     return { gapRight: Math.round(c.right - s.right), gapTop: Math.round(s.top - c.top) };
   });
@@ -83,15 +99,15 @@ async function main() {
     // 从 body 起按一次 Tab。若选择器不是第一个可聚焦元素，落点会是输入框。
     await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
     await page.keyboard.press('Tab');
-    const firstFocus = await page.evaluate(() => document.activeElement?.tagName ?? '');
-    check('IE-M8-03 第一个 Tab 落在选择器上', firstFocus === 'SELECT', `落点 ${firstFocus}`);
+    const firstFocus = await page.evaluate(() => document.activeElement?.getAttribute('role') ?? '');
+    check('IE-M8-03 第一个 Tab 落在选择器上', firstFocus === 'combobox', `落点 ${firstFocus}`);
 
     // ── 2. 默认中文 ────────────────────────────────────────────
     const zhHeading = (await page.getByRole('heading', { level: 1 }).textContent()) ?? '';
     check('IE-M8-04 默认是中文界面', zhHeading.includes('登录') && (await page.getByRole('button', { name: '登录' }).count()) === 1, zhHeading);
 
     // ── 3. 切到英文 ────────────────────────────────────────────
-    await select.selectOption('en-US');
+    await pickLocale(page, '界面语言', 'English');
     await page.waitForFunction(() => document.documentElement.lang === 'en-US', undefined, { timeout: 10000 });
     // 等 h1 真的换了文字，而不是只等 `html[lang]`：后者在 `changeLanguage`
     // 之前就已经改好了（`applyLocale` 先跑），单看它会拿到一个还在渲染中文的中间态。
@@ -146,17 +162,42 @@ async function main() {
     );
     await setRegistration(adminToken, true);
 
-    // ── 7. 切回中文 ────────────────────────────────────────────
+    // ── 7. 键盘：这是自绘下拉最容易退化的地方 ──────────────────
+    // 原生 `<select>` 的方向键、Enter、Esc 都是白送的；换成自绘之后，这些行为
+    // 全靠 `role="listbox"` + `aria-activedescendant` 自己实现。三条断言分别
+    // 盯「能移动」「能退出并交还焦点」「能确认并生效」。
     await page.goto(`${BASE}/login`);
-    await page.getByLabel('Language').selectOption('zh-CN');
+    await page.getByRole('heading', { level: 1, name: /Sign in to/ }).waitFor({ timeout: 30000 });
+
+    await page.getByLabel('Language').click();
+    await page.getByRole('listbox').waitFor({ timeout: 10000 });
+    const before = await page.evaluate(
+      () => document.querySelector('[role="listbox"]')?.getAttribute('aria-activedescendant') ?? '',
+    );
+    await page.keyboard.press('ArrowDown');
+    const after = await page.evaluate(
+      () => document.querySelector('[role="listbox"]')?.getAttribute('aria-activedescendant') ?? '',
+    );
+    check('IE-M8-12 方向键移动活动项', before !== '' && after !== before, `${before} → ${after}`);
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('listbox').waitFor({ state: 'detached', timeout: 10000 });
+    const focusBack = await page.evaluate(() => document.activeElement?.getAttribute('role') ?? '');
+    check('IE-M8-13 Esc 关闭并把焦点还给触发器', focusBack === 'combobox', `落点 ${focusBack}`);
+
+    // Enter 确认：打开、把鼠标移到「中文」上（hover 会同步活动项）、回车。
+    await page.getByLabel('Language').click();
+    await page.getByRole('listbox').waitFor({ timeout: 10000 });
+    await page.getByRole('option', { name: '中文', exact: true }).hover();
+    await page.keyboard.press('Enter');
     await page.getByRole('heading', { level: 1, name: /登录/ }).waitFor({ timeout: 10000 });
     check(
-      'IE-M8-11 切回中文后登录页恢复中文',
-      (await page.getByRole('button', { name: '登录' }).count()) === 1 &&
-        (await page.evaluate(() => document.documentElement.lang)) === 'zh-CN',
+      'IE-M8-14 Enter 确认选择并立即生效',
+      (await page.evaluate(() => document.documentElement.lang)) === 'zh-CN' &&
+        (await page.getByRole('button', { name: '登录' }).count()) === 1,
     );
 
-    check('IE-M8-12 全程没有未捕获异常', errors.length === 0, errors.slice(0, 2).join(' | '));
+    check('IE-M8-15 全程没有未捕获异常', errors.length === 0, errors.slice(0, 2).join(' | '));
   } finally {
     // 上面中途失败也要把注册开回去，否则后面几套全挂在 403 上。
     await setRegistration(adminToken, true).catch(() => undefined);

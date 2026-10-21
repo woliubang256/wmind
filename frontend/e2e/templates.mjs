@@ -102,9 +102,10 @@ async function main() {
       await dialog.locator('button', { hasText: name }).first().click();
       await page.waitForURL((url) => url.pathname.startsWith('/maps/'), { timeout: 30000 });
       const uid = page.url().split('/maps/')[1].split(/[?#]/)[0];
+      // 自绘下拉不是 <select>，`inputValue()` 用不了；值挂在 `data-value` 上。
       const select = page.locator('header').getByLabel('结构');
       await select.waitFor({ timeout: 30000 });
-      const actual = await select.inputValue();
+      const actual = await select.getAttribute('data-value');
       created.push({ name, structure, actual, uid });
       check(`IE-TPL-07 从「${name}」建图后结构是 ${structure}`, actual === structure, `实际 ${actual}`);
     }
@@ -148,7 +149,7 @@ async function main() {
     // 用我的模板建图，结构应与源导图一致
     await renamed.locator('button').first().click();
     await page.waitForURL((url) => url.pathname.startsWith('/maps/'), { timeout: 30000 });
-    const mineStructure = await page.locator('header').getByLabel('结构').inputValue();
+    const mineStructure = await page.locator('header').getByLabel('结构').getAttribute('data-value');
     check(
       'IE-TPL-13 用「我的模板」建图，结构沿用源导图',
       mineStructure === source.structure,

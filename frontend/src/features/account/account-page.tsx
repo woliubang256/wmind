@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { TextField } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
+import { RadioGroup } from '@/components/ui/radio-group';
 import { authKeys, useCurrentUser } from '@/app/auth';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useLocaleStore } from '@/app/locale-store';
@@ -16,7 +17,6 @@ import { userApi } from '@/lib/api/endpoints';
 import type { User } from '@/lib/api/types';
 import { ApiError, codeToField, fieldErrorsFrom } from '@/lib/api/errors';
 import { hasErrors, validatePasswordChange, validateProfile, type FieldErrors } from '@/lib/validation';
-import { cn } from '@/lib/utils';
 
 const THEME_LABEL_KEY: Record<ThemePreference, string> = {
   light: 'account.themeLight',
@@ -271,30 +271,17 @@ function AppearanceCard() {
 
   return (
     <Card title={t('account.appearance')} description={t('account.appearanceHint')}>
-      <div role="radiogroup" aria-label={t('account.appearance')} className="grid gap-2 sm:grid-cols-3">
-        {THEME_ORDER.map((option) => {
-          const active = preference === option;
-          return (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => setPreference(option)}
-              className={cn(
-                'flex items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition',
-                active
-                  ? 'border-primary bg-primary/10 font-medium text-primary'
-                  : 'border-border hover:bg-accent hover:text-accent-foreground',
-              )}
-            >
-              <Icon name={THEME_ICON[option]} className="size-4" />
-              <span className="flex-1">{t(THEME_LABEL_KEY[option])}</span>
-              {active ? <Icon name="check" className="size-4" /> : null}
-            </button>
-          );
-        })}
-      </div>
+      <RadioGroup
+        label={t('account.appearance')}
+        variant="card"
+        value={preference}
+        options={THEME_ORDER.map((option) => ({
+          value: option,
+          label: t(THEME_LABEL_KEY[option]),
+          icon: THEME_ICON[option],
+        }))}
+        onChange={setPreference}
+      />
     </Card>
   );
 }
@@ -306,33 +293,20 @@ function LanguageCard() {
 
   return (
     <Card title={t('account.language')} description={t('account.languageHint')}>
-      <div role="radiogroup" aria-label={t('account.language')} className="grid gap-2 sm:grid-cols-3">
-        {LOCALE_ORDER.map((option) => {
-          const active = preference === option;
-          return (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              // 语言名是**该语言自己的写法**，所以这一项不走 `t()` 之外的处理；
-              // 而「跟随浏览器」要跟着界面语言变，所以走 key。
-              lang={option === 'system' ? undefined : option}
-              onClick={() => setPreference(option)}
-              className={cn(
-                'flex items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition',
-                active
-                  ? 'border-primary bg-primary/10 font-medium text-primary'
-                  : 'border-border hover:bg-accent hover:text-accent-foreground',
-              )}
-            >
-              <Icon name={option === 'system' ? 'monitor' : 'globe'} className="size-4" />
-              <span className="flex-1">{t(LOCALE_LABEL[option])}</span>
-              {active ? <Icon name="check" className="size-4" /> : null}
-            </button>
-          );
-        })}
-      </div>
+      <RadioGroup
+        label={t('account.language')}
+        variant="card"
+        value={preference}
+        options={LOCALE_ORDER.map((option) => ({
+          value: option,
+          label: t(LOCALE_LABEL[option]),
+          icon: option === 'system' ? 'monitor' : 'globe',
+          // 语言名是**该语言自己的写法**，所以要标上 `lang`，读屏才会用对语音包。
+          // 「跟随浏览器」跟着界面语言变，不标。
+          lang: option === 'system' ? undefined : option,
+        }))}
+        onChange={setPreference}
+      />
     </Card>
   );
 }
