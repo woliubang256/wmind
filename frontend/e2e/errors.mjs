@@ -6,7 +6,7 @@
  * 注入的那一行不在任何提交里，验完即恢复。
  */
 
-import { BASE, api, check, ensureUser, launchBrowser, makeUser, newPage, run, summary, uiLogin } from './lib/harness.mjs';
+import { BASE, api, check, ensureUser, launchBrowser, makeUser, newContext, newPage, run, summary, uiLogin } from './lib/harness.mjs';
 
 /** `--crash` 只在注入了崩溃的那一轮用，见文件头。 */
 const CRASH = process.argv.includes('--crash');
@@ -83,7 +83,7 @@ async function main() {
       // 断网时**新开**的页面：把 navigator.onLine 钉成 false 再加载（真断网时
       // SPA 本身都下载不下来，那不是这条要验的东西）。验的是首帧快照——
       // 用 useSyncExternalStore 才有的性质，用 useEffect 订阅会先渲染成「在线」。
-      const offlineContext = await browser.newContext();
+      const offlineContext = await newContext(browser);
       await offlineContext.addInitScript(() => {
         Object.defineProperty(Navigator.prototype, 'onLine', { get: () => false });
       });

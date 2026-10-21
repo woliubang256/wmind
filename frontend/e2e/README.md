@@ -62,15 +62,15 @@ ln -s /path/to/playwright-core frontend/node_modules/playwright-core
 ```bash
 cd frontend
 
-node e2e/run-all.mjs             # 六套全跑
+node e2e/run-all.mjs             # 八套全跑
 node e2e/run-all.mjs a11y share  # 只跑指定的
 node e2e/a11y.mjs                # 单跑一套（输出最完整）
 ```
 
 `run-all.mjs` 会先探一次后端和前端的健康，连不上就直接报「先把服务起起来」，
-不让六套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余五套。
+不让八套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余七套。
 
-## 六套分别验什么
+## 八套分别验什么
 
 | 脚本 | 条数 | 判据 |
 | --- | --- | --- |
@@ -78,10 +78,12 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `templates.mjs` | 27 | 8 个内置模板各建一次图且结构对得上、模板预览是真渲染、我的模板增删改、站点开关关闭后的三处表现 |
 | `canvas.mjs` | 25 | 多画布新建/切换/持久化、大纲与画布双向同步、`Ctrl+]` 降级、折叠隐藏后代、ZEN 模式进出 |
 | `a11y.mjs` | 23 | 画布是不是一棵可读的树（`role=tree` / `treeitem` / `aria-level` / `aria-expanded`）、方向键后 `aria-activedescendant` 换人、播报文案、只读预览降级成一个 `img`、两个键盘陷阱 |
+| `export.mjs` | 22 | 六种格式都在、PDF 能下且结构合法（`%PDF` / `DCTDecode` / `MediaBox` 与页脚毫米对得上 / `startxref` 指对）、SVG 分支没被带坏、切英文后导航与导出对话框整块无中文、刷新后语言保持 |
+| `register.mjs` | 11 | 关闭注册后登录页没有入口、`/register` 拿不到表单、接口返回 403 `REGISTRATION_CLOSED` 而不是 429、关站期间连打 5 次不退化、重开后不再返回 `REGISTRATION_CLOSED` |
 | `culling.mjs` | 6 | 2001 个节点时只渲染视口附近、放大后是子集、缩回来不丢、选中节点离开视口仍渲染 |
 | `errors.mjs` | 3 | 断网提示条出现与消失、首帧就离线时也带提示条 |
 
-合计 108 条。
+合计 141 条。
 
 ## 几处不显然的地方
 
@@ -99,6 +101,10 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 53ms、生产构建只有 22.6ms——拿 dev 的数字做优化决策会优化错地方。注意
 `vite preview` **不套用** `server.proxy`，所以量性能时要自己起一个带 `/api`
 反代的静态服务器，否则接口全 404。本仓库的六套脚本不涉及计时，可以跑 dev。
+
+**`register.mjs` 会改站点设置，跑完自己恢复。** 它用管理员账号把
+`auth.registration_enabled` 关掉、验完再打开。`finally` 里无条件恢复：这套脚本
+被别的套件跟在后面跑，留一个「已关站」的实例会让别人的注册全部失败。
 
 **`culling.mjs` 自己造压测文档。** 2001 个节点（40 个分支 × 50 个叶子 + 根）走
 `POST /maps` 现造，不再依赖手工灌库的固定 uid——那样换台机器就跑不了。

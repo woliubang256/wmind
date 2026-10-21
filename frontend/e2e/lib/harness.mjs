@@ -118,13 +118,33 @@ export async function ensureUser(user) {
 
 // ---------------------------------------------------------------- 浏览器
 
-export async function launchBrowser({ width = 1440, height = 900 } = {}) {
+/**
+ * 再开一个独立上下文（分享页要匿名、断网提示要干净存储）。
+ *
+ * 这里同样必须钉 `locale`：语言偏好的 `system` 那一档读的是
+ * `navigator.languages`，而 Playwright 新建上下文的默认语言是 `en-US`。
+ * 不钉的话，匿名上下文里的分享页会整页英文——断言中文文案的用例只能超时，
+ * 而且报错只说「等不到某个标题」，看不出是语言问题。
+ */
+export async function newContext(browser, { width = 1440, height = 900, locale = 'zh-CN' } = {}) {
+  return browser.newContext({ viewport: { width, height }, locale });
+}
+
+/**
+ * 起浏览器。
+ *
+ * `locale` 显式钉成中文：应用现在有语言切换器，而 `system` 那一档读的是
+ * `navigator.languages`——不钉的话，同一份脚本在英文系统的机器上会先渲染出
+ * 英文界面，所有 `getByLabel('用户名或邮箱')` 立刻超时。断言写的是中文文案，
+ * 环境就该是中文，不能靠跑脚本的机器碰巧是中文系统。
+ */
+export async function launchBrowser({ width = 1440, height = 900, locale = 'zh-CN' } = {}) {
   const browser = await chromium.launch({
     executablePath: CHROME,
     args: ['--no-sandbox', '--font-render-hinting=none'],
   });
   // 显式建默认上下文，`contexts()[0]` 才稳定存在——`newPage` 靠它。
-  await browser.newContext({ viewport: { width, height } });
+  await newContext(browser, { width, height, locale });
   return browser;
 }
 

@@ -23,6 +23,7 @@ import {
   launchBrowser,
   login,
   makeUser,
+  newContext,
   newPage,
   run,
   stamp,
@@ -140,7 +141,7 @@ async function main() {
 
   /** 每次开一个新的匿名上下文，等价于无痕窗口：不共享 localStorage / cookie。 */
   const anon = async () => {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const context = await newContext(browser);
     // 匿名页的异常也归到同一个数组里，判据最后一条要一起判。
     const created = await newPage(browser, { context, errors });
     return { context, page: created.page };
