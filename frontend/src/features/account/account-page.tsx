@@ -11,7 +11,7 @@ import { useSiteConfig } from '@/features/site/use-site-config';
 import { useLocaleStore } from '@/app/locale-store';
 import { useThemeStore } from '@/app/theme-store';
 import { THEME_ORDER, type ThemePreference } from '@/app/theme';
-import { LOCALE_ORDER, type LocalePreference } from '@/lib/i18n/preference';
+import { LOCALE_LABEL, LOCALE_ORDER } from '@/lib/i18n/preference';
 import { userApi } from '@/lib/api/endpoints';
 import type { User } from '@/lib/api/types';
 import { ApiError, codeToField, fieldErrorsFrom } from '@/lib/api/errors';
@@ -25,17 +25,9 @@ const THEME_LABEL_KEY: Record<ThemePreference, string> = {
 };
 
 /**
- * 语言的显示名。
- *
- * 不跟随界面语言：语言选择器里永远用**该语言自己的写法**（中文 / English），
- * 否则英文界面下会看到「Chinese」和「English」，中文界面下看到「中文」和
- * 「英文」——用户要在一堆自己看不懂的字里找自己看得懂的那一个。
+ * 语言的显示名在 `lib/i18n/preference.ts`：设置页与登录页右上角的选择器共用
+ * 同一张表，两处各写一份就会在「加语言时漏改一处」。
  */
-const LOCALE_LABEL: Record<LocalePreference, string> = {
-  system: 'locale.system',
-  'zh-CN': 'locale.zh-CN',
-  'en-US': 'locale.en-US',
-};
 
 const THEME_ICON: Record<ThemePreference, 'sun' | 'moon' | 'monitor'> = {
   light: 'sun',

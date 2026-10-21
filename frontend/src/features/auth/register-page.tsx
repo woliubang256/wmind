@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LocaleSwitcher } from '@/components/locale-switcher';
 import { TextField } from '@/components/ui/input';
 import { authKeys, useCurrentUser } from '@/app/auth';
 import { useSiteConfig } from '@/features/site/use-site-config';
@@ -71,8 +72,10 @@ export function RegisterPage() {
 
   if (!config.registrationEnabled) {
     return (
-      <section className="rounded-3xl border border-border/80 bg-card/95 p-8 text-center shadow-xl shadow-primary/5">
-        <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-secondary text-secondary-foreground">
+      <section className="relative rounded-3xl border border-border/80 bg-card/95 p-8 text-center shadow-xl shadow-primary/5">
+        {/* 关站页也要有切换：读不懂「本站暂未开放注册」的人，正是最需要它的。 */}
+        <LocaleSwitcher className="absolute right-4 top-4" />
+        <span className="mx-auto mt-4 grid size-12 place-items-center rounded-2xl bg-secondary text-secondary-foreground">
           <Icon name="lock" className="size-5" />
         </span>
         <h1 className="mt-5 text-xl font-semibold tracking-tight">{t('register.closedTitle')}</h1>
@@ -85,8 +88,10 @@ export function RegisterPage() {
   }
 
   return (
-    <section className="rounded-3xl border border-border/80 bg-card/95 p-7 shadow-xl shadow-primary/5 backdrop-blur sm:p-9">
-      <div className="mb-7 text-center">
+    <section className="relative rounded-3xl border border-border/80 bg-card/95 p-7 shadow-xl shadow-primary/5 backdrop-blur sm:p-9">
+      <LocaleSwitcher className="absolute right-4 top-4" />
+
+      <div className="mb-7 mt-5 text-center sm:mt-6">
         <h1 className="text-xl font-semibold tracking-tight">{t('register.title', { site: config.siteName })}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t('register.description')}</p>
       </div>

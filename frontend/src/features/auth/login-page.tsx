@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LocaleSwitcher } from '@/components/locale-switcher';
 import { TextField } from '@/components/ui/input';
 import { api, setAccessToken, type AuthSession } from '@/lib/api/client';
 import { ApiError, fieldErrorsFrom } from '@/lib/api/errors';
@@ -62,8 +63,15 @@ export function LoginPage() {
   };
 
   return (
-    <section className="rounded-3xl border border-border/80 bg-card/95 p-7 shadow-xl shadow-primary/5 backdrop-blur sm:p-9">
-      <div className="mb-8 flex flex-col items-center gap-4 text-center">
+    <section className="relative rounded-3xl border border-border/80 bg-card/95 p-7 shadow-xl shadow-primary/5 backdrop-blur sm:p-9">
+      {/*
+        语言切换放在卡片右上角，并且是**第一个**可聚焦元素：看不懂当前界面语言
+        的人，第一个 Tab 就该落在它上面。`mt-5` 给 logo 让出一行高度，否则窄屏上
+        这块会和居中的 logo 在角上蹭到一起。
+      */}
+      <LocaleSwitcher className="absolute right-4 top-4" />
+
+      <div className="mb-8 mt-5 flex flex-col items-center gap-4 text-center sm:mt-7">
         <img
           src={config.logoUrl || '/wmind-logo.jpg'}
           alt={t('auth.logoAlt')}

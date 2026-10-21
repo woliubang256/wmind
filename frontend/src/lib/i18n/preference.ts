@@ -29,6 +29,23 @@ export const LOCALE_STORAGE_KEY = 'wmind:locale';
 /** 展示顺序，也是分段控件的顺序。 */
 export const LOCALE_ORDER: LocalePreference[] = ['system', 'zh-CN', 'en-US'];
 
+/**
+ * 语言的显示名（i18n key）。
+ *
+ * 具体语言**不跟随界面语言**：选择器里永远用该语言自己的写法（中文 / English），
+ * 否则英文界面下会看到「Chinese」与「English」、中文界面下看到「中文」与「英文」
+ * ——用户要在一堆自己看不懂的字里找自己看得懂的那一个。只有「跟随浏览器」这一项
+ * 跟着界面语言走（它本来就没有自己的写法）。
+ *
+ * 放这里而不是某个页面里：设置页的分段控件与登录页右上角的小选择器是同一个列表，
+ * 两处各写一份就会出现「加语言时漏改一处」。
+ */
+export const LOCALE_LABEL: Record<LocalePreference, string> = {
+  system: 'locale.system',
+  'zh-CN': 'locale.zh-CN',
+  'en-US': 'locale.en-US',
+};
+
 /** 兜底语言：既不是中文也不是英文的浏览器，看到中文。 */
 export const FALLBACK_LOCALE: SupportedLocale = 'zh-CN';
 

@@ -35,7 +35,7 @@ cd frontend
 node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5199
 ```
 
-dev 就够——六套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
+dev 就够——九套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
 必须换生产构建，见下面「几处不显然的地方」。
 
 ### `playwright-core` 没写进 `package.json`
@@ -62,15 +62,15 @@ ln -s /path/to/playwright-core frontend/node_modules/playwright-core
 ```bash
 cd frontend
 
-node e2e/run-all.mjs             # 八套全跑
+node e2e/run-all.mjs             # 九套全跑
 node e2e/run-all.mjs a11y share  # 只跑指定的
 node e2e/a11y.mjs                # 单跑一套（输出最完整）
 ```
 
 `run-all.mjs` 会先探一次后端和前端的健康，连不上就直接报「先把服务起起来」，
-不让八套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余七套。
+不让九套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余八套。
 
-## 八套分别验什么
+## 九套分别验什么
 
 | 脚本 | 条数 | 判据 |
 | --- | --- | --- |
@@ -80,10 +80,11 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `a11y.mjs` | 23 | 画布是不是一棵可读的树（`role=tree` / `treeitem` / `aria-level` / `aria-expanded`）、方向键后 `aria-activedescendant` 换人、播报文案、只读预览降级成一个 `img`、两个键盘陷阱 |
 | `export.mjs` | 24 | 六种格式都在、PDF 能下且结构合法（`%PDF` / `DCTDecode` / `MediaBox` 与页脚毫米对得上 / `startxref` 指对）、SVG 分支没被带坏、切英文后导航与导出对话框整块无中文、刷新后语言保持、**站点关掉导出后编辑器不再有「导出」按钮** |
 | `register.mjs` | 11 | 关闭注册后登录页没有入口、`/register` 拿不到表单、接口返回 403 `REGISTRATION_CLOSED` 而不是 429、关站期间连打 5 次不退化、重开后不再返回 `REGISTRATION_CLOSED` |
+| `locale.mjs` | 12 | 登录/注册页右上角有语言选择器、几何位置确实在右上角、**第一个 Tab 就落在它上面**、切英文后整块卡片零残留中文、`html[lang]` 与 `localStorage` 同步、刷新后保持、关站提示页也有入口、切回中文 |
 | `culling.mjs` | 6 | 2001 个节点时只渲染视口附近、放大后是子集、缩回来不丢、选中节点离开视口仍渲染 |
 | `errors.mjs` | 3 | 断网提示条出现与消失、首帧就离线时也带提示条 |
 
-合计 143 条。
+合计 155 条。
 
 ## 几处不显然的地方
 
@@ -100,16 +101,24 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 **性能数字必须来自生产构建。** dev 模式是双渲染 + 不压缩，同一段操作 dev 量到
 53ms、生产构建只有 22.6ms——拿 dev 的数字做优化决策会优化错地方。注意
 `vite preview` **不套用** `server.proxy`，所以量性能时要自己起一个带 `/api`
-反代的静态服务器，否则接口全 404。本仓库的六套脚本不涉及计时，可以跑 dev。
+反代的静态服务器，否则接口全 404。本仓库的九套脚本不涉及计时，可以跑 dev。
 
-**`register.mjs` 与 `export.mjs` 会改站点设置，跑完自己恢复。** 前者用管理员账号把
-`auth.registration_enabled` 关掉、验完再打开；后者把 `feature.export_enabled` 关掉，
-验「编辑器里的导出按钮消失」，再打开。两处 `finally` 都无条件恢复：这套脚本被别的
-套件跟在后面跑，留一个「已关站」或「已关导出」的实例会让别人的用例全部失败。
+**`register.mjs`、`locale.mjs` 与 `export.mjs` 会改站点设置，跑完自己恢复。**
+前者用管理员账号把 `auth.registration_enabled` 关掉、验完再打开；`locale.mjs`
+为了验「关站提示页也得有语言切换」也会关一次；`export.mjs` 把
+`feature.export_enabled` 关掉，验「编辑器里的导出按钮消失」，再打开。三处
+`finally` 都无条件恢复：这套脚本被别的套件跟在后面跑，留一个「已关站」或
+「已关导出」的实例会让别人的用例全部失败。
 
 `export.mjs` 里那两条还多一个坑：**不能用 `reload()` 验开关效果**。站点配置在
 前端有 5 分钟 `staleTime`，刷新后拿到的仍是旧的那份。要开一个**新页面**（同一个
 context，Cookie 还在，但 React Query 缓存是新的）。
+
+**登录会被限流，`login()` 自己会等。** 登录限流按「IP + 账号」分桶，5 次/分钟
+（`NewRateLimiter(5, time.Minute, 5)`）。九套脚本一轮下来管理员账号要登五六次，
+正好压在边界上——所以 `lib/harness.mjs` 的 `login()` 撞到 429 时会按服务端给的
+`retryAfter` 等一等再试（最多两次）。**限流不是被测对象**，不该让脚本因为跑得勤
+而红；不加这一步的话，连跑两轮必然有一套挂在 429 上，报错还长得像「登录坏了」。
 
 **`culling.mjs` 自己造压测文档。** 2001 个节点（40 个分支 × 50 个叶子 + 根）走
 `POST /maps` 现造，不再依赖手工灌库的固定 uid——那样换台机器就跑不了。

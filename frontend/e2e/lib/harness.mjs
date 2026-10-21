@@ -87,9 +87,28 @@ export async function api(path, { method = 'GET', token, body, headers = {}, raw
   return payload;
 }
 
-export async function login(identifier, password) {
-  const res = await api('/auth/login', { method: 'POST', body: { identifier, password } });
-  return res.data.accessToken;
+/**
+ * 登录。
+ *
+ * 登录接口是 5 次/分钟/IP 限流，而九套脚本一轮下来要登录十几次——**限流不是
+ * 被测对象**，撞上了就按服务端给的 `retryAfter` 等一等再试。不等的话，
+ * `npm run e2e` 连跑两轮必然有一套挂在 429 上，报错还长得像「登录接口坏了」，
+ * 排查时容易一路查到鉴权代码里去。
+ *
+ * 最多重试两次（单次等待上限 30s）：真被限死了应该报错，不该无限等下去。
+ */
+export async function login(identifier, password, attempt = 0) {
+  try {
+    const res = await api('/auth/login', { method: 'POST', body: { identifier, password } });
+    return res.data.accessToken;
+  } catch (error) {
+    const retryAfter = /"retryAfter":(\d+)/.exec(String(error))?.[1];
+    if (retryAfter === undefined || attempt >= 2) throw error;
+    const waitMs = Math.min(Number(retryAfter) * 1000 + 500, 30_000);
+    console.log(`  （登录被限流，等 ${Math.round(waitMs / 1000)}s 后重试）`);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    return login(identifier, password, attempt + 1);
+  }
 }
 
 /**
