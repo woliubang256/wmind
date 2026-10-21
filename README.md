@@ -7,7 +7,7 @@
 | 后端 | Go 1.25 + Gin，模块化单体；**SQLite（默认）与 PostgreSQL 双方言** |
 | 前端 | React + TypeScript + Vite + Tailwind v4，纯 SPA，自带三档暗色模式（light / dark / system） |
 | 编辑器 | 自研 SVG 渲染 + 自研布局引擎（8 种结构、10 套配色） |
-| 格式 | 自有 `.wmind` 文档格式；导入 XMind / Markdown / OPML，导出 PNG / JPEG / SVG / Markdown / OPML（PDF 待做） |
+| 格式 | 自有 `.wmind` 文档格式；导入 XMind / Markdown / OPML，导出 PNG / JPEG / SVG / PDF / Markdown / OPML（PDF 为单页图片，文字不可选中） |
 | 部署 | `docker compose up -d`，一期零外部依赖 |
 
 需求、架构、接口、部署的完整设计见 [`docs/`](./docs/README.md)，逐里程碑的进度与验收记录见
@@ -26,13 +26,13 @@
 | M1 账号体系：注册/登录/刷新/登出/改密/头像、管理后台、审计、三档暗色 | ✅ |
 | M2 编辑器内核：SVG 渲染、布局引擎、拖拽、快捷键、撤销重做、自动保存 | ✅ |
 | M3 样式与主题：8 种结构、10 套配色、自定义主题、面板 | ✅ |
-| M4 导入导出：XMind 8/新版、Markdown、OPML；导出 SVG/PNG/JPEG/MD/OPML | ✅ **PDF 导出未做**（字体子集化是独立工程，见 [docs/06](./docs/06-导入导出与主题系统.md)） |
+| M4 导入导出：XMind 8/新版、Markdown、OPML；导出 SVG/PNG/JPEG/PDF/MD/OPML | ✅ PDF 走**栅格**路线（单页图片 + 手写容器），文字不可选中，界面已说明；矢量 PDF 需要 WOFF2→TTF 子集化工具，是独立工程，见 [docs/06](./docs/06-导入导出与主题系统.md) §3.5 |
 | M5 模板 / 多画布 / 大纲 / ZEN / 分享链接 | ✅ |
 | M6 无障碍、视口裁剪、错误兜底、备份与恢复 | ✅ 无障碍 23 条、裁剪 6 条、错误 3 条界面验收全过 |
-| 测试 | ✅ 前端 959 条单测；后端全绿；界面验收 108 条（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
+| 测试 | ✅ 前端 1015 条单测（62 个文件）；后端全绿；界面验收 141 条 / 8 套（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
 | 两套 Compose / Dockerfile / Nginx | 🟡 配置已写，**本机没有 Docker，镜像构建与编排未实跑** |
 | PostgreSQL 完整回归 | ⬜ 需要 CI 提供实例 |
-| 多语言 | 🟡 zh-CN 完整；en-US 覆盖主要文案，管理后台等页面仍以中文为主 |
+| 多语言 | ✅ zh-CN / en-US 双语约 860 个键，界面内可切换（跟随浏览器 / 中文 / English），`<html lang>` 同步；守卫测试比对 key、占位符与源码引用 |
 
 ## 快速开始
 
