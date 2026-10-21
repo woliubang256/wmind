@@ -16,7 +16,7 @@ import type { LayoutResult, Rect } from '../layout/types';
 import type { Sheet, Theme, WmindDocument } from '../model/types';
 
 /** 会产出文件的导出格式。 */
-export type ExportFormat = 'svg' | 'png' | 'jpeg' | 'md' | 'opml';
+export type ExportFormat = 'svg' | 'png' | 'jpeg' | 'pdf' | 'md' | 'opml';
 /** 纯文本格式：从文档模型直接序列化，不经过布局与渲染，因此没有尺寸、留白、背景。 */
 export type TextExportFormat = 'md' | 'opml';
 

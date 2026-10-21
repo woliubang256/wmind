@@ -44,6 +44,7 @@ import { applyFontCss, loadFontCss, planFamilies } from '@/editor/export/font-em
 import { detectFallback } from '@/editor/export/fonts';
 import { checkRasterSize, rasterizeSvg } from '@/editor/export/raster';
 import { exportBranches, planBranches, svgEncoder } from '@/editor/export/split';
+import { buildImagePdf, jpegSize, pageSizePoints } from '@/editor/export/pdf';
 import { buildExportSvg, exportFileName, svgDataUrl } from '@/editor/export/svg';
 import { exportMarkdown, exportOpml } from '@/editor/export/text';
 import type { WmindDocument } from '@/editor/model/types';
@@ -107,6 +108,7 @@ const FORMATS: {
   { id: 'svg', labelKey: 'editor.export.formatSvg', descriptionKey: 'editor.export.description', ext: 'svg' },
   { id: 'png', labelKey: 'editor.export.formatPng', descriptionKey: 'editor.export.descriptionPng', ext: 'png' },
   { id: 'jpeg', labelKey: 'editor.export.formatJpeg', descriptionKey: 'editor.export.descriptionJpeg', ext: 'jpg' },
+  { id: 'pdf', labelKey: 'editor.export.formatPdf', descriptionKey: 'editor.export.descriptionPdf', ext: 'pdf' },
   {
     id: 'md',
     labelKey: 'editor.export.formatMd',
@@ -122,6 +124,34 @@ const FORMATS: {
     mime: 'text/x-opml;charset=utf-8',
   },
 ];
+
+/** point → 毫米。PDF 的页面单位是 1/72 英寸。 */
+function mmOf(px: number): number {
+  return Math.round(px * 0.75 * (25.4 / 72));
+}
+
+/**
+ * 把刚栅格化出来的 JPEG 包成单页 PDF。
+ *
+ * 图像尺寸从 JPEG 字节里读，不从 `outputWidth` 拿：两者应当相等，但真出现
+ * 差异时（浏览器对大图做降采样、`toBlob` 换了编码参数），声明错的 `/Width`
+ * 会让阅读器拉伸或裁切，而且**完全不报错**——用户拿到的是一张看着「有点糊」
+ * 的图，没有任何线索。以文件本身为准，至少不会错位。
+ */
+function toPdf(jpeg: Uint8Array, title: string, logicalWidth: number, logicalHeight: number): Uint8Array {
+  const size = jpegSize(jpeg);
+  if (size === null) throw new Error('PDF 需要 JPEG 位图');
+  const page = pageSizePoints(logicalWidth, logicalHeight);
+  return buildImagePdf({
+    jpeg,
+    imageWidth: size.width,
+    imageHeight: size.height,
+    pageWidth: page.width,
+    pageHeight: page.height,
+    title,
+    creator: 'wmind',
+  });
+}
 
 export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDialogProps) {
   const { t } = useTranslation();
@@ -223,7 +253,8 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   const outputHeight = Math.round(ctx.height * ctx.scale);
   // 只有 PNG / JPEG 需要过尺寸闸门。文本格式若也走一遍，一张巨型导图会被判成
   // 「太大」并把「下载」按钮禁掉——导个 Markdown 而已。
-  const needsRaster = options.format === 'png' || options.format === 'jpeg';
+  // PDF 也走位图：它内部嵌的就是一张 JPEG，同样受浏览器尺寸闸门约束。
+  const needsRaster = options.format === 'png' || options.format === 'jpeg' || options.format === 'pdf';
   const rasterVerdict = needsRaster ? checkRasterSize(outputWidth, outputHeight) : { kind: 'ok' as const };
 
   const [busy, setBusy] = useState(false);
@@ -252,7 +283,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
     if (split && branches.length > 1) {
       setBusy(true);
       try {
-        const rasterFormat = options.format === 'jpeg' ? 'jpeg' : 'png';
+        const rasterFormat = options.format === 'png' ? 'png' : 'jpeg';
         const result = await exportBranches(doc, sheetId, options, format.ext, {
           // 图片内嵌对拆分同样有效：每张分支图也要把 `/uploads/…` 换成 data URL，
           // 否则打出来的 zip 里全是指回本机的死链。
@@ -271,7 +302,12 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                     format: rasterFormat,
                     background: raw.background,
                   });
-                  return new Uint8Array(await blob.arrayBuffer());
+                  const bytes = new Uint8Array(await blob.arrayBuffer());
+                  // 拆分出的每个分支都是一份独立文件，所以每份都要有自己的
+                  // 页面尺寸与标题——用整份文档的标题会让 zip 里出现 N 个同名文件。
+                  return options.format === 'pdf'
+                    ? toPdf(bytes, raw.title, raw.width, raw.height)
+                    : bytes;
                 },
         });
         downloadBlob(
@@ -299,10 +335,17 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       const blob = await rasterizeSvg(markup, {
         width: outputWidth,
         height: outputHeight,
-        format: options.format === 'jpeg' ? 'jpeg' : 'png',
+        // PDF 内部嵌 JPEG：省掉一次「PNG → 再压缩」的往返，也避免 PDF 里
+        // 出现需要单独处理的 alpha 通道。
+        format: options.format === 'png' ? 'png' : 'jpeg',
         background: ctx.background,
       });
-      downloadBlob(blob, exportFileName(ctx.title, format.ext));
+      if (options.format === 'pdf') {
+        const bytes = toPdf(new Uint8Array(await blob.arrayBuffer()), ctx.title, ctx.width, ctx.height);
+        downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), exportFileName(ctx.title, 'pdf'));
+      } else {
+        downloadBlob(blob, exportFileName(ctx.title, format.ext));
+      }
       onClose();
     } catch {
       // 失败时留在对话框里：关掉再重开会丢掉用户刚调的选项。
@@ -328,7 +371,13 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 : split && branches.length > 1
                   // 拆分时逐张尺寸不同，报一个数只会误导；报文件数才有用。
                   ? t('editor.export.splitFiles', { count: branches.length })
-                  : t('editor.export.size', { width: outputWidth, height: outputHeight })}
+                  : options.format === 'pdf'
+                    ? // PDF 的「尺寸」用户是按纸看的：报像素没有意义。
+                      t('editor.export.pageSize', {
+                        width: mmOf(ctx.width),
+                        height: mmOf(ctx.height),
+                      })
+                    : t('editor.export.size', { width: outputWidth, height: outputHeight })}
             </span>
             {rasterVerdict.kind === 'too-large' ? (
               <span className="ml-2 text-destructive">
