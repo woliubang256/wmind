@@ -127,10 +127,15 @@ function PasswordGate({ token, onGranted }: { token: string; onGranted: (accessT
 /** 只读画布。文档已经过归一化，字体就绪后才进布局（否则宽度会被永久缓存错）。 */
 function ShareCanvas({ share }: { share: PublicShare }) {
   const { t } = useTranslation();
+  const { config } = useSiteConfig();
   const document = useMemo(() => parseDocument(share.document).document, [share.document]);
   const fonts = useFontsReady(document);
   const sheet = document.sheets[0];
   const [exportOpen, setExportOpen] = useState(false);
+
+  // 两个开关都要开：分享者允许下载，且站点没关导出。站点级开关是管理员
+  // 的意志，不该被单条分享链接的 `allowDownload` 覆盖。
+  const canExport = share.allowDownload && config.exportEnabled;
 
   if (!sheet) return <InvalidShare code="SHARE_NOT_FOUND" />;
 
@@ -147,7 +152,7 @@ function ShareCanvas({ share }: { share: PublicShare }) {
             {share.expiresAt ? ` · ${t('share.public.expiresAt', { time: new Date(share.expiresAt).toLocaleDateString() })}` : ''}
           </p>
         </div>
-        {share.allowDownload ? (
+        {canExport ? (
           <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
             <Icon name="download" className="mr-1.5 size-4" />
             {t('editor.exportEntry')}
@@ -170,7 +175,7 @@ function ShareCanvas({ share }: { share: PublicShare }) {
         )}
       </div>
 
-      {share.allowDownload && exportOpen ? (
+      {canExport && exportOpen ? (
         <Suspense fallback={null}>
           <ExportDialog open={exportOpen} document={document} sheetId={sheet.id} onClose={() => setExportOpen(false)} />
         </Suspense>

@@ -823,15 +823,25 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </Button>
         ) : null}
 
-        <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
-          <Icon name="link" className="mr-1.5 size-4" />
-          {t('share.action')}
-        </Button>
+        {/*
+          分享与导出都跟着站点开关走。两个都是「点了必然失败」的按钮：
+          站点关掉分享后 `POST /shares` 回 403 `SHARE_DISABLED`，而导出虽然
+          全在浏览器里做、服务端拦不住，但把一个管理员明确关掉的能力继续摆在
+          工具栏上，等于让设置项看起来没生效。
+        */}
+        {config.shareEnabled ? (
+          <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
+            <Icon name="link" className="mr-1.5 size-4" />
+            {t('share.action')}
+          </Button>
+        ) : null}
 
-        <Button variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
-          <Icon name="download" className="mr-1.5 size-4" />
-          {t('editor.exportEntry')}
-        </Button>
+        {config.exportEnabled ? (
+          <Button variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
+            <Icon name="download" className="mr-1.5 size-4" />
+            {t('editor.exportEntry')}
+          </Button>
+        ) : null}
 
         {/*
           视图切换（画布 / 大纲）与 ZEN。三个都是「看同一份文档的不同方式」，

@@ -78,12 +78,12 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `templates.mjs` | 27 | 8 个内置模板各建一次图且结构对得上、模板预览是真渲染、我的模板增删改、站点开关关闭后的三处表现 |
 | `canvas.mjs` | 25 | 多画布新建/切换/持久化、大纲与画布双向同步、`Ctrl+]` 降级、折叠隐藏后代、ZEN 模式进出 |
 | `a11y.mjs` | 23 | 画布是不是一棵可读的树（`role=tree` / `treeitem` / `aria-level` / `aria-expanded`）、方向键后 `aria-activedescendant` 换人、播报文案、只读预览降级成一个 `img`、两个键盘陷阱 |
-| `export.mjs` | 22 | 六种格式都在、PDF 能下且结构合法（`%PDF` / `DCTDecode` / `MediaBox` 与页脚毫米对得上 / `startxref` 指对）、SVG 分支没被带坏、切英文后导航与导出对话框整块无中文、刷新后语言保持 |
+| `export.mjs` | 24 | 六种格式都在、PDF 能下且结构合法（`%PDF` / `DCTDecode` / `MediaBox` 与页脚毫米对得上 / `startxref` 指对）、SVG 分支没被带坏、切英文后导航与导出对话框整块无中文、刷新后语言保持、**站点关掉导出后编辑器不再有「导出」按钮** |
 | `register.mjs` | 11 | 关闭注册后登录页没有入口、`/register` 拿不到表单、接口返回 403 `REGISTRATION_CLOSED` 而不是 429、关站期间连打 5 次不退化、重开后不再返回 `REGISTRATION_CLOSED` |
 | `culling.mjs` | 6 | 2001 个节点时只渲染视口附近、放大后是子集、缩回来不丢、选中节点离开视口仍渲染 |
 | `errors.mjs` | 3 | 断网提示条出现与消失、首帧就离线时也带提示条 |
 
-合计 141 条。
+合计 143 条。
 
 ## 几处不显然的地方
 
@@ -102,9 +102,14 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 `vite preview` **不套用** `server.proxy`，所以量性能时要自己起一个带 `/api`
 反代的静态服务器，否则接口全 404。本仓库的六套脚本不涉及计时，可以跑 dev。
 
-**`register.mjs` 会改站点设置，跑完自己恢复。** 它用管理员账号把
-`auth.registration_enabled` 关掉、验完再打开。`finally` 里无条件恢复：这套脚本
-被别的套件跟在后面跑，留一个「已关站」的实例会让别人的注册全部失败。
+**`register.mjs` 与 `export.mjs` 会改站点设置，跑完自己恢复。** 前者用管理员账号把
+`auth.registration_enabled` 关掉、验完再打开；后者把 `feature.export_enabled` 关掉，
+验「编辑器里的导出按钮消失」，再打开。两处 `finally` 都无条件恢复：这套脚本被别的
+套件跟在后面跑，留一个「已关站」或「已关导出」的实例会让别人的用例全部失败。
+
+`export.mjs` 里那两条还多一个坑：**不能用 `reload()` 验开关效果**。站点配置在
+前端有 5 分钟 `staleTime`，刷新后拿到的仍是旧的那份。要开一个**新页面**（同一个
+context，Cookie 还在，但 React Query 缓存是新的）。
 
 **`culling.mjs` 自己造压测文档。** 2001 个节点（40 个分支 × 50 个叶子 + 根）走
 `POST /maps` 现造，不再依赖手工灌库的固定 uid——那样换台机器就跑不了。

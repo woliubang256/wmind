@@ -10,9 +10,18 @@
  */
 
 import fs from 'node:fs/promises';
-import { BASE, api, check, ensureUser, launchBrowser, makeUser, newPage, run, stamp, uiLogin, waitForCanvas } from './lib/harness.mjs';
+import { ADMIN, BASE, api, check, ensureUser, launchBrowser, login, makeUser, newPage, run, stamp, uiLogin, waitForCanvas } from './lib/harness.mjs';
 
 const USER = makeUser('export');
+
+/** 改站点导出开关。走管理员接口——界面那条由 UI 断言负责。 */
+async function setExportEnabled(token, enabled) {
+  return api('/admin/settings', {
+    method: 'PUT',
+    token,
+    body: { 'feature.export_enabled': enabled },
+  });
+}
 
 /** 一棵足够大、又有中文的树：中文标题会走 PDF 的 UTF-16BE 分支。 */
 function documentFor(title) {
@@ -248,7 +257,41 @@ async function main() {
     );
 
     check('IE-M7-22 全程没有未捕获异常', errors.length === 0, errors.slice(0, 2).join(' | '));
+
+    // ── 9. 站点关掉导出之后，入口要消失 ──────────────────────
+    // 导出全在浏览器里做，服务端拦不住——所以「关掉导出」这件事只可能靠界面
+    // 兑现。只验按钮消失，不验「拦住了请求」：后者在这个架构下不成立。
+    const adminToken = await login(ADMIN.email, ADMIN.password);
+    await setExportEnabled(adminToken, false);
+
+    // 同一个 context 开新页：Cookie 还在，但 React Query 缓存是新的。
+    // 直接 reload 会拿到 5 分钟内仍然「新鲜」的旧配置，验不出开关的效果。
+    const closed = await page.context().newPage();
+    await closed.goto(`${BASE}/maps/${uid}`);
+    await waitForCanvas(closed);
+    check(
+      'IE-M7-23 关闭导出后编辑器没有「导出」按钮',
+      (await closed.getByRole('button', { name: '导出' }).count()) === 0,
+    );
+    await closed.close();
+
+    await setExportEnabled(adminToken, true);
+    const reopened = await page.context().newPage();
+    await reopened.goto(`${BASE}/maps/${uid}`);
+    await waitForCanvas(reopened);
+    check(
+      'IE-M7-24 重新打开后「导出」按钮回来',
+      (await reopened.getByRole('button', { name: '导出' }).count()) === 1,
+    );
+    await reopened.close();
   } finally {
+    // 异常中止也要把开关放回去，否则下一轮这套脚本的前半段会红。
+    try {
+      const adminToken = await login(ADMIN.email, ADMIN.password);
+      await setExportEnabled(adminToken, true);
+    } catch {
+      // 收尾失败不覆盖原始失败信息。
+    }
     await browser.close();
   }
 }
