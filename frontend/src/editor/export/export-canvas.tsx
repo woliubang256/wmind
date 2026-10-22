@@ -14,7 +14,8 @@
  */
 
 import { fontStack } from '../theme/fonts';
-import { BoundariesLayer, RelationshipsLayer } from '../viewer/decorations';
+import { layoutAnnotations } from '../layout/annotations';
+import { BoundariesLayer, RelationshipsLayer, SummariesLayer } from '../viewer/decorations';
 import { EdgesLayer, TopicsLayer } from '../viewer/layers';
 import type { ExportContext, ExportSheet } from './context';
 
@@ -23,14 +24,16 @@ const FOOTER_COLOR = '#8C8C8C';
 const FOOTER_SIZE = 12;
 
 function SheetGroup({ sheet }: { sheet: ExportSheet }) {
+  const annotations = layoutAnnotations(sheet.sheet, sheet.layout, sheet.theme);
   return (
     <g
       data-export-sheet={sheet.id}
       transform={`translate(${sheet.offsetX - sheet.bounds.x} ${sheet.offsetY - sheet.bounds.y})`}
     >
-      <BoundariesLayer sheet={sheet.sheet} layout={sheet.layout} theme={sheet.theme} />
+      <BoundariesLayer annotations={annotations} />
       <EdgesLayer edges={sheet.layout.edges} />
-      <RelationshipsLayer sheet={sheet.sheet} layout={sheet.layout} theme={sheet.theme} />
+      <RelationshipsLayer annotations={annotations} />
+      <SummariesLayer annotations={annotations} />
       <TopicsLayer layout={sheet.layout} showBadges={false} />
     </g>
   );

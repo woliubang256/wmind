@@ -33,9 +33,35 @@ import {
   waitForCanvas,
 } from './lib/harness.mjs';
 import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-/** 制造「链接过期」要直接改库，所以这里知道 SQLite 文件在哪。 */
-const DB = process.env.WMIND_SQLITE_PATH ?? '/tmp/wmind-share.db';
+/**
+ * 制造「链接过期」要直接改库，所以这里知道 SQLite 文件在哪。
+ *
+ * 路径优先取环境变量，其次读 `backend/.env` 的 `WMIND_SQLITE_PATH`（后端的
+ * 相对路径是相对 `backend/` 解析的），最后才落到 `backend/data/wmind.db`。
+ *
+ * 以前这里写死 `/tmp/wmind-share.db`：那个文件在任何真实部署里都不存在，
+ * `sqlite3` 会**新建一个空库**再报 `no such table: share_links`——看起来像
+ * 「分享功能的表丢了」，实际是脚本连错了库。
+ */
+function resolveDbPath() {
+  if (process.env.WMIND_SQLITE_PATH) return process.env.WMIND_SQLITE_PATH;
+  const backend = fileURLToPath(new URL('../../backend/', import.meta.url));
+  const envFile = `${backend}.env`;
+  if (existsSync(envFile)) {
+    for (const line of readFileSync(envFile, 'utf8').split('\n')) {
+      const match = /^\s*WMIND_SQLITE_PATH\s*=\s*(.*)$/.exec(line);
+      if (match === null) continue;
+      const value = match[1].trim().replace(/^['"]|['"]$/g, '');
+      return value.startsWith('/') ? value : `${backend}${value.replace(/^\.\//, '')}`;
+    }
+  }
+  return `${backend}data/wmind.db`;
+}
+
+const DB = resolveDbPath();
 
 const USER = makeUser('share');
 

@@ -208,14 +208,21 @@ export function TemplatePicker({ open, onClose, onCreateBlank }: TemplatePickerP
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3">
           <p className="text-xs text-muted-foreground">{t('templates.picker.hint')}</p>
           <div className="flex items-center gap-2">
+            {/*
+              「直接建空白导图」曾经是 ghost 按钮，紧挨着「取消」，结果和次要
+              操作长得一模一样——用户扫一眼只看到「取消」，以为这一页只能从
+              模板开始。它是**第二条主路径**（不是逃生口），所以给它实心样式，
+              并把「取消」降级为 ghost：一主一次，视线自然落在主操作上。
+            */}
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
             {onCreateBlank ? (
-              <Button variant="ghost" size="sm" onClick={onCreateBlank} disabled={busy}>
+              <Button size="sm" onClick={onCreateBlank} disabled={busy}>
+                <Icon name="file-plus" className="size-4" />
                 {t('templates.picker.blank')}
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" onClick={onClose}>
-              {t('common.cancel')}
-            </Button>
           </div>
         </div>
       </div>

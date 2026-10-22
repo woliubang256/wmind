@@ -62,6 +62,15 @@ import {
 } from '@/editor/commands/topic';
 import { changeStructureCommand, changeTitleCommand } from '@/editor/commands/document';
 import {
+  addBoundaryCommand,
+  addRelationshipCommand,
+  addSummaryCommand,
+  removeAnnotationCommand,
+  renameAnnotationCommand,
+  type AnnotationKind,
+} from '@/editor/commands/annotation';
+import { StructureTab } from './panel/structure-tab';
+import {
   addSheetCommand,
   moveSheetCommand,
   removeSheetCommand,
@@ -279,6 +288,13 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const [conflictOpen, setConflictOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>('style');
+  /**
+   * 面板里正在编辑的附属结构（概要 / 边界 / 联系）。
+   *
+   * 不进 store：它不是文档状态，也不该被撤销。放 store 里会让「悬停面板里的
+   * 一行」变成一次可能被写进历史的状态变更。
+   */
+  const [activeAnnotation, setActiveAnnotation] = useState<{ kind: AnnotationKind; id: string } | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
@@ -408,6 +424,48 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     (theme: Theme) => store.getState().dispatch(applyThemeCommand(theme)),
     [store],
   );
+
+  /**
+   * 概要用在哪：选中主题的**父节点**，范围是与它同级的那部分选中项。
+   *
+   * 概要的语义是「这几个兄弟的汇总」，所以跨分支的选中（同时选了 A 的子节点
+   * 和 B 的子节点）只能落到其中一个父节点下——取第一个选中项的父节点，其余
+   * 不同级的自动被滤掉。这比直接禁用按钮好：用户至少能看到「它挂了什么」。
+   */
+  const summaryTarget = useMemo(() => {
+    if (selection.length === 0) return null;
+    const found = findTopicInSheet(sheet, selection[0] ?? '');
+    const parent = found?.parent ?? null;
+    if (parent === null) return null;
+    const siblings = new Set(parent.children.attached.map((topic) => topic.id));
+    const range = selection.filter((id) => siblings.has(id));
+    return range.length === 0 ? null : { topicId: parent.id, range };
+  }, [sheet, selection]);
+
+  const addSummary = useCallback(() => {
+    if (summaryTarget === null) return;
+    store.getState().dispatch(
+      addSummaryCommand({ ...summaryTarget, title: t('editor.annotation.summaryDefault') }),
+    );
+    setPanelOpen(true);
+    setPanelTab('structure');
+  }, [summaryTarget, store, t]);
+
+  const addBoundary = useCallback(() => {
+    if (selection.length === 0) return;
+    store.getState().dispatch(addBoundaryCommand({ range: selection }));
+    setPanelOpen(true);
+    setPanelTab('structure');
+  }, [selection, store]);
+
+  const addRelationship = useCallback(() => {
+    if (selection.length !== 2) return;
+    store.getState().dispatch(
+      addRelationshipCommand({ fromId: selection[0] ?? '', toId: selection[1] ?? '' }),
+    );
+    setPanelOpen(true);
+    setPanelTab('structure');
+  }, [selection, store]);
 
   const fit = useCallback(() => {
     const element = canvasRef.current;
@@ -690,7 +748,9 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         'relative flex flex-col overflow-hidden bg-card',
         zen
           ? 'fixed inset-0 z-50 h-svh min-h-0'
-          : 'h-[calc(100svh-9.5rem)] min-h-[420px] rounded-2xl border border-border/70',
+          // 顶栏是 3.5rem（h-14），内容区不再套内边距：编辑器要吃掉整块屏幕，
+          // 圆角与边框留给面板内部的小卡片。
+          : 'h-[calc(100svh-3.5rem)] min-h-[420px]',
       ].join(' ')}
     >
       {zen ? null : (
@@ -764,6 +824,41 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               onClick={() => store.getState().dispatch(toggleCollapseCommand(selection[0] ?? ''))}
             >
               <Icon name="chevron-right" className="size-4" />
+            </Button>
+          </div>
+        ) : null}
+
+        {!preview ? (
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('editor.annotation.summary')}
+              title={t('editor.annotation.summary')}
+              disabled={summaryTarget === null}
+              onClick={addSummary}
+            >
+              <Icon name="summary" className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('editor.annotation.boundary')}
+              title={t('editor.annotation.boundary')}
+              disabled={selection.length === 0}
+              onClick={addBoundary}
+            >
+              <Icon name="boundary" className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('editor.annotation.relationship')}
+              title={t('editor.annotation.relationship')}
+              disabled={selection.length !== 2}
+              onClick={addRelationship}
+            >
+              <Icon name="relationship" className="size-4" />
             </Button>
           </div>
         ) : null}
@@ -954,6 +1049,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                 onViewportChange={setViewport}
                 selection={selectionSet}
                 editingId={preview ? null : editingId}
+                selectedAnnotationId={activeAnnotation?.id ?? null}
                 ariaLabel={doc.title}
                 onSelectionChange={(ids) => store.getState().select(ids)}
                 onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
@@ -1005,6 +1101,24 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                 ) : null}
                 {panelTab === 'palette' ? (
                   <PaletteTab theme={doc.theme} onChange={applyTheme} canPersist={enabled} />
+                ) : null}
+                {panelTab === 'structure' ? (
+                  <StructureTab
+                    sheet={sheet}
+                    selection={selection}
+                    activeId={activeAnnotation?.id ?? null}
+                    onActivate={(kind, id) => setActiveAnnotation(id === null ? null : { kind, id })}
+                    onAddSummary={addSummary}
+                    onAddBoundary={addBoundary}
+                    onAddRelationship={addRelationship}
+                    onRename={(kind, id, title) =>
+                      store.getState().dispatch(renameAnnotationCommand(kind, id, title))
+                    }
+                    onRemove={(kind, id) => {
+                      store.getState().dispatch(removeAnnotationCommand(kind, id));
+                      setActiveAnnotation(null);
+                    }}
+                  />
                 ) : null}
                 {panelTab === 'speaker' ? (
                   <div className="flex flex-col gap-1">

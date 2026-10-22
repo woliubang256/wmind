@@ -40,11 +40,12 @@
     "account": "个人设置",
     "adminOverview": "管理概览",
     "adminUsers": "用户管理",
-    "adminSettings": "网站设置"
+    "adminSettings": "网站设置",
+    "menu": "菜单",
+    "primary": "主导航"
   },
   "auth": {
     "loginTitle": "登录 {{site}}",
-    "loginDescription": "登录以继续使用你的思维导图。",
     "forgotPassword": "忘记密码？请联系网站管理员重置。",
     "registerClosed": "本站暂未开放注册，请联系管理员。",
     "noAccount": "还没有账号？",
@@ -173,7 +174,21 @@
     "panel.close": "收起面板",
     "panel.tabs.style": "样式",
     "panel.tabs.palette": "配色",
+    "panel.tabs.structure": "结构",
     "panel.tabs.speaker": "演说",
+    "annotation.summary": "概要",
+    "annotation.boundary": "边界",
+    "annotation.relationship": "联系",
+    "annotation.add": "新建",
+    "annotation.remove": "删除",
+    "annotation.summaryDefault": "概要",
+    "annotation.untitledTopic": "未命名主题",
+    "annotation.summaryHint": "选中几个同级主题，生成一条汇总。",
+    "annotation.boundaryHint": "选中主题后加一圈虚线框，用来分组。",
+    "annotation.relationshipHint": "选中两个主题，连一条跨分支的线。",
+    "annotation.summaryEmpty": "还没有概要",
+    "annotation.boundaryEmpty": "还没有边界",
+    "annotation.relationshipEmpty": "还没有联系",
     "panel.speaker.title": "演说模式",
     "panel.speaker.body": "按主题逐条播放导图，一期暂未开放。",
     "sheets.label": "画布列表",
@@ -449,7 +464,6 @@
   },
   "maps": {
     "title": "最近的导图",
-    "subtitle": "继续整理正在进行的想法。",
     "count": "共 {{count}} 张",
     "search": "搜索导图",
     "searchPlaceholder": "搜索导图标题…",
@@ -574,7 +588,6 @@
   },
   "templates": {
     "title": "模板",
-    "subtitle": "从模板开始，比从空白开始快。内置模板只读，点一下就能建出一张新导图。",
     "tab": {
       "all": "全部",
       "basic": "基本",
@@ -582,7 +595,6 @@
     },
     "section": {
       "basic": "基本模板",
-      "basicHint": "{{count}} 个内置起点",
       "mine": "我的模板",
       "mineHint": "{{count}} 个"
     },
@@ -617,8 +629,7 @@
       "body": "删除后不能恢复。已经用这个模板建出来的导图不受影响。"
     },
     "empty": {
-      "title": "还没有自己的模板",
-      "body": "在编辑器里点顶部的模板图标，就能把当前导图存成模板。"
+      "title": "还没有自己的模板"
     },
     "disabled": {
       "title": "站点已关闭用户模板",

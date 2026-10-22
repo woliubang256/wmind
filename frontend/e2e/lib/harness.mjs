@@ -17,6 +17,8 @@
 
 import { chromium } from 'playwright-core';
 import os from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 export const BASE = process.env.BASE ?? 'http://127.0.0.1:5199';
 export const API = process.env.API ?? 'http://127.0.0.1:8080';
@@ -32,10 +34,34 @@ export const CHROME =
   process.env.PLAYWRIGHT_CHROMIUM ??
   `${os.homedir()}/Library/Caches/ms-playwright/chromium-1228/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`;
 
-/** 开发用的管理员账号；注册被限流时靠它建号。 */
+/**
+ * 开发用的管理员账号；注册被限流时靠它建号。
+ *
+ * 注册接口是 **3 次/小时/IP**，而 `run-all.mjs` 有十套脚本、每套一个独立
+ * 账号——第四套开始必然走这条路。所以它不是「偶尔用一下的兜底」，是整轮
+ * 验收的必经之路，凭据错了后面全红。
+ *
+ * 凭据优先从 `backend/.env` 读（后端用它种管理员），因为写死的那份迟早和
+ * 本机 `.env` 对不上——对不上时的表现是 401，而 401 从 `ensureUser` 里抛出来
+ * 长得像「账号密码错了」，完全看不出其实是管理员种子换过了。
+ */
+function readBackendAdmin() {
+  const file = fileURLToPath(new URL('../../../backend/.env', import.meta.url));
+  if (!existsSync(file)) return {};
+  const found = {};
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const match = /^\s*(WMIND_ADMIN_EMAIL|WMIND_ADMIN_PASSWORD)\s*=\s*(.*)$/.exec(line);
+    if (match === null) continue;
+    found[match[1]] = match[2].trim().replace(/^['"]|['"]$/g, '');
+  }
+  return found;
+}
+
+const backendEnv = readBackendAdmin();
+
 export const ADMIN = {
-  email: process.env.ADMIN_EMAIL ?? 'admin@example.test',
-  password: process.env.ADMIN_PASSWORD ?? 'share-admin-password',
+  email: process.env.ADMIN_EMAIL ?? backendEnv.WMIND_ADMIN_EMAIL ?? 'admin@example.test',
+  password: process.env.ADMIN_PASSWORD ?? backendEnv.WMIND_ADMIN_PASSWORD ?? 'share-admin-password',
 };
 
 export const stamp = Date.now();
@@ -124,13 +150,35 @@ export async function ensureUser(user) {
       body: { username: user.username, email: user.email, password: user.password },
     });
   } catch (error) {
-    if (!String(error).includes('429')) throw error;
-    const token = await login(ADMIN.email, ADMIN.password);
-    await api('/admin/users', {
-      method: 'POST',
-      token,
-      body: { username: user.username, email: user.email, password: user.password, role: 'user' },
-    });
+    // 三种「注册这条路走不通」都改走管理员建号：
+    // 429 是限流（跑得勤），403 REGISTRATION_CLOSED 是站点关着注册——
+    // 后者通常意味着上一轮 `register.mjs` / `locale.mjs` 被中途打断，
+    // 站点停在「已关站」。409 是这个账号上一轮已经建过（同一个 stamp 重跑）。
+    // 这三种都不是被测对象，不该让后面的套件全红。
+    const text = String(error);
+    if (!text.includes('429') && !text.includes('REGISTRATION_CLOSED') && !text.includes('409')) {
+      throw error;
+    }
+    let token;
+    try {
+      token = await login(ADMIN.email, ADMIN.password);
+    } catch (loginError) {
+      throw new Error(
+        `注册被限流/关闭后要改走管理员建号，但管理员登录失败（${ADMIN.email}）。` +
+          `检查 backend/.env 里的 WMIND_ADMIN_EMAIL / WMIND_ADMIN_PASSWORD，` +
+          `或用 ADMIN_EMAIL / ADMIN_PASSWORD 环境变量覆盖。原始错误：${loginError.message}`,
+      );
+    }
+    try {
+      await api('/admin/users', {
+        method: 'POST',
+        token,
+        body: { username: user.username, email: user.email, password: user.password, role: 'user' },
+      });
+    } catch (createError) {
+      // 已经存在就直接登录，别再抛——重跑同一套脚本时会走到这里。
+      if (!String(createError).includes('409')) throw createError;
+    }
   }
   return login(user.email, user.password);
 }

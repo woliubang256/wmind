@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Icon } from '@/components/ui/icon';
+import { Icon, type IconName } from '@/components/ui/icon';
 import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useThemeStore } from './theme-store';
@@ -45,6 +45,78 @@ function ThemeToggle() {
   );
 }
 
+/**
+ * 移动端导航抽屉。
+ *
+ * 用原生 `<dialog>` 而不是自己造遮罩：焦点陷阱、Esc 关闭、`::backdrop` 都由
+ * 浏览器负责。这里只把它从「居中对话框」改成「贴左边的抽屉」——原生 dialog
+ * 默认靠 `margin: auto` 居中，preflight 又把 margin 清零，所以 `m-0` 就落到了
+ * 左上角，配 `h-svh` 就是一条侧栏。
+ *
+ * 为什么窄屏要收起来而不是横向滚动：八条链接在 375px 上横向滚动条根本看不出
+ * 还有内容，用户会以为「我的分享」之后就没有了。
+ */
+function MobileNav({
+  open,
+  links,
+  isActive,
+  onClose,
+}: {
+  open: boolean;
+  links: { to: string; label: string; icon: IconName }[];
+  isActive: (to: string) => boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  return (
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      onClick={(event) => {
+        // 点遮罩时 target 是 dialog 自己。
+        if (event.target === ref.current) onClose();
+      }}
+      aria-label={t('nav.menu')}
+      className="m-0 h-svh max-h-svh w-72 max-w-[82vw] rounded-none border-0 border-r border-border bg-card p-0 text-card-foreground backdrop:bg-black/40 backdrop:backdrop-blur-sm"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <span className="text-sm font-semibold">{t('nav.menu')}</span>
+          <Button variant="ghost" size="icon" aria-label={t('common.close')} onClick={onClose}>
+            <Icon name="x" className="size-4" />
+          </Button>
+        </div>
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
+          {links.map(({ to, label, icon }) => {
+            const active = isActive(to);
+            return (
+              <Link
+                key={to}
+                to={to}
+                onClick={onClose}
+                aria-current={active ? 'page' : undefined}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'}`}
+              >
+                <Icon name={icon} className="size-4" />
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+    </dialog>
+  );
+}
+
 export function AppLayout() {
   const { t } = useTranslation();
   const { data: user } = useCurrentUser();
@@ -52,6 +124,7 @@ export function AppLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -61,6 +134,9 @@ export function AppLayout() {
     });
     return () => setUnauthorizedHandler(undefined);
   }, [navigate, queryClient]);
+
+  // 换页时收抽屉：手机上点完链接还盖着半屏菜单是常态 bug。
+  useEffect(() => setNavOpen(false), [location.pathname]);
 
   const signOut = async () => {
     try {
@@ -92,7 +168,7 @@ export function AppLayout() {
   const allLinks = [...links, ...adminLinks];
 
   /**
-   * 侧栏高亮。
+   * 导航高亮。
    *
    * 前缀匹配必须让「更具体的链接」优先：`/admin/users` 同时以 `/admin`
    * 开头，只按前缀判断会点亮两项，用户看不出自己在哪一页。
@@ -103,16 +179,63 @@ export function AppLayout() {
     return !allLinks.some((other) => other.to !== to && other.to.length > to.length && location.pathname.startsWith(other.to));
   };
 
+  /**
+   * 编辑器要**满宽**。
+   *
+   * 侧栏换成顶栏就是为了把横向空间还给画布，如果内容区还套着 `max-w-7xl`
+   * 与 `px-4 py-7`，等于只还了一半。编辑器自己管高度（`100svh - 顶栏`），
+   * 其余页面仍然是居中的内容列。
+   */
+  const fullBleed = location.pathname.startsWith('/maps/');
+
   return (
     <div className="min-h-svh bg-background text-foreground">
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <img src={config.logoUrl || '/wmind-logo.jpg'} alt="" className="size-9 rounded-xl object-cover shadow-sm" />
-            <span>{config.siteName}</span>
+        <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
+          <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
+            <img src={config.logoUrl || '/wmind-logo.jpg'} alt="" className="size-8 rounded-lg object-cover shadow-sm" />
+            <span className="hidden max-w-40 truncate sm:inline">{config.siteName}</span>
           </Link>
-          <div className="flex items-center gap-1">
-            <span className="hidden pr-2 text-sm text-muted-foreground sm:inline">{user?.nickname || user?.username}</span>
+
+          {/*
+            桌面端导航。
+            `md` 到 `xl` 之间只留图标：八条链接带文字在 768px 上必然折行，
+            折行后顶栏会突然变高、画布跟着跳一下。图标有 `title` 与
+            `aria-label`，悬停和读屏都拿得到名字。
+          */}
+          <nav aria-label={t('nav.primary')} className="ml-1 hidden items-center gap-0.5 md:flex">
+            {allLinks.map(({ to, label, icon }) => {
+              const active = isActive(to);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  title={label}
+                  aria-label={label}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors ${active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'}`}
+                >
+                  <Icon name={icon} className="size-4 shrink-0" />
+                  <span className="hidden xl:inline">{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-1">
+            <span className="hidden max-w-32 truncate pr-1 text-sm text-muted-foreground lg:inline">
+              {user?.nickname || user?.username}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              aria-label={t('nav.menu')}
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen(true)}
+            >
+              <Icon name="menu" className="size-5" />
+            </Button>
             <ThemeToggle />
             <Button variant="ghost" size="icon" aria-label={t('common.logout')} onClick={() => void signOut()}>
               <Icon name="logout" className="size-4" />
@@ -120,23 +243,14 @@ export function AppLayout() {
           </div>
         </div>
       </header>
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-7 sm:px-6 md:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="flex gap-1 overflow-x-auto md:flex-col">
-          {allLinks.map(({ to, label, icon }) => {
-            const active = isActive(to);
-            return (
-              <Link
-                key={to}
-                to={to}
-                className={`flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'}`}
-              >
-                <Icon name={icon} className="size-4" />{label}
-              </Link>
-            );
-          })}
-        </aside>
+
+      <MobileNav open={navOpen} links={allLinks} isActive={isActive} onClose={() => setNavOpen(false)} />
+
+      {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>
-      </div>
+      ) : (
+        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6"><Outlet /></main>
+      )}
     </div>
   );
 }

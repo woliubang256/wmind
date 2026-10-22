@@ -77,10 +77,7 @@ export function LoginPage() {
           alt={t('auth.logoAlt')}
           className="size-24 rounded-3xl object-cover shadow-lg shadow-orange-500/15"
         />
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{t('auth.loginTitle', { site: config.siteName })}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('auth.loginDescription')}</p>
-        </div>
+        <h1 className="text-xl font-semibold tracking-tight">{t('auth.loginTitle', { site: config.siteName })}</h1>
       </div>
 
       <form onSubmit={submit} className="space-y-5" noValidate>

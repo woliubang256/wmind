@@ -35,7 +35,7 @@ cd frontend
 node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5199
 ```
 
-dev 就够——九套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
+dev 就够——十套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
 必须换生产构建，见下面「几处不显然的地方」。
 
 ### `playwright-core` 没写进 `package.json`
@@ -62,15 +62,15 @@ ln -s /path/to/playwright-core frontend/node_modules/playwright-core
 ```bash
 cd frontend
 
-node e2e/run-all.mjs             # 九套全跑
+node e2e/run-all.mjs             # 十套全跑
 node e2e/run-all.mjs a11y share  # 只跑指定的
 node e2e/a11y.mjs                # 单跑一套（输出最完整）
 ```
 
 `run-all.mjs` 会先探一次后端和前端的健康，连不上就直接报「先把服务起起来」，
-不让九套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余八套。
+不让十套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余九套。
 
-## 九套分别验什么
+## 十套分别验什么
 
 | 脚本 | 条数 | 判据 |
 | --- | --- | --- |
@@ -78,13 +78,14 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `templates.mjs` | 27 | 8 个内置模板各建一次图且结构对得上、模板预览是真渲染、我的模板增删改、站点开关关闭后的三处表现 |
 | `canvas.mjs` | 25 | 多画布新建/切换/持久化、大纲与画布双向同步、`Ctrl+]` 降级、折叠隐藏后代、ZEN 模式进出 |
 | `a11y.mjs` | 23 | 画布是不是一棵可读的树（`role=tree` / `treeitem` / `aria-level` / `aria-expanded`）、方向键后 `aria-activedescendant` 换人、播报文案、只读预览降级成一个 `img`、两个键盘陷阱 |
+| `annotations.mjs` | 11 | 概要 / 边界 / 联系：点按钮后画布上真的多出那一圈虚线框、面板自动切到「结构」页签、面板改名后画布上的字跟着变、概要节点落在被概要范围的右侧、刷新后三条都还在、面板里删除后画布上消失 |
 | `export.mjs` | 24 | 六种格式都在、PDF 能下且结构合法（`%PDF` / `DCTDecode` / `MediaBox` 与页脚毫米对得上 / `startxref` 指对）、SVG 分支没被带坏、切英文后导航与导出对话框整块无中文、刷新后语言保持、**站点关掉导出后编辑器不再有「导出」按钮** |
 | `register.mjs` | 11 | 关闭注册后登录页没有入口、`/register` 拿不到表单、接口返回 403 `REGISTRATION_CLOSED` 而不是 429、关站期间连打 5 次不退化、重开后不再返回 `REGISTRATION_CLOSED` |
 | `locale.mjs` | 14 | 登录/注册页右上角有语言选择器、几何位置确实在右上角、**第一个 Tab 就落在它上面**、切英文后整块卡片零残留中文、`html[lang]` 与 `localStorage` 同步、刷新后保持、关站提示页也有入口、**自绘下拉的方向键 / Esc 还焦点 / Enter 确认三条键盘断言**、切回中文 |
 | `culling.mjs` | 6 | 2001 个节点时只渲染视口附近、放大后是子集、缩回来不丢、选中节点离开视口仍渲染 |
 | `errors.mjs` | 3 | 断网提示条出现与消失、首帧就离线时也带提示条 |
 
-合计 157 条。
+合计 168 条。
 
 ## 几处不显然的地方
 
@@ -101,7 +102,7 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 **性能数字必须来自生产构建。** dev 模式是双渲染 + 不压缩，同一段操作 dev 量到
 53ms、生产构建只有 22.6ms——拿 dev 的数字做优化决策会优化错地方。注意
 `vite preview` **不套用** `server.proxy`，所以量性能时要自己起一个带 `/api`
-反代的静态服务器，否则接口全 404。本仓库的九套脚本不涉及计时，可以跑 dev。
+反代的静态服务器，否则接口全 404。本仓库的十套脚本不涉及计时，可以跑 dev。
 
 **`register.mjs`、`locale.mjs` 与 `export.mjs` 会改站点设置，跑完自己恢复。**
 前者用管理员账号把 `auth.registration_enabled` 关掉、验完再打开；`locale.mjs`
@@ -115,10 +116,22 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 context，Cookie 还在，但 React Query 缓存是新的）。
 
 **登录会被限流，`login()` 自己会等。** 登录限流按「IP + 账号」分桶，5 次/分钟
-（`NewRateLimiter(5, time.Minute, 5)`）。九套脚本一轮下来管理员账号要登五六次，
+（`NewRateLimiter(5, time.Minute, 5)`）。十套脚本一轮下来管理员账号要登七八次，
 正好压在边界上——所以 `lib/harness.mjs` 的 `login()` 撞到 429 时会按服务端给的
 `retryAfter` 等一等再试（最多两次）。**限流不是被测对象**，不该让脚本因为跑得勤
 而红；不加这一步的话，连跑两轮必然有一套挂在 429 上，报错还长得像「登录坏了」。
+
+**注册是 3 次/小时，所以管理员建号是必经之路，不是兜底。** 十套脚本各建一个
+独立账号，第四套开始必然撞 429，全部改走 `POST /admin/users`。这条路的凭据由
+`lib/harness.mjs` 从 `backend/.env` 读（`WMIND_ADMIN_EMAIL` / `WMIND_ADMIN_PASSWORD`），
+也可以用 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 环境变量覆盖。写死的默认值只是最后的
+兜底——**它和本机 `.env` 对不上时的表现是 401**，从 `ensureUser` 里抛出来长得像
+「账号密码错了」，完全看不出其实是管理员种子换过了。所以那里特意包了一层，
+把「注册被限流 → 管理员登录失败」和真实的账号错误区分开。
+
+**点画布不能用 `page.locator('svg').first()`。** 导航搬到顶栏之后，页面上第一个
+`<svg>` 是顶栏 logo，点它等于点了「回首页」的链接，后面等节点必然 30s 超时。
+画布要点名 `svg[data-read-only="false"]`。
 
 **`culling.mjs` 自己造压测文档。** 2001 个节点（40 个分支 × 50 个叶子 + 根）走
 `POST /maps` 现造，不再依赖手工灌库的固定 uid——那样换台机器就跑不了。

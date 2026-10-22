@@ -7,15 +7,18 @@
  *
  * 分层顺序（从下到上）：
  *
- *   边界 → 父子连线 → 关系线 → 主题 → 插件 overlay
+ *   边界 → 父子连线 → 关系线 → 概要 → 主题 → 插件 overlay
  *
  * 边界在最下是因为它是一块底色；关系线在父子连线之上是因为它通常是
- * 跨分支的细线，被密集的分支线盖住就看不见了。
+ * 跨分支的细线，被密集的分支线盖住就看不见了。概要在主题之前、关系线之后：
+ * 概要节点挂在范围的右侧，正常情况下不与主题重叠，但它的括号横臂会伸进
+ * 兄弟节点之间的空隙，画在主题之前才不会被节点挡住起点。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { layoutMindmap } from '../layout/mindmap';
+import { layoutAnnotations } from '../layout/annotations';
 import type { LayoutResult, NodeBox, Rect } from '../layout/types';
 import type { ComputedStyle, Sheet, Theme } from '../model/types';
 import { walkSheet } from '../model/traverse';
@@ -23,7 +26,7 @@ import { fontStack } from '../theme/fonts';
 import { ViewerContext } from './viewer-context';
 import type { CommitTitleOptions, ViewerContextValue, ViewerPlugin, Viewport } from './viewer-types';
 import { EdgesLayer, TopicsLayer } from './layers';
-import { BoundariesLayer, RelationshipsLayer } from './decorations';
+import { BoundariesLayer, RelationshipsLayer, SummariesLayer } from './decorations';
 import { CULL_THRESHOLD } from './cull';
 
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
@@ -37,6 +40,14 @@ export interface MindMapViewerProps {
   readOnly?: boolean;
   selection?: ReadonlySet<string>;
   editingId?: string | null;
+  /**
+   * 当前选中的附属结构 id（概要 / 边界 / 关系线）。
+   *
+   * 与 `selection`（主题）分开：主题的选中会驱动树形导航与键盘焦点，
+   * 附属结构只是「面板里正在编辑哪一条」，混进同一个数组会让方向键在
+   * 主题之间移动时撞上一个不存在的节点。
+   */
+  selectedAnnotationId?: string | null;
   onSelectionChange?(ids: string[]): void;
   onToggleCollapse?(id: string): void;
   onBeginEdit?(id: string): void;
@@ -60,6 +71,7 @@ export function MindMapViewer({
   readOnly = false,
   selection = EMPTY_SELECTION,
   editingId = null,
+  selectedAnnotationId = null,
   onSelectionChange,
   onToggleCollapse,
   onBeginEdit,
@@ -97,6 +109,17 @@ export function MindMapViewer({
   );
 
   const effectiveTheme = sheet.themeOverride ?? theme;
+
+  /*
+    附属结构（概要 / 边界 / 关系线）的几何。
+
+    依赖 layout 与 effectiveTheme：主题换了配色，边界与概要的颜色跟着变，
+    但位置不变——重算一次是 O(附属结构数量)，与节点数无关。
+  */
+  const annotations = useMemo(
+    () => layoutAnnotations(sheet, layout, effectiveTheme),
+    [sheet, layout, effectiveTheme],
+  );
 
   /*
     读屏标签用的 `id → 原始标题` 表。
@@ -304,11 +327,13 @@ export function MindMapViewer({
             className="viewport"
             transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}
           >
-            <BoundariesLayer sheet={sheet} layout={layout} theme={effectiveTheme} />
+            <BoundariesLayer annotations={annotations} selectedId={selectedAnnotationId} />
 
             <EdgesLayer edges={layout.edges} cullRect={cullRect} />
 
-            <RelationshipsLayer sheet={sheet} layout={layout} theme={effectiveTheme} />
+            <RelationshipsLayer annotations={annotations} selectedId={selectedAnnotationId} />
+
+            <SummariesLayer annotations={annotations} selectedId={selectedAnnotationId} />
 
             <TopicsLayer
               layout={layout}

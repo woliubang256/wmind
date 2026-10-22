@@ -12,6 +12,7 @@
  */
 
 import { layoutMindmap } from '../layout/mindmap';
+import { layoutAnnotations } from '../layout/annotations';
 import type { LayoutResult, Rect } from '../layout/types';
 import type { Sheet, Theme, WmindDocument } from '../model/types';
 
@@ -238,8 +239,11 @@ export interface ExportContext {
  * 只会以为选项没生效。这里从盒子本身算，留白完全由导出选项决定。
  *
  * 连线端点也计入：曲线可能鼓出盒子外面一点，只算盒子会把弧顶裁掉。
+ *
+ * `annotations` 是附属结构（概要 / 边界）的包围盒。概要节点挂在最右侧，
+ * 不算进来的话，导出的图里它会缺一条边——而画布上看得好好的。
  */
-export function contentBounds(layout: LayoutResult): Rect {
+export function contentBounds(layout: LayoutResult, annotations: Rect | null = null): Rect {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -259,6 +263,10 @@ export function contentBounds(layout: LayoutResult): Rect {
   for (const edge of layout.edges) {
     consider(edge.from.x, edge.from.y);
     consider(edge.to.x, edge.to.y);
+  }
+  if (annotations !== null) {
+    consider(annotations.x, annotations.y);
+    consider(annotations.x + annotations.width, annotations.y + annotations.height);
   }
 
   if (!Number.isFinite(minX)) return { x: 0, y: 0, width: 0, height: 0 };
@@ -317,7 +325,8 @@ export function buildExportContext(
   const laid = sheets.map((sheet) => {
     const theme = sheet.themeOverride ?? document.theme;
     const layout = layoutMindmap({ sheet, theme });
-    return { sheet, theme, layout, bounds: contentBounds(layout) };
+    const annotations = layoutAnnotations(sheet, layout, theme);
+    return { sheet, theme, layout, bounds: contentBounds(layout, annotations.bounds) };
   });
 
   const innerWidth = laid.reduce((max, item) => Math.max(max, item.bounds.width), 0);

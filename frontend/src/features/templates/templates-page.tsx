@@ -84,16 +84,11 @@ export function TemplatesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('templates.title')} description={t('templates.subtitle')} />
+      <PageHeader title={t('templates.title')} />
 
       {/* ── 内置模板 ─────────────────────────────────────────────── */}
       <section className="space-y-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-sm font-medium">{t('templates.section.basic')}</h2>
-          <span className="text-xs text-muted-foreground">
-            {t('templates.section.basicHint', { count: BUILTIN_TEMPLATES.length })}
-          </span>
-        </div>
+        <h2 className="text-sm font-medium">{t('templates.section.basic')}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {previews.map(({ def, document }) => (
             <TemplateCard
@@ -138,11 +133,7 @@ export function TemplatesPage() {
             ))}
           </div>
         ) : items.length === 0 ? (
-          <EmptyState
-            icon="waypoints"
-            title={t('templates.empty.title')}
-            description={t('templates.empty.body')}
-          />
+          <EmptyState icon="waypoints" title={t('templates.empty.title')} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.map((item) => (

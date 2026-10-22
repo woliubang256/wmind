@@ -40,11 +40,12 @@
     "account": "Account",
     "adminOverview": "Overview",
     "adminUsers": "Users",
-    "adminSettings": "Site settings"
+    "adminSettings": "Site settings",
+    "menu": "Menu",
+    "primary": "Main"
   },
   "auth": {
     "loginTitle": "Sign in to {{site}}",
-    "loginDescription": "Sign in to continue working with your mind maps.",
     "forgotPassword": "Forgot your password? Contact the site administrator for a reset.",
     "registerClosed": "Registration is closed. Contact the site administrator.",
     "noAccount": "No account yet?",
@@ -173,7 +174,21 @@
     "panel.close": "Collapse panel",
     "panel.tabs.style": "Style",
     "panel.tabs.palette": "Palette",
+    "panel.tabs.structure": "Structure",
     "panel.tabs.speaker": "Present",
+    "annotation.summary": "Summary",
+    "annotation.boundary": "Boundary",
+    "annotation.relationship": "Relationship",
+    "annotation.add": "New",
+    "annotation.remove": "Delete",
+    "annotation.summaryDefault": "Summary",
+    "annotation.untitledTopic": "Untitled topic",
+    "annotation.summaryHint": "Select sibling topics to summarise them in one node.",
+    "annotation.boundaryHint": "Select topics to wrap them in a dashed outline.",
+    "annotation.relationshipHint": "Select two topics to link them across branches.",
+    "annotation.summaryEmpty": "No summaries yet",
+    "annotation.boundaryEmpty": "No boundaries yet",
+    "annotation.relationshipEmpty": "No relationships yet",
     "panel.speaker.title": "Presentation mode",
     "panel.speaker.body": "Play the map topic by topic. Coming in a later milestone.",
     "sheets.label": "Canvases",
@@ -449,7 +464,6 @@
   },
   "maps": {
     "title": "Recent maps",
-    "subtitle": "Pick up where you left off.",
     "count": "{{count}} maps",
     "search": "Search maps",
     "searchPlaceholder": "Search by title…",
@@ -574,7 +588,6 @@
   },
   "templates": {
     "title": "Templates",
-    "subtitle": "Starting from a template beats starting from a blank page. Built-in templates are read-only — one click and you have a new map.",
     "tab": {
       "all": "All",
       "basic": "Basic",
@@ -582,7 +595,6 @@
     },
     "section": {
       "basic": "Built-in templates",
-      "basicHint": "{{count}} starting points",
       "mine": "My templates",
       "mineHint": "{{count}} saved"
     },
@@ -617,8 +629,7 @@
       "body": "This cannot be undone. Maps already created from it are not affected."
     },
     "empty": {
-      "title": "No templates of your own yet",
-      "body": "In the editor, click the template icon in the header to save the current map as a template."
+      "title": "No templates of your own yet"
     },
     "disabled": {
       "title": "User templates are turned off",

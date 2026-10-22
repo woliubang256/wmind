@@ -42,7 +42,11 @@ export type IconName =
   | 'link'
   | 'upload'
   | 'download'
-  | 'globe';
+  | 'globe'
+  | 'menu'
+  | 'summary'
+  | 'boundary'
+  | 'relationship';
 
 const paths: Record<IconName, ReactNode> = {
   'arrow-right': <><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>,
@@ -88,6 +92,13 @@ const paths: Record<IconName, ReactNode> = {
   upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></>,
   download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></>,
   globe: <><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/></>,
+  menu: <><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></>,
+  // 概要：左侧几条被汇总的短横线，右侧括号收成一条竖线再引出。
+  summary: <><path d="M3 6h6"/><path d="M3 12h6"/><path d="M3 18h6"/><path d="M12 4v16"/><path d="M12 12h6"/></>,
+  // 边界：虚线圆角框。
+  boundary: <><rect x="3" y="3" width="18" height="18" rx="3" strokeDasharray="3 3"/></>,
+  // 联系：两个端点之间的一段弧。
+  relationship: <><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="5" r="2.5"/><path d="M7.5 19h4a4 4 0 0 0 4-4V7.5"/></>,
 };
 
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconName }) {

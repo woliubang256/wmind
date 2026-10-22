@@ -12,11 +12,12 @@ import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { Icon } from '@/components/ui/icon';
 import { cn } from '@/lib/utils';
 
-export type PanelTab = 'style' | 'palette' | 'speaker';
+export type PanelTab = 'style' | 'palette' | 'speaker' | 'structure';
 
 const TABS: { id: PanelTab; labelKey: string }[] = [
   { id: 'style', labelKey: 'editor.panel.tabs.style' },
   { id: 'palette', labelKey: 'editor.panel.tabs.palette' },
+  { id: 'structure', labelKey: 'editor.panel.tabs.structure' },
   { id: 'speaker', labelKey: 'editor.panel.tabs.speaker' },
 ];
 

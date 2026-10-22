@@ -201,7 +201,7 @@ async function main() {
     check(
       'IE-M7-14 切到英文后导航变英文',
       (await page.getByRole('link', { name: 'Recent' }).count()) > 0,
-      await page.locator('aside').first().textContent(),
+      await page.locator('header').first().textContent(),
     );
     check(
       'IE-M7-15 html[lang] 同步为 en-US',

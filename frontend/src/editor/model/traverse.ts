@@ -10,7 +10,7 @@
  * 反而比按需扫描更容易出错。
  */
 
-import type { Sheet, Topic, WmindDocument } from './types';
+import type { Boundary, Sheet, Summary, Topic, WmindDocument } from './types';
 
 export interface WalkContext {
   depth: number;
@@ -282,8 +282,57 @@ export function firstSheet(doc: WmindDocument): Sheet {
   return sheet;
 }
 
+/**
+ * 画布上的全部边界。
+ *
+ * 与概要同一个道理：XMind 把边界挂在**被边界覆盖的主题**上（`topic.boundaries`），
+ * 画布级的 `sheet.boundaries` 只装根级的那几条。渲染与导出必须把两边合起来——
+ * 只读 `sheet.boundaries` 的话，导入的 XMind 里那些边界一条都画不出来。
+ */
+export function collectBoundaries(sheet: Sheet): Boundary[] {
+  const seen = new Set<string>();
+  const out: Boundary[] = [];
+  const push = (boundary: Boundary) => {
+    if (seen.has(boundary.id)) return;
+    seen.add(boundary.id);
+    out.push(boundary);
+  };
+  for (const boundary of sheet.boundaries) push(boundary);
+  walkSheet(sheet, (topic) => {
+    for (const boundary of topic.boundaries) push(boundary);
+  });
+  return out;
+}
+
 /** 按 id 取画布，取不到时回落到第一张。 */
 export function sheetById(doc: WmindDocument, sheetId: string | null): Sheet {
   if (!sheetId) return firstSheet(doc);
   return doc.sheets.find((s) => s.id === sheetId) ?? firstSheet(doc);
+}
+
+/**
+ * 画布上的全部概要。
+ *
+ * 概要在这份模型里有**两个落点**，因为 `.xmind` 本身就这么存：挂在其父主题
+ * 的 `topic.summaries` 上（XMind 的原生结构），以及画布级的 `sheet.summaries`
+ * 索引。导入器按 XMind 的样子写进前者，而 `sheet.summaries` 在某些工具导出的
+ * 文件里也会带上同一批概要。
+ *
+ * 所以这里**按 id 去重合并**，而不是二选一：只读前者会漏掉工具写在画布级的
+ * 概要，只读后者会漏掉 XMind 导入的。去重键用 id——两条不同来源的概要不可能
+ * 共用同一个 id，除非它们本来就是同一条。
+ */
+export function collectSummaries(sheet: Sheet): Summary[] {
+  const seen = new Set<string>();
+  const out: Summary[] = [];
+  const push = (summary: Summary) => {
+    if (seen.has(summary.id)) return;
+    seen.add(summary.id);
+    out.push(summary);
+  };
+  for (const summary of sheet.summaries) push(summary);
+  walkSheet(sheet, (topic) => {
+    for (const summary of topic.summaries) push(summary);
+  });
+  return out;
 }

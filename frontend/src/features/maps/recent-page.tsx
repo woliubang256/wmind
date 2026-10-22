@@ -206,7 +206,6 @@ export function RecentPage() {
 
       <PageHeader
         title={t('maps.title')}
-        description={t('maps.subtitle')}
         actions={
           <>
             {config.importEnabled ? (
