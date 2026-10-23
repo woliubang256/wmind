@@ -22,6 +22,7 @@ const SUITE = [
   ['register', '关闭注册'],
   ['locale', '登录页语言切换'],
   ['avatars', '头像来源优先级 / 上传与回退'],
+  ['settings-cleanup', '设置精简 / 导航字号 / 确认弹窗布局'],
   ['user-menu', '用户导航 / 权限 / 键盘与窄屏'],
   ['two-factor', '账户双因素认证'],
   ['templates', '模板选择与管理'],

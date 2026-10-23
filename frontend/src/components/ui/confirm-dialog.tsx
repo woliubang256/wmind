@@ -53,9 +53,6 @@ export function ConfirmDialog({
           </Button>
         </>
       }
-    >
-      {/* 正文已经写在 description 里，这里留空保持 Modal 的间距稳定。 */}
-      <div />
-    </Modal>
+    />
   );
 }
