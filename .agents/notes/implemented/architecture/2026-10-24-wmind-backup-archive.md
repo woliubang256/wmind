@@ -30,4 +30,6 @@ SQLite 与 PostgreSQL 适配器采用固定表 JSONL 导出，分别使用读事
 
 验证使用隔离目录，覆盖 Unicode 文件名往返、兼容性拒绝、重复成员、路径穿越、损坏校验和、符号链接、临时上传过滤及在途请求排空。
 
-数据库契约测试覆盖大于 2^53 的 ID、Unicode 内容、文件安装失败回滚、非法外键回滚和取消；SQLite 实库通过。PostgreSQL 使用独立 WMIND_TEST_BACKUP_DATABASE_URL，未配置时明确跳过，不能把编译通过当作实库验证。
+数据库契约测试覆盖大于 2^53 的 ID、Unicode 内容、文件安装失败回滚、非法外键回滚和取消；SQLite 与隔离 PostgreSQL 17 实库均通过。PostgreSQL 使用独立 WMIND_TEST_BACKUP_DATABASE_URL，未配置时明确跳过，不能把编译通过当作实库验证。
+
+恢复路径校验拒绝 uploads 包含任何 SQLite 活库（包括软链接解析后的路径），装配层将活库路径作为受保护文件传入。压缩前按文件元数据拒绝解压总量大于 8 GiB 的快照，产物同步到磁盘并检查 2 GiB ZIP 上限，避免生成自身恢复入口不能接受的归档。两个缺口先有失败复现测试，再通过修复。

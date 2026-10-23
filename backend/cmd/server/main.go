@@ -79,17 +79,18 @@ func run() error {
 	// These are the dialect-agnostic handles the service layer works with.
 	// Only this switch is allowed to name a concrete dialect.
 	var (
-		backupRepo   domain.BackupRepository
-		factorRepo   domain.TwoFactorRepo
-		userRepo     domain.UserRepo
-		tokenRepo    domain.RefreshTokenRepo
-		settingsRepo domain.SettingsRepo
-		auditRepo    domain.AuditRepo
-		mapRepo      domain.MapRepo
-		themeRepo    domain.ThemeRepo
-		templateRepo domain.TemplateRepo
-		shareRepo    domain.ShareRepo
-		txManager    domain.TxManager
+		backupProtectedPaths []string
+		backupRepo           domain.BackupRepository
+		factorRepo           domain.TwoFactorRepo
+		userRepo             domain.UserRepo
+		tokenRepo            domain.RefreshTokenRepo
+		settingsRepo         domain.SettingsRepo
+		auditRepo            domain.AuditRepo
+		mapRepo              domain.MapRepo
+		themeRepo            domain.ThemeRepo
+		templateRepo         domain.TemplateRepo
+		shareRepo            domain.ShareRepo
+		txManager            domain.TxManager
 	)
 
 	// This is the only server-assembly switch allowed to select a dialect.
@@ -108,6 +109,7 @@ func run() error {
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: sqliterepo.Check(db)})
 		backupRepo = sqliterepo.NewBackupRepository(db)
+		backupProtectedPaths = append(backupProtectedPaths, cfg.DB.SQLitePath)
 		factorRepo = sqliterepo.NewTwoFactorRepository(db)
 		userRepo = sqliterepo.NewUserRepository(db)
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
@@ -266,7 +268,7 @@ func run() error {
 
 	backupsCtx, stopBackups := context.WithCancel(context.Background())
 	backups, err := backup.NewManager(backupsCtx, backup.ManagerConfig{
-		Repository: backupRepo, Settings: settingsRepo, UploadDir: cfg.Storage.Dir, Secret: factorKey, Logger: log,
+		ProtectedPaths: backupProtectedPaths, Repository: backupRepo, Settings: settingsRepo, UploadDir: cfg.Storage.Dir, Secret: factorKey, Logger: log,
 		AfterRestore: func(ctx context.Context) error { authSvc.InvalidateAllUsers(); return settingsSvc.Reload(ctx) },
 	})
 	if err != nil {

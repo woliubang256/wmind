@@ -111,6 +111,7 @@ func Pack(ctx context.Context, dir, output string, manifest Manifest) (Manifest,
 		return manifest, err
 	}
 	zw := zip.NewWriter(f)
+	var total int64
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -128,6 +129,10 @@ func Pack(ctx context.Context, dir, output string, manifest Manifest) (Manifest,
 		if !info.Mode().IsRegular() {
 			return errors.New("invalid snapshot file")
 		}
+		if info.Size() > MaxExtractBytes-total {
+			return errors.New("snapshot exceeds 8 GiB")
+		}
+		total += info.Size()
 		rel, err := filepath.Rel(dir, p)
 		if err != nil {
 			return err
@@ -163,7 +168,18 @@ func Pack(ctx context.Context, dir, output string, manifest Manifest) (Manifest,
 			err = json.NewEncoder(w).Encode(manifest)
 		}
 	}
-	err = errors.Join(err, zw.Close(), f.Close())
+	err = errors.Join(err, zw.Close())
+	if err == nil {
+		err = f.Sync()
+	}
+	err = errors.Join(err, f.Close())
+	if err == nil {
+		if stat, e := os.Stat(output); e != nil {
+			err = e
+		} else if stat.Size() > MaxZIPBytes {
+			err = errors.New("ZIP exceeds 2 GiB")
+		}
+	}
 	if err != nil {
 		_ = os.Remove(output)
 	}

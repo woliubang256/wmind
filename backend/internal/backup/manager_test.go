@@ -260,3 +260,47 @@ func TestSchedulerMinuteDeduplicationAndDisabledState(t *testing.T) {
 		t.Fatal("disabled scheduler ran")
 	}
 }
+
+func TestManagerRejectsUploadsContainingDatabase(t *testing.T) {
+	f := newManagerFixture(t)
+	root := filepath.Dir(f.uploads)
+	var database string
+	if err := f.db.QueryRow(`SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&database); err != nil {
+		t.Fatal(err)
+	}
+	_, err := backup.NewManager(t.Context(), backup.ManagerConfig{
+		Repository: sqlite.NewBackupRepository(f.db), Settings: sqlite.NewSettingsRepository(f.db),
+		UploadDir: root, WorkDir: filepath.Join(t.TempDir(), "work"), Secret: strings.Repeat("s", 32),
+		ProtectedPaths: []string{database},
+	})
+	if err == nil {
+		t.Fatal("accepted uploads containing the live database; restore could move it")
+	}
+}
+
+func TestManagerReclaimsExpiredOwnedStagingOnly(t *testing.T) {
+	f := newManagerFixture(t)
+	stale := filepath.Join(f.work, "stage-12345")
+	fresh := filepath.Join(f.work, "stage-12346")
+	unrelated := filepath.Join(f.work, "stage-manual")
+	for _, dir := range []string{stale, fresh, unrelated} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(stale, past, past)
+	os.Chtimes(unrelated, past, past)
+	_, err := backup.NewManager(t.Context(), backup.ManagerConfig{Repository: sqlite.NewBackupRepository(f.db), Settings: sqlite.NewSettingsRepository(f.db), UploadDir: f.uploads, WorkDir: f.work, Secret: strings.Repeat("s", 32)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("expired staging survived restart")
+	}
+	for _, dir := range []string{fresh, unrelated} {
+		if _, err = os.Stat(dir); err != nil {
+			t.Fatal("removed fresh or unrelated directory", err)
+		}
+	}
+}

@@ -42,15 +42,16 @@ type State struct {
 	MaxUploadBytes int64         `json:"maxUploadBytes"`
 }
 type ManagerConfig struct {
-	Repository   domain.BackupRepository
-	Settings     domain.SettingsRepo
-	UploadDir    string
-	WorkDir      string
-	Secret       string
-	Remote       Remote
-	Gate         *Gate
-	AfterRestore func(context.Context) error
-	Logger       *slog.Logger
+	ProtectedPaths []string
+	Repository     domain.BackupRepository
+	Settings       domain.SettingsRepo
+	UploadDir      string
+	WorkDir        string
+	Secret         string
+	Remote         Remote
+	Gate           *Gate
+	AfterRestore   func(context.Context) error
+	Logger         *slog.Logger
 }
 type Manager struct {
 	cfg           ManagerConfig
@@ -76,6 +77,22 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 	cfg.UploadDir, err = filepath.Abs(cfg.UploadDir)
 	if err != nil {
 		return nil, err
+	}
+	if resolved, e := filepath.EvalSymlinks(cfg.UploadDir); e == nil {
+		cfg.UploadDir = resolved
+	}
+	for _, protected := range cfg.ProtectedPaths {
+		absolute, e := filepath.Abs(protected)
+		if e != nil {
+			return nil, e
+		}
+		if resolved, e := filepath.EvalSymlinks(absolute); e == nil {
+			absolute = resolved
+		}
+		relative, e := filepath.Rel(cfg.UploadDir, absolute)
+		if e != nil || relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator))) {
+			return nil, errors.New("uploads directory must not contain a live database file")
+		}
 	}
 	if cfg.WorkDir == "" {
 		cfg.WorkDir = filepath.Join(filepath.Dir(cfg.UploadDir), ".wmind-backups")
@@ -108,6 +125,7 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 	if err = m.Reload(ctx); err != nil {
 		return nil, err
 	}
+	m.reclaimStaging(time.Now())
 	return m, nil
 }
 func (m *Manager) Gate() *Gate { return m.cfg.Gate }

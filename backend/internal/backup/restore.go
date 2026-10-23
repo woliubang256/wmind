@@ -31,6 +31,7 @@ func (m *Manager) Inspect(ctx context.Context, owner string, reader io.Reader) (
 		return RestorePreview{}, ErrBusy
 	}
 	defer m.release()
+	m.reclaimStaging(time.Now())
 	// One staged upload per admin; expired stages are reclaimed when uploading.
 	m.mu.Lock()
 	for key, stage := range m.staged {

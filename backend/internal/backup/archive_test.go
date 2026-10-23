@@ -166,3 +166,20 @@ func TestGateDrainsAndRejects(t *testing.T) {
 	}
 	leave()
 }
+
+func TestPackRejectsOversizedSourceBeforeReading(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "uploads"), 0700)
+	f, err := os.Create(filepath.Join(dir, "uploads", "sparse.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Truncate(MaxExtractBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	_, err = Pack(t.Context(), dir, filepath.Join(t.TempDir(), "out.zip"), Manifest{})
+	if err == nil {
+		t.Fatal("created a backup larger than the restore format accepts")
+	}
+}

@@ -15,6 +15,10 @@ func (m *Manager) Tick(now time.Time) {
 	}
 	m.lastTick = minute
 	m.tickMu.Unlock()
+	if m.reserve() {
+		m.reclaimStaging(now)
+		m.release()
+	}
 	m.mu.RLock()
 	c := m.configuration
 	m.mu.RUnlock()
