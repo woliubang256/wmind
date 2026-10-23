@@ -51,6 +51,7 @@ import type { StructureClass } from '@/editor/model/types';
 import type { Style, Theme } from '@/editor/model/types';
 import {
   applyThemeCommand,
+  changeTopicShapeCommand,
   resetStyleCommand,
   updateStyleCommand,
 } from '@/editor/commands/style';
@@ -1206,6 +1207,8 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                     style={panelStyle}
                     theme={doc.theme}
                     structure={sheet.structure}
+                    shape={sheet.topicShape}
+                    onShape={(shape) => store.getState().dispatch(changeTopicShapeCommand(shape))}
                     onPatch={patchStyle}
                     onStructure={(next) => store.getState().dispatch(changeStructureCommand(next))}
                     onReset={() => store.getState().dispatch(resetStyleCommand(panelTargets))}

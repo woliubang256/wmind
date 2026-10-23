@@ -24,7 +24,7 @@ const SUITE = [
   ['two-factor', '账户双因素认证'],
   ['templates', '模板选择与管理'],
   ['palettes', '参考色板 / 分类切换 / 旧主题兼容'],
-  ['editor-appearance', '控件字号 / 字重 / 面板层级'],
+  ['editor-appearance', '控件字号 / 全画布形状'],
   ['canvas', '多画布 / 大纲 / ZEN'],
   ['a11y', '画布无障碍'],
   ['annotations', '概要 / 边界 / 联系'],

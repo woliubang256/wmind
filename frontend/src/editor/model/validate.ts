@@ -417,6 +417,9 @@ function parseSheet(input: unknown, index: number, warnings: string[], seen: Set
     id: asString(input.id) || `sh-${index}`,
     title: asString(input.title, `画布 ${index + 1}`),
     structure,
+    ...(input.topicShape === undefined || input.topicShape === null ? {} : {
+      topicShape: pickEnum(input.topicShape, SHAPES, 'rounded-rect', `${path}.topicShape`, warnings),
+    }),
     rootTopic: parseTopic(input.rootTopic, `${path}.rootTopic`, warnings, seen, '中心主题'),
     floatingTopics: asArray(input.floatingTopics).map((t, i) =>
       parseTopic(t, `${path}.floatingTopics[${i}]`, warnings, seen, ''),

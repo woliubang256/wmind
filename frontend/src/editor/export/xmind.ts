@@ -37,7 +37,8 @@ import type {
   Topic,
   WmindDocument,
 } from '../model/types';
-import { collectBoundaries, collectSummaries } from '../model/traverse';
+import { collectBoundaries, collectSummaries, walkSheet } from '../model/traverse';
+import { resolveStyle } from '../theme/resolve';
 import { relationshipStyle } from '../layout/annotations';
 import type { ExportContext } from './context';
 
@@ -344,8 +345,19 @@ function sheetToXmind(
   const parentOf = new Map<string, string>();
   for (const floating of sheet.floatingTopics) parentOf.set(floating.id, sheet.rootTopic.id);
 
+  // 布局跳过折叠后代，文档导出仍需写出其真实样式，不能遗漏全画布形状。
+  const completeStyles = new Map(styles);
+  walkSheet(sheet, (topic, ctx) => {
+    if (completeStyles.has(topic.id)) return;
+    const style = resolveStyle(topic, {
+      depth: ctx.depth, branchIndex: ctx.branchIndex,
+      isRoot: ctx.depth === 0, isFloating: ctx.isFloating && ctx.parent === null, isSummary: false,
+    }, theme);
+    completeStyles.set(topic.id, sheet.topicShape === undefined ? style : { ...style, shape: sheet.topicShape });
+  });
+
   const maps: TopicMaps = {
-    styles,
+    styles: completeStyles,
     images,
     bag,
     summaries: groupSummaries(sheet),

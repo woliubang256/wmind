@@ -1,11 +1,83 @@
 import { describe, expect, it } from 'vitest';
-import { nextFillColor, resetStyleCommand, updateStyleCommand } from './style';
-import { defaultTheme } from '../model/create';
+import { changeTopicShapeCommand, nextFillColor, resetStyleCommand, updateStyleCommand } from './style';
+import { createSheet, defaultTheme } from '../model/create';
+import { layoutMindmap } from '../layout/mindmap';
+import { parseDocument } from '../model/validate';
+import { addChildCommand, addSiblingCommand } from './topic';
 import { createEditorStore } from '../store/editor-store';
 import { findTopic } from '../model/traverse';
 import { docWithTree } from '../test-utils';
 
 const theme = defaultTheme();
+
+describe('changeTopicShapeCommand', () => {
+  it('只统一当前画布的主题形状，保留其他样式和原有节点形状字段', () => {
+    const doc = docWithTree();
+    doc.sheets.push(createSheet({ id: 'other' }));
+    doc.sheets[0]!.rootTopic.style = { shape: 'diamond', fill: '#456A86', fontSize: 32 };
+    const store = createEditorStore({ doc });
+    store.getState().select(['a']);
+    store.getState().dispatch(changeTopicShapeCommand('ellipse'));
+    const next = store.getState().doc;
+    expect(next.sheets[0]!.topicShape).toBe('ellipse');
+    expect(next.sheets[1]!.topicShape).toBeUndefined();
+    expect(next.sheets[0]!.rootTopic.style).toEqual(doc.sheets[0]!.rootTopic.style);
+    const layout = layoutMindmap({ sheet: next.sheets[0]!, theme: next.theme });
+    expect([...layout.styles.values()].every((style) => style.shape === 'ellipse')).toBe(true);
+    expect(layout.styles.get('root')).toMatchObject({ fill: '#456A86', fontSize: 32 });
+    expect(store.getState().selection).toEqual(['a']);
+  });
+
+  it('新增子主题、同级主题、自由主题同级以及折叠后代继承画布形状', () => {
+    const store = createEditorStore({ doc: docWithTree() });
+    store.getState().dispatch(changeTopicShapeCommand('hexagon'));
+    store.getState().dispatch(addChildCommand('a2', '新子主题'));
+    store.getState().dispatch(addSiblingCommand('a', '新同级'));
+    store.getState().dispatch(addSiblingCommand('f1', '新自由主题'));
+    const { doc } = store.getState();
+    const layout = layoutMindmap({ sheet: doc.sheets[0]!, theme: doc.theme });
+    expect(layout.styles.get('a2x')?.shape).toBe('hexagon');
+    expect([...layout.styles.values()].every((style) => style.shape === 'hexagon')).toBe(true);
+  });
+
+  it('一次撤销和重做恢复整张画布，重复应用不增加历史', () => {
+    const store = createEditorStore({ doc: docWithTree() });
+    store.getState().dispatch(changeTopicShapeCommand('capsule'));
+    const revision = store.getState().revision;
+    store.getState().dispatch(changeTopicShapeCommand('capsule'));
+    expect(store.getState().revision).toBe(revision);
+    store.getState().undo();
+    expect(store.getState().doc.sheets[0]!.topicShape).toBeUndefined();
+    store.getState().redo();
+    expect(store.getState().doc.sheets[0]!.topicShape).toBe('capsule');
+  });
+
+  it('回到跟随主题时恢复旧形状，清除后重复操作也是空操作', () => {
+    const doc = docWithTree();
+    doc.sheets[0]!.rootTopic.style = { shape: 'diamond' };
+    const store = createEditorStore({ doc });
+    store.getState().dispatch(changeTopicShapeCommand('capsule'));
+    store.getState().dispatch(changeTopicShapeCommand(undefined));
+    const revision = store.getState().revision;
+    store.getState().dispatch(changeTopicShapeCommand(undefined));
+    expect(store.getState().revision).toBe(revision);
+    const next = store.getState().doc;
+    expect(layoutMindmap({ sheet: next.sheets[0]!, theme: next.theme }).styles.get('root')?.shape).toBe('diamond');
+  });
+
+  it('原生保存解析保留统一形状，旧文件不添加覆盖，非法值留警告', () => {
+    const doc = docWithTree();
+    const legacy = parseDocument(doc).document;
+    expect(legacy.sheets[0]!.topicShape).toBeUndefined();
+    doc.sheets[0]!.topicShape = 'circle';
+    expect(parseDocument(JSON.parse(JSON.stringify(doc))).document.sheets[0]!.topicShape).toBe('circle');
+    const raw = JSON.parse(JSON.stringify(doc));
+    raw.sheets[0].topicShape = 'unknown';
+    const result = parseDocument(raw);
+    expect(result.document.sheets[0]!.topicShape).toBe('rounded-rect');
+    expect(result.warnings.some((warning) => warning.includes('topicShape'))).toBe(true);
+  });
+});
 
 describe('nextFillColor', () => {
   it('从调色板外的颜色（含根节点的白底）进入调色板首位', () => {

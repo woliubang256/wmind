@@ -7,8 +7,22 @@
  */
 
 import { findTopic } from '../model/traverse';
-import type { Style, Theme } from '../model/types';
+import type { ShapeClass, Style, Theme } from '../model/types';
 import { defineCommand, type EditorCommand } from './types';
+
+/** 统一当前画布形状，保留节点原样式，后续新增主题由布局自动继承。 */
+export function changeTopicShapeCommand(shape: ShapeClass | undefined): EditorCommand {
+  return defineCommand({
+    type: 'style.sheet-shape',
+    label: '修改整个画布的主题形状',
+    apply(draft, ctx): void {
+      const sheet = draft.sheets.find((item) => item.id === ctx.sheetId);
+      if (!sheet || sheet.topicShape === shape) return;
+      if (shape === undefined) delete sheet.topicShape;
+      else sheet.topicShape = shape;
+    },
+  });
+}
 
 /**
  * 批量改样式。

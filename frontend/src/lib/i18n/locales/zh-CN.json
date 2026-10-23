@@ -230,6 +230,8 @@
     "panel.style.multi": "正在编辑 {{count}} 个主题",
     "panel.style.reset": "重置样式",
     "panel.style.shapeSection": "形状与结构",
+    "panel.style.shapeSectionCanvas": "形状与结构 · 整个画布",
+    "panel.style.shapeFromTheme": "跟随主题",
     "panel.style.shape": "形状",
     "panel.style.structure": "结构",
     "panel.style.fillSection": "填充与边框",

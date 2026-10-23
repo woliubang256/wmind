@@ -80,6 +80,18 @@ describe('XMind 包结构', () => {
 });
 
 describe('往返：内容与层级', () => {
+  it('全画布形状写入所有主题，包括自由主题和折叠后代', () => {
+    const doc = fixture();
+    doc.sheets[0]!.topicShape = 'ellipse';
+    doc.sheets[0]!.rootTopic.children.attached[0]!.collapsed = true;
+    doc.sheets[0]!.floatingTopics.push(createTopic({ id: 'floating', title: '自由主题' }));
+    const { sheet } = exportThenImport(doc);
+    const topics = [sheet.rootTopic, ...sheet.rootTopic.children.attached,
+      ...sheet.rootTopic.children.attached[0]!.children.attached, ...sheet.floatingTopics];
+    expect(topics).toHaveLength(5);
+    expect(topics.every((topic) => topic.style?.shape === 'ellipse')).toBe(true);
+  });
+
   it('联系走向通过 wmindRouting 扩展往返保留', () => {
     const doc = fixture();
     const routing = { start: { x: 100, y: -120 }, end: { x: -100, y: 80 } };

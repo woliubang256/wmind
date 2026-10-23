@@ -1,5 +1,5 @@
 /**
- * 「样式」Tab：改**选中节点**的样式。
+ * 「样式」Tab：形状与布局作用于整个画布，其余字段改选中节点。
  *
  * 面板显示的是**解析后**的样式（`resolveStyle` 的结果），不是 `topic.style`。
  * 一级分支的填充色是渲染期按 `branchIndex` 从调色板算出来的，`topic.style.fill`
@@ -69,7 +69,9 @@ export interface StyleTabProps {
   style: ComputedStyle;
   theme: Theme;
   structure: StructureClass;
+  shape?: ShapeClass;
   onPatch: (patch: Partial<Style>) => void;
+  onShape: (shape: ShapeClass | undefined) => void;
   onStructure: (structure: StructureClass) => void;
   onReset: () => void;
 }
@@ -79,7 +81,9 @@ export function StyleTab({
   style,
   theme,
   structure,
+  shape,
   onPatch,
+  onShape,
   onStructure,
   onReset,
 }: StyleTabProps) {
@@ -89,25 +93,15 @@ export function StyleTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
-          {multi ? t('editor.panel.style.multi', { count: targets.length }) : t('editor.panel.style.single')}
-        </span>
-        <button
-          type="button"
-          onClick={onReset}
-          className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          {t('editor.panel.style.reset')}
-        </button>
-      </div>
-
-      <Section title={t('editor.panel.style.shapeSection')}>
+      <Section title={t('editor.panel.style.shapeSectionCanvas')}>
         <SelectField
           label={t('editor.panel.style.shape')}
-          value={style.shape}
-          options={SHAPES.map((shape) => ({ value: shape, label: t(`editor.panel.shapes.${shape}`) }))}
-          onChange={(shape) => onPatch({ shape })}
+          value={shape ?? 'inherit'}
+          options={[
+            { value: 'inherit' as const, label: t('editor.panel.style.shapeFromTheme') },
+            ...SHAPES.map((value) => ({ value, label: t(`editor.panel.shapes.${value}`) })),
+          ]}
+          onChange={(value: ShapeClass | 'inherit') => onShape(value === 'inherit' ? undefined : value)}
         />
         <SelectField
           label={t('editor.panel.style.structure')}
@@ -116,6 +110,16 @@ export function StyleTab({
           onChange={onStructure}
         />
       </Section>
+
+      <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <span className="text-xs text-muted-foreground">
+          {multi ? t('editor.panel.style.multi', { count: targets.length }) : t('editor.panel.style.single')}
+        </span>
+        <button type="button" onClick={onReset}
+          className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground">
+          {t('editor.panel.style.reset')}
+        </button>
+      </div>
 
       <Section title={t('editor.panel.style.fillSection')}>
         <ColorField

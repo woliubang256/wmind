@@ -218,6 +218,8 @@ export interface Sheet {
   id: string;
   title: string;
   structure: StructureClass;
+  /** 用户选择的全画布主题形状；缺失时保留主题及节点各自的形状。 */
+  topicShape?: ShapeClass;
   rootTopic: Topic;
   floatingTopics: Topic[];
   relationships: Relationship[];

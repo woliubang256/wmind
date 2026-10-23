@@ -230,6 +230,8 @@
     "panel.style.multi": "Editing {{count}} topics",
     "panel.style.reset": "Reset style",
     "panel.style.shapeSection": "Shape & structure",
+    "panel.style.shapeSectionCanvas": "Shape & structure · Entire canvas",
+    "panel.style.shapeFromTheme": "Follow theme",
     "panel.style.shape": "Shape",
     "panel.style.structure": "Structure",
     "panel.style.fillSection": "Fill & border",

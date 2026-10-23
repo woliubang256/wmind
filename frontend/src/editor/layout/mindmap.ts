@@ -21,7 +21,7 @@ import { walkSheet } from '../model/traverse';
 
 import { resolveStyle, type StyleContext } from '../theme/resolve';
 import { countDescendants } from '../model/traverse';
-import type { ComputedStyle, Sheet, StructureClass, Theme, Topic } from '../model/types';
+import type { ComputedStyle, ShapeClass, Sheet, StructureClass, Theme, Topic } from '../model/types';
 import { defaultBackend, measureTopic } from './measure';
 import { spacingFor, type LayoutSpacing } from './constants';
 import type { EdgePath, EdgeShape, LayoutResult, NodeBox, Side, TopicSize } from './types';
@@ -136,7 +136,7 @@ export function layoutMindmap(input: LayoutInput): LayoutResult {
     isRoot: true,
     isFloating: false,
     isSummary: false,
-  });
+  }, input.sheet.topicShape);
 
   const out: Out = { boxes: new Map(), sizes: new Map(), styles: new Map(), edges: [] };
   const ctx: Ctx = {
@@ -179,8 +179,11 @@ function measureNode(
   theme: Theme,
   measure: MeasureFn,
   ctx: StyleContext,
+  shape?: ShapeClass,
 ): MeasuredNode {
-  const style = resolveStyle(topic, ctx, theme);
+  const resolved = resolveStyle(topic, ctx, theme);
+  // 画布统一形状先于测量生效；不修改主题缓存及节点原有的显式样式。
+  const style = shape === undefined || shape === resolved.shape ? resolved : { ...resolved, shape };
   const size = measure(topic, style);
 
   // 折叠节点不测量子树——这既是性能优化，也是语义：折叠的含义就是「别管里面」。
@@ -194,7 +197,7 @@ function measureNode(
           isRoot: false,
           isFloating: false,
           isSummary: false,
-        }),
+        }, shape),
       );
     });
   }
@@ -810,7 +813,7 @@ function placeFloating(sheet: Sheet, theme: Theme, measure: MeasureFn, ctx: Ctx)
       isRoot: false,
       isFloating: true,
       isSummary: false,
-    });
+    }, sheet.topicShape);
     subtreeHeightOf(measured, siblingGap);
     // 自由主题不参与列对齐：它们的起点是整棵树的左边界，套用主树的列坐标
     // 会被拽到树中间去。
