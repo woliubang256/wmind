@@ -26,6 +26,8 @@ export interface Rect {
 export type Side = 'left' | 'right' | 'bottom' | 'none';
 
 export interface NodeBox extends Rect {
+  /** 含形状下方标签的完整高度；连线仍使用 height。 */
+  outerHeight?: number;
   id: string;
   depth: number;
   /** 一级分支序号，决定取色；根与自由主题为 -1。 */
@@ -133,10 +135,17 @@ export interface MarkerLayout {
 export interface TopicSize {
   width: number;
   height: number;
+  /** 实际形状高度，height 为包含标签的布局占用。 */
+  bodyHeight?: number;
   /** 折行后的文本行。渲染层直接逐行输出 `<tspan>`。 */
   lines: string[];
   /** 节点内的图片；没有图片为 null。 */
   image: ImageSize | null;
   markers?: MarkerLayout;
   details?: TopicDetails;
+}
+
+/** 需要包含外置标签的范围计算统一读取这里。 */
+export function topicBounds(box: NodeBox): Rect {
+  return box.outerHeight === undefined ? box : { x: box.x, y: box.y, width: box.width, height: box.outerHeight };
 }

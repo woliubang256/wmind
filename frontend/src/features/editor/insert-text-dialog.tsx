@@ -8,11 +8,12 @@ import type { ContentPatch } from '@/editor/commands/content';
 import type { Topic, WmindDocument } from '@/editor/model/types';
 import { safeTopicHref } from '@/editor/model/topic-content';
 import { flatten } from '@/editor/model/traverse';
+import { topicNoteText } from './topic-note-text';
 import type { InsertAction } from './insert-actions';
 
 export function InsertTextDialog({ action, topics, doc, onSave, onClose }: { action: InsertAction; topics: Topic[]; doc: WmindDocument; onSave(patch: ContentPatch): void; onClose(): void }) {
   const { t } = useTranslation(); const first = topics[0]!;
-  const [value, setValue] = useState(action === 'note' ? first.notes.plain : action === 'label' ? first.labels.join('\n') : action === 'web' ? first.href : action === 'topic' ? first.href.replace(/^xmind:#/, '') : '');
+  const [value, setValue] = useState(action === 'note' ? topicNoteText(first.notes) : action === 'label' ? first.labels.join('\n') : action === 'web' ? first.href : action === 'topic' ? first.href.replace(/^xmind:#/, '') : '');
   const [done, setDone] = useState(first.content?.todo ?? false);
   const [task, setTask] = useState(first.content?.task ?? { progress: 0, priority: 0, assignee: '', start: '', due: '' });
   const [error, setError] = useState('');

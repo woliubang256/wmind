@@ -1,3 +1,4 @@
+import { topicBounds } from '../layout/types';
 /**
  * 视口裁剪。
  *
@@ -64,7 +65,7 @@ export function cullBoxes(
   if (rect === null) return all;
 
   const viewport = expandRect(rect);
-  return all.filter((box) => intersects(box, viewport) || (keep?.has(box.id) ?? false));
+  return all.filter((box) => intersects(topicBounds(box), viewport) || (keep?.has(box.id) ?? false));
 }
 
 /**

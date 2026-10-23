@@ -1,4 +1,4 @@
-import { TopicDetailsView } from './topic-details';
+import { TopicDetailsView, type TopicContentLabels } from './topic-details';
 import type { TopicDetails } from '../layout/topic-details';
 /**
  * 单个主题节点的渲染。
@@ -50,6 +50,9 @@ export interface TopicNodeProps {
    * 是一个 `img`，里面再挂 treeitem 会让读屏报出一棵无名树。
    */
   treeItem?: boolean;
+  contentReadOnly?: boolean;
+  contentInteractive?: boolean;
+  contentLabels?: TopicContentLabels;
 }
 
 const SELECTION_INSET = 3;
@@ -67,10 +70,14 @@ export const TopicNode = memo(function TopicNode({
   editing,
   showBadges = true,
   treeItem = false,
+  contentReadOnly = false,
+  contentInteractive = false,
+  contentLabels,
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
   const showImage = image !== null && image.src !== '';
-  const { textX, textAnchor: anchor, firstY, imageX, imageY, markerRects, detailsY } = topicContentGeometry(box, style, lines, image, markers, details?.height);
+  const geometry = topicContentGeometry(box, style, lines, image, markers, details);
+  const { textX, textAnchor: anchor, firstY, imageX, imageY, markerRects } = geometry;
 
   // 折叠徽标放在「远离根」的一侧：左侧分支在左边缘，右侧在右边缘，
   // 自上而下的结构（org-chart）在下沿。
@@ -103,7 +110,7 @@ export const TopicNode = memo(function TopicNode({
       aria-label={treeItem && title !== '' ? title : undefined}
     >
       <TopicShape box={box} style={style} />
-      {details ? <TopicDetailsView details={details} box={box} y={detailsY} color={style.textColor} /> : null}
+      {details ? <TopicDetailsView details={details} box={box} geometry={geometry} color={style.textColor} interactive={showBadges && contentInteractive} readOnly={contentReadOnly} labels={contentLabels} /> : null}
 
       {showImage ? (
         <image
@@ -200,7 +207,7 @@ export const TopicNode = memo(function TopicNode({
           x={box.x - SELECTION_INSET}
           y={box.y - SELECTION_INSET}
           width={box.width + SELECTION_INSET * 2}
-          height={box.height + SELECTION_INSET * 2}
+          height={(box.outerHeight ?? box.height) + SELECTION_INSET * 2}
           rx={Math.min(12, box.height / 2) + SELECTION_INSET}
           fill="none"
           stroke="var(--wmind-selection, #1E88E5)"
@@ -224,6 +231,9 @@ function areEqual(prev: TopicNodeProps, next: TopicNodeProps): boolean {
     prev.showBadges === next.showBadges &&
     prev.selected === next.selected &&
     prev.editing === next.editing &&
+    prev.contentLabels === next.contentLabels &&
+    prev.contentInteractive === next.contentInteractive &&
+    prev.contentReadOnly === next.contentReadOnly &&
     prev.treeItem === next.treeItem
   );
 }

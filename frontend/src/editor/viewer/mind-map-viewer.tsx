@@ -41,6 +41,8 @@ export interface MindMapViewerProps {
   layout?: LayoutResult;
   plugins?: ViewerPlugin[];
   readOnly?: boolean;
+  /** 宿主接管内容点击时才提供键盘入口，导出/独立查看器不生成无效按钮。 */
+  contentInteractive?: boolean;
   selection?: ReadonlySet<string>;
   editingId?: string | null;
   /**
@@ -75,6 +77,7 @@ export function MindMapViewer({
   layout: providedLayout,
   plugins,
   readOnly = false,
+  contentInteractive = false,
   selection = EMPTY_SELECTION,
   editingId = null,
   selectedAnnotationId = null,
@@ -355,6 +358,7 @@ export function MindMapViewer({
     return set;
   }, [selection, editingId]);
 
+  const contentLabels = useMemo(() => ({ todo: t('editor.content.todo'), note: t('editor.content.note'), link: t('editor.content.link'), more: t('editor.content.more') }), [t]);
   return (
     <ViewerContext.Provider value={context}>
       <div
@@ -393,6 +397,9 @@ export function MindMapViewer({
               editingId={editingId}
               titles={titles}
               treeItems={!readOnly}
+              contentReadOnly={readOnly}
+              contentInteractive={contentInteractive}
+              contentLabels={contentLabels}
               cullRect={cullRect}
               keep={keep}
             />
@@ -422,7 +429,7 @@ export function MindMapViewer({
             key={editingBox.id}
             box={editingBox}
             style={editingStyle}
-            contentRect={editingSize && (editingSize.markers || editingSize.details) ? topicContentGeometry(editingBox, editingStyle, editingSize.lines, editingSize.image, editingSize.markers, editingSize.details?.height).textRect : undefined}
+            contentRect={editingSize && (editingSize.markers || editingSize.details) ? topicContentGeometry(editingBox, editingStyle, editingSize.lines, editingSize.image, editingSize.markers, editingSize.details).textRect : undefined}
             textHeight={editingSize ? editingSize.lines.length * Math.round(editingStyle.fontSize * 1.4) : editingBox.height}
             viewport={viewport}
             initialValue={findTitle(sheet, editingBox.id)}

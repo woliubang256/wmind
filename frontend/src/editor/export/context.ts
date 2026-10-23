@@ -281,7 +281,7 @@ export function contentBounds(layout: LayoutResult, annotations: Rect | null = n
 
   for (const box of layout.boxes.values()) {
     consider(box.x, box.y);
-    consider(box.x + box.width, box.y + box.height);
+    consider(box.x + box.width, box.y + (box.outerHeight ?? box.height));
   }
   for (const edge of layout.edges) {
     consider(edge.from.x, edge.from.y);

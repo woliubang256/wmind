@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { ToolbarButton } from './toolbar-button';
 import { InsertMenu } from './insert-menu';
 import { InsertDialog } from './insert-dialog';
+import { TopicContentPopover } from './topic-content-popover';
 import { insertAvailability, type InsertAction } from './insert-actions';
 import { updateContentCommand, type ContentPatch } from '@/editor/commands/content';
 import { safeTopicHref } from '@/editor/model/topic-content';
@@ -47,7 +48,7 @@ import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import { topicElementId } from '@/editor/viewer/a11y-ids';
 import type { Viewport } from '@/editor/viewer/viewer-types';
-import type { StructureClass } from '@/editor/model/types';
+import type { StructureClass, Topic } from '@/editor/model/types';
 import type { Style, Theme } from '@/editor/model/types';
 import {
   applyThemeCommand,
@@ -293,6 +294,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const saveState = useEditor((state) => state.save);
   const version = useEditor((state) => state.version);
 
+  const [contentPopover, setContentPopover] = useState<{ topicId: string; sheetId: string; anchor: Element } | null>(null);
   const [preview, setPreview] = useState(false);
   /** 画布 / 大纲两种视图。大纲是同一份文档的另一种投影，切换不丢任何东西。 */
   const [view, setView] = useState<'canvas' | 'outline'>('canvas');
@@ -762,10 +764,17 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
 
   const selectedTopics = selection.flatMap((id) => { const found = findTopicInSheet(sheet, id); return found ? [found.topic] : []; });
   const activeId = selection[0] ?? sheet.rootTopic.id;
+  const closeContentPopover = useCallback((restoreFocus = true) => {
+    if (restoreFocus && contentPopover?.anchor.isConnected) { const anchor = contentPopover.anchor as SVGElement; requestAnimationFrame(() => anchor.focus?.({ preventScroll: true })); }
+    setContentPopover(null);
+  }, [contentPopover]);
+  useEffect(() => { setContentPopover(null); }, [sheetId, view, preview, viewport.x, viewport.y, viewport.zoom]);
+  const popoverTopic = contentPopover?.sheetId === sheet.id ? findTopicInSheet(sheet, contentPopover.topicId)?.topic : undefined;
   const openInsert = (action: InsertAction, ids = selection) => {
     const current = store.getState(); const currentSheet = sheetById(current.doc, current.sheetId);
     const count = ids.filter((id) => findTopicInSheet(currentSheet, id)).length;
     if (insertAvailability(action, count, ids.length)) return;
+    setContentPopover(null);
     current.setEditing(null);
     setInsertState({ action, ids: [...ids], sheetId: currentSheet.id });
   };
@@ -776,25 +785,36 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     setInsertState(null);
     requestAnimationFrame(() => { canvasRef.current?.focus({ preventScroll: true }); fitRef.current(); });
   };
+  const openTopicLink = (topic: Topic) => {
+    setContentPopover(null);
+    if (topic.content?.localLink) downloadEmbedded(topic.content.localLink);
+    else if (topic.href.startsWith('xmind:#')) {
+      const found = findTopic(doc, topic.href.slice(7));
+      if (found) { store.getState().setSheet(found.sheet.id); store.getState().select([found.topic.id]); requestAnimationFrame(() => fitRef.current()); }
+    } else if (safeTopicHref(topic.href)) window.open(topic.href, '_blank', 'noopener,noreferrer');
+  };
   const contentClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (preview) return;
     const target = (event.target as Element).closest('[data-topic-content-kind]');
     const topicId = target?.closest('[data-topic-id]')?.getAttribute('data-topic-id');
     if (!target || !topicId) return;
     const topic = findTopicInSheet(sheet, topicId)?.topic; if (!topic) return;
     event.preventDefault(); event.stopPropagation();
     const kind = target.getAttribute('data-topic-content-kind');
-    if (kind === 'todo') store.getState().dispatch(updateContentCommand([topicId], { content: { todo: !topic.content?.todo } }));
-    else if (kind === 'link') {
-      if (topic.content?.localLink) downloadEmbedded(topic.content.localLink);
-      else if (topic.href.startsWith('xmind:#')) {
-        const found = findTopic(doc, topic.href.slice(7));
-        if (found) { store.getState().setSheet(found.sheet.id); store.getState().select([found.topic.id]); requestAnimationFrame(() => fitRef.current()); }
-      } else if (safeTopicHref(topic.href)) window.open(topic.href, '_blank', 'noopener,noreferrer');
+    if (kind === 'note' || kind === 'link' || kind === 'more') {
+      setContentPopover((current) => current?.topicId === topicId ? null : { topicId, sheetId: sheet.id, anchor: target });
     } else if (kind === 'attachment') {
       const file = topic.content?.attachments?.find((item) => item.id === target.getAttribute('data-content-id'));
       if (file) downloadEmbedded(file);
-    } else if (kind) openInsert(kind as InsertAction, [topicId]);
+    } else if (!preview) {
+      if (kind === 'todo') store.getState().dispatch(updateContentCommand([topicId], { content: { todo: !topic.content?.todo } }));
+      else if (kind) openInsert(kind as InsertAction, [topicId]);
+    }
+  };
+  const contentKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['Enter', ' '].includes(event.key) || event.nativeEvent.isComposing) return;
+    const target = (event.target as Element).closest<SVGElement>('[data-topic-content-kind]');
+    if (!target) return;
+    event.preventDefault(); event.stopPropagation(); target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   };
 
 
@@ -1131,13 +1151,14 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               }}
               className="relative min-h-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
-              <div className="h-full w-full" onClickCapture={contentClick}>
+              <div className="h-full w-full" onClickCapture={contentClick} onKeyDownCapture={contentKeyDown}>
               <MindMapViewer
                 sheet={sheet}
                 theme={doc.theme}
                 layout={layout}
                 plugins={preview ? READ_ONLY_PLUGINS : EDITOR_PLUGINS}
                 readOnly={preview}
+                contentInteractive
                 viewport={viewport}
                 onViewportChange={setViewport}
                 selection={selectionSet}
@@ -1355,6 +1376,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         onClose={() => setSaveTemplateOpen(false)}
       />
 
+      {contentPopover && popoverTopic ? <TopicContentPopover key={`${contentPopover.sheetId}:${contentPopover.topicId}`} topic={popoverTopic}
+        anchor={contentPopover.anchor} readOnly={preview} onClose={closeContentPopover}
+        linkTitle={popoverTopic.content?.localLink?.name ?? (popoverTopic.href.startsWith('xmind:#') ? findTopic(doc, popoverTopic.href.slice(7))?.topic.title ?? '…' : popoverTopic.href)}
+        onEdit={(action) => openInsert(action, [popoverTopic.id])} onOpenLink={() => openTopicLink(popoverTopic)} /> : null}
       {insertState && insertState.sheetId === sheet.id && insertState.ids.every((id) => findTopicInSheet(sheet, id)) ? <InsertDialog
         key={`${insertState.sheetId}:${insertState.action}:${insertState.ids.join(',')}`} action={insertState.action}
         topics={insertState.ids.map((id) => findTopicInSheet(sheet, id)!.topic)} doc={doc} onSave={saveInsert}

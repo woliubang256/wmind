@@ -181,6 +181,11 @@ describe('resolveDrop', () => {
 });
 
 describe('boxesInRect', () => {
+  it('扫过底部标签也能框选主题', () => {
+    const item = { ...box('labels', 0, 0), outerHeight: 100 };
+    expect(boxesInRect(new Map([[item.id, item]]), { x: 0, y: 80, width: 10, height: 10 })).toEqual(['labels']);
+  });
+
   it('相交即选中，不要求完全包含', () => {
     // 一条横线扫过 a1 与 a2 的左边缘。
     const ids = boxesInRect(boxes(), { x: 195, y: -100, width: 10, height: 100 });

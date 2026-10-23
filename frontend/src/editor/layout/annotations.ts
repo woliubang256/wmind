@@ -1,3 +1,4 @@
+import { topicBounds } from './types';
 /**
  * 概要 / 边界 / 关系线的几何。
  *
@@ -339,7 +340,7 @@ function rectsOf(layout: LayoutResult, range: readonly string[]): Rect[] {
   const rects: Rect[] = [];
   for (const id of range) {
     const box = layout.boxes.get(id);
-    if (box !== undefined) rects.push(box);
+    if (box !== undefined) rects.push(topicBounds(box));
   }
   return rects;
 }
@@ -369,7 +370,7 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
     const range = unionRect(rects);
     if (range === null) continue;
     const side = item.range.filter((id) => layout.boxes.has(id)).every((id) => layout.boxes.get(id)!.side === 'left') ? 'left' : 'right';
-    const placed = layoutSummary(item, range, summary, side, [...layout.boxes.values(), ...summaries.map((entry) => entry.bounds)]);
+    const placed = layoutSummary(item, range, summary, side, [...layout.boxes.values()].map(topicBounds).concat(summaries.map((entry) => entry.bounds)));
     const direction = side === 'left' ? -1 : 1;
     const textEdge = placed.rect.x + (side === 'left' ? placed.rect.width : 0);
     const fromX = textEdge - direction * ANNOTATION_METRICS.connectorGap;

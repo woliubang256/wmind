@@ -56,6 +56,11 @@ describe('expandRect', () => {
 });
 
 describe('cullBoxes', () => {
+  it('只有形状下方标签进入视口时仍保留主题', () => {
+    const item = { ...box('labels', 0, -400), outerHeight: 300 };
+    expect(cullBoxes([item], viewport).map((entry) => entry.id)).toEqual(['labels']);
+  });
+
   it('rect 为 null 时原样返回（导出与小图走这条路）', () => {
     const boxes = [box('a', 0, 0), box('b', 99999, 99999)];
     expect(cullBoxes(boxes, null)).toHaveLength(2);

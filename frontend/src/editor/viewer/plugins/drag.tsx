@@ -80,7 +80,7 @@ export function DragPlugin() {
       left = Math.min(left, box.x);
       top = Math.min(top, box.y);
       right = Math.max(right, box.x + box.width);
-      bottom = Math.max(bottom, box.y + box.height);
+      bottom = Math.max(bottom, box.y + (box.outerHeight ?? box.height));
     }
     if (left === Infinity) return null;
     return { x: left, y: top, width: right - left, height: bottom - top };

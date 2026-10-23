@@ -1,3 +1,4 @@
+import type { TopicContentLabels } from './topic-details';
 /**
  * 画布的三层内容：连线、主题、装饰。
  *
@@ -64,6 +65,9 @@ export interface TopicsLayerProps {
    * 报出一棵「没有名字的树」，比不报还糟。导出同理（`false`）。
    */
   treeItems?: boolean;
+  contentReadOnly?: boolean;
+  contentInteractive?: boolean;
+  contentLabels?: TopicContentLabels;
   /**
    * 世界坐标的视口矩形；`null` 表示不裁剪（小图与导出）。
    *
@@ -82,6 +86,9 @@ export const TopicsLayer = memo(function TopicsLayer({
   showBadges = true,
   titles,
   treeItems = false,
+  contentReadOnly = false,
+  contentInteractive = false,
+  contentLabels,
   cullRect = null,
   keep = EMPTY_KEEP,
 }: TopicsLayerProps) {
@@ -104,6 +111,9 @@ export const TopicsLayer = memo(function TopicsLayer({
             editing={editingId === box.id}
             showBadges={showBadges}
             treeItem={treeItems}
+            contentReadOnly={contentReadOnly}
+            contentInteractive={contentInteractive}
+            contentLabels={contentLabels}
           />
         );
       })}

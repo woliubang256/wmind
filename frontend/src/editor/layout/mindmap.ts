@@ -778,7 +778,8 @@ function placeNodeAt(node: MeasuredNode, x: number, y: number, side: Side, ctx: 
     x,
     y,
     width: node.size.width,
-    height: node.size.height,
+    height: node.size.bodyHeight ?? node.size.height,
+    ...(node.size.bodyHeight !== undefined ? { outerHeight: node.size.height } : {}),
     depth: node.depth,
     branchIndex: node.branchIndex,
     side,
@@ -814,7 +815,7 @@ function placeFloating(sheet: Sheet, theme: Theme, measure: MeasureFn, ctx: Ctx)
   let maxY = -Infinity;
   for (const box of ctx.out.boxes.values()) {
     if (box.x < minX) minX = box.x;
-    if (box.y + box.height > maxY) maxY = box.y + box.height;
+    if (box.y + (box.outerHeight ?? box.height) > maxY) maxY = box.y + (box.outerHeight ?? box.height);
   }
   if (!Number.isFinite(minX)) {
     minX = 0;
@@ -864,7 +865,7 @@ function finalize(out: Out, padding: number): LayoutResult {
     if (box.x < minX) minX = box.x;
     if (box.y < minY) minY = box.y;
     if (box.x + box.width > maxX) maxX = box.x + box.width;
-    if (box.y + box.height > maxY) maxY = box.y + box.height;
+    if (box.y + (box.outerHeight ?? box.height) > maxY) maxY = box.y + (box.outerHeight ?? box.height);
   }
 
   const dx = padding - minX;

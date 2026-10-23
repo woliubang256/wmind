@@ -188,7 +188,7 @@ export function resolveDrop(
 
 /** 框选：返回与矩形相交的节点 id。 */
 export function boxesInRect(
-  boxes: ReadonlyMap<string, { id: string; x: number; y: number; width: number; height: number }>,
+  boxes: ReadonlyMap<string, { id: string; x: number; y: number; width: number; height: number; outerHeight?: number }>,
   rect: { x: number; y: number; width: number; height: number },
 ): string[] {
   const left = Math.min(rect.x, rect.x + rect.width);
@@ -200,7 +200,7 @@ export function boxesInRect(
   for (const box of boxes.values()) {
     // 相交而非包含：用户随手划一道横线，期望选中被扫到的节点。
     if (box.x + box.width < left || box.x > right) continue;
-    if (box.y + box.height < top || box.y > bottom) continue;
+    if (box.y + (box.outerHeight ?? box.height) < top || box.y > bottom) continue;
     ids.push(box.id);
   }
   return ids;

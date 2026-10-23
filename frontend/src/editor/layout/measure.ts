@@ -1,4 +1,4 @@
-import { measureDetails } from './topic-details';
+import { DETAIL_CONTROL_SPACE, layoutLabelBadges, measureDetails } from './topic-details';
 /**
  * 文本测量。
  *
@@ -350,38 +350,46 @@ export function measureTopic(
     ? maxContentWidth
     : Math.max(1, style.width - paddingX * 2);
 
+  const details = measureDetails(topic, available, impl, linkedTopicTitle);
+  const controlsWidth = (details?.todo !== undefined ? DETAIL_CONTROL_SPACE : 0) + (details?.entry ? DETAIL_CONTROL_SPACE : 0);
+  const contentAvailable = Math.max(available, controlsWidth + Math.max(16, style.fontSize));
+  const titleAvailable = contentAvailable - controlsWidth;
   const count = topic.markers.length;
   const markerSize = Math.max(16, Math.min(24, style.fontSize));
   const gap = 6;
   const fullMarkerWidth = count * markerSize + Math.max(0, count - 1) * gap;
-  const inline = fullMarkerWidth + gap + minContentWidth <= available;
-  const columns = Math.max(1, Math.min(count, Math.floor((available + gap) / (markerSize + gap))));
+  const inline = fullMarkerWidth + gap + minContentWidth <= titleAvailable;
+  const columns = Math.max(1, Math.min(count, Math.floor((titleAvailable + gap) / (markerSize + gap))));
   const markerWidth = columns * markerSize + Math.max(0, columns - 1) * gap;
   const markerHeight = Math.ceil(count / columns) * (markerSize + gap) - gap;
   const prefix = count && inline ? fullMarkerWidth + gap : 0;
-  const measured = measureText(topic.title, font, available - prefix, impl);
+  const measured = measureText(topic.title, font, Math.max(1, titleAvailable - prefix), impl);
   const contentWidth = count ? inline ? measured.width + prefix : Math.max(measured.width, markerWidth) : measured.width;
-  const rowWidth = style.autoWidth ? Math.min(maxContentWidth, Math.max(minContentWidth, contentWidth)) : available;
+  const rowWidth = style.autoWidth ? Math.min(maxContentWidth, Math.max(minContentWidth, contentWidth + controlsWidth)) : contentAvailable;
   const markers: MarkerLayout | undefined = count ? { items: topic.markers, size: markerSize, gap, columns: inline ? count : columns,
-    width: inline ? fullMarkerWidth : markerWidth, height: inline ? markerSize : markerHeight, inline, rowWidth } : undefined;
-  const headerHeight = markers ? inline ? Math.max(measured.height, markerSize) : markerHeight + gap + measured.height : measured.height;
+    width: inline ? fullMarkerWidth : markerWidth, height: inline ? markerSize : markerHeight, inline, rowWidth: rowWidth - controlsWidth } : undefined;
+  const textHeaderHeight = markers ? inline ? Math.max(measured.height, markerSize) : markerHeight + gap + measured.height : measured.height;
+  const headerHeight = Math.max(textHeaderHeight, controlsWidth ? 16 : 0);
+  if (details) details.rowWidth = rowWidth;
 
   const image = topic.image === null ? null : imageDisplaySize(topic.image);
 
   let width = style.autoWidth
     ? rowWidth + paddingX * 2
-    : style.width;
+    : Math.max(style.width, rowWidth + paddingX * 2);
   if (image !== null) width = Math.max(width, image.width + paddingX * 2);
 
-  const details = measureDetails(topic, available, impl, linkedTopicTitle);
   if (details) width = Math.max(width, details.width + paddingX * 2);
   const height = image === null
     ? headerHeight + paddingY * 2
     : headerHeight + imageGap + image.height + paddingY * 2;
 
+  if (details) Object.assign(details, layoutLabelBadges(topic.labels, roundHalf(width), impl));
+  const bodyHeight = roundHalf(height + (details?.height ?? 0));
   return {
     width: roundHalf(width),
-    height: roundHalf(height + (details?.height ?? 0)),
+    height: bodyHeight + (details?.labelHeight ?? 0),
+    ...(details?.labelHeight ? { bodyHeight } : {}),
     lines: measured.lines,
     image,
     ...(markers ? { markers } : {}),
