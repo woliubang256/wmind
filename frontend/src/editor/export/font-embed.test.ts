@@ -66,7 +66,7 @@ function ctxOf(sheet: Sheet, document?: Partial<WmindDocument>) {
   const doc = createDocument({ title: '测试' });
   doc.sheets = [sheet];
   Object.assign(doc, document);
-  return buildExportContext(doc, 'sheet-0', DEFAULT_EXPORT_OPTIONS);
+  return buildExportContext(doc, 'sheet-0', { ...DEFAULT_EXPORT_OPTIONS, brand: false });
 }
 
 describe('parseRangeSpec', () => {
