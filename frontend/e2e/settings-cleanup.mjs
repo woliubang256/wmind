@@ -20,7 +20,7 @@ run(async () => {
         revoked = true;
         return route.fulfill({ status: 204 });
       }
-      if (path === '/admin/stats') data = { userCount: 1, activeUserCount: 1, mapCount: 2, mapCountToday: 1, storageUsedBytes: 1024, trend: [] };
+      if (path === '/admin/stats') data = { userCount: 1, activeUserCount: 1, mapCount: 2, mapCountToday: 1, storageUsedBytes: 1024, trend: [{ date: '2026-10-23', newUsers: 0, newMaps: 0 }, { date: '2026-10-24', newUsers: 1, newMaps: 1 }] };
       if (path === '/admin/settings') data = {};
       await route.fulfill({ json: { data, pagination: { page: 1, pageSize: 20, total: Array.isArray(data) ? data.length : 0, totalPages: 1 } } });
     });
@@ -57,7 +57,18 @@ run(async () => {
       await page.goto(`${BASE}${path}`);
       await page.getByRole('heading', { name: title, exact: true }).waitFor();
       check(`${title}删除圈出的说明`, !(await page.locator('main').innerText()).includes(removed));
-      if (path === '/admin') check('最近操作删除说明', !await page.getByText('审计日志只增不改，记录谁在什么时候改了什么。').count());
+      if (path === '/admin') {
+        check('最近操作删除说明', !await page.getByText('审计日志只增不改，记录谁在什么时候改了什么。').count());
+        const zeroBar = page.locator('main section').first().locator('.group').first();
+        check('零新增不显示虚假的柱条', await zeroBar.locator('span').evaluateAll((nodes) => nodes.length === 2 && nodes.every((node) => parseFloat(getComputedStyle(node).height) === 0)));
+      }
+      if (path === '/admin/users') {
+        await page.getByRole('button', { name: '新建用户', exact: true }).click();
+        const formDialog = page.getByRole('dialog', { name: '新建用户', exact: true });
+        await formDialog.waitFor();
+        check('有正文的表单弹窗保留正文和分隔', await formDialog.evaluate((node) => node.children.length === 3 && getComputedStyle(node.children[0]).borderBottomWidth === '1px' && getComputedStyle(node.children[2]).borderTopWidth === '1px'));
+        await page.keyboard.press('Escape');
+      }
       if (path === '/admin/settings') check('网站设置保留影响提示', await page.getByText('部分设置会影响已登录用户，请留意提示。', { exact: true }).count() === 1);
     }
 

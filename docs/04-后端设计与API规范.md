@@ -900,6 +900,8 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 #### `GET /api/v1/admin/stats`
 
+管理员专用。用户总数和活跃用户排除已删除账号，活跃指 `status=active`；导图总数排除回收站。`storageUsedBytes` 为全部现存导图文档（含回收站）加上传目录普通文件的业务字节数，不含数据库索引、历史快照或备份。趋势返回含今天的连续 14 个 UTC 自然日，缺少记录的日期补零，统计仍保留的用户及导图创建记录（包含软删除记录，永久删除后不再计入）。
+
 ```json
 {
   "data": {

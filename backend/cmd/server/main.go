@@ -82,6 +82,7 @@ func run() error {
 		backupProtectedPaths []string
 		backupRepo           domain.BackupRepository
 		factorRepo           domain.TwoFactorRepo
+		statsRepo            domain.AdminStatsRepo
 		userRepo             domain.UserRepo
 		tokenRepo            domain.RefreshTokenRepo
 		settingsRepo         domain.SettingsRepo
@@ -110,6 +111,7 @@ func run() error {
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: sqliterepo.Check(db)})
 		backupRepo = sqliterepo.NewBackupRepository(db)
 		backupProtectedPaths = append(backupProtectedPaths, cfg.DB.SQLitePath)
+		statsRepo = sqliterepo.NewAdminStatsRepository(db)
 		factorRepo = sqliterepo.NewTwoFactorRepository(db)
 		userRepo = sqliterepo.NewUserRepository(db)
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
@@ -145,6 +147,7 @@ func run() error {
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: postgresrepo.Check(pool)})
 		backupRepo = postgresrepo.NewBackupRepository(pool)
+		statsRepo = postgresrepo.NewAdminStatsRepository(pool)
 		factorRepo = postgresrepo.NewTwoFactorRepository(pool)
 		userRepo = postgresrepo.NewUserRepository(pool)
 		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
@@ -222,6 +225,7 @@ func run() error {
 	}
 
 	adminSvc, err := service.NewAdminService(service.AdminServiceConfig{
+		Stats: statsRepo, Uploads: avatarStore,
 		Users: userRepo, Tokens: tokenRepo, Audit: auditRepo,
 		Site: settingsSvc, Invalidator: authSvc, Tx: txManager, Logger: log,
 	})

@@ -76,19 +76,21 @@ export function AdminOverviewPage() {
             icon="check"
             label={t('admin.overview.activeUserCount')}
             value={formatNumber(data?.activeUserCount ?? 0)}
+            tooltip={t('admin.overview.activeUserHint')}
           />
           <StatCard icon="waypoints" label={t('admin.overview.mapCount')} value={formatNumber(data?.mapCount ?? 0)} />
           <StatCard
             icon="image"
             label={t('admin.overview.storageUsed')}
             value={formatBytes(data?.storageUsedBytes ?? 0)}
+            tooltip={t('admin.overview.storageHint')}
           />
         </div>
       )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel
-          title={t('admin.overview.trendTitle')}
+          title={<span title={t('admin.overview.trendHint')}>{t('admin.overview.trendTitle')}</span>}
           description={
             data
               ? t('admin.overview.trendToday', { count: formatNumber(data.mapCountToday) })
@@ -124,11 +126,11 @@ export function AdminOverviewPage() {
   );
 }
 
-function StatCard({ icon, label, value, hint }: { icon: IconName; label: string; value: string; hint?: string }) {
+function StatCard({ icon, label, value, hint, tooltip }: { icon: IconName; label: string; value: string; hint?: string; tooltip?: string }) {
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-4">
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>{label}</span>
+        <span title={tooltip}>{label}</span>
         <Icon name={icon} className="size-4" />
       </div>
       <p className="mt-3 text-2xl font-semibold tabular-nums">{value}</p>
@@ -167,11 +169,11 @@ function TrendChart({ points }: { points: { date: string; newUsers: number; newM
             <div className="flex h-full items-end justify-center gap-0.5">
               <span
                 className="w-1/2 max-w-2 rounded-t bg-primary/80 transition-colors group-hover:bg-primary"
-                style={{ height: `${Math.max(2, (point.newUsers / max) * 100)}%` }}
+                style={{ height: `${point.newUsers === 0 ? 0 : Math.max(2, (point.newUsers / max) * 100)}%` }}
               />
               <span
                 className="w-1/2 max-w-2 rounded-t bg-emerald-500/70 transition-colors group-hover:bg-emerald-500"
-                style={{ height: `${Math.max(2, (point.newMaps / max) * 100)}%` }}
+                style={{ height: `${point.newMaps === 0 ? 0 : Math.max(2, (point.newMaps / max) * 100)}%` }}
               />
             </div>
           </div>

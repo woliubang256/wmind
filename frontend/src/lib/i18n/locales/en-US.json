@@ -900,6 +900,9 @@
   },
   "admin": {
     "overview.title": "Admin overview",
+    "overview.activeUserHint": "Enabled accounts that have not been deleted; not recent sign-ins.",
+    "overview.storageHint": "Bytes in current map documents (including trash) and uploaded files, excluding database indexes, historical snapshots and backups.",
+    "overview.trendHint": "Retained user and map creation records by UTC calendar day, including trash. Permanently deleted records are excluded.",
     "overview.description": "Site size and recent admin activity.",
     "overview.refresh": "Refresh",
     "overview.refreshing": "Refreshing…",

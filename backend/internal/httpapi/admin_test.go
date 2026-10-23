@@ -2,6 +2,8 @@ package httpapi_test
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -341,9 +343,63 @@ func TestAdminStats(t *testing.T) {
 	if _, ok := body.Data["activeUserCount"]; !ok {
 		t.Fatalf("统计缺少 activeUserCount: %#v", body.Data)
 	}
-	// 导图计数在 M2 前固定为 0，但字段必须存在。
+	// 即使没有导图，字段也必须存在。
 	if _, ok := body.Data["mapCount"]; !ok {
 		t.Fatalf("统计缺少 mapCount: %#v", body.Data)
+	}
+}
+
+func TestAdminStatsReflectMapsTrashAndUploads(t *testing.T) {
+	s := newAuthTestServer(t)
+	token := s.loginAs(testAdminEmail, testAdminPassword)
+	read := func() map[string]any {
+		t.Helper()
+		status, body := s.do(http.MethodGet, "/api/v1/admin/stats", token, nil)
+		if status != http.StatusOK {
+			t.Fatalf("stats = %d %#v", status, body.Error)
+		}
+		return body.Data
+	}
+	before := read()
+	uid := s.createMap(token, "真实统计", "分支")
+	created := read()
+	if created["mapCount"] != float64(1) || created["mapCountToday"] != float64(1) {
+		t.Fatalf("新建导图后统计仍是占位值: %#v", created)
+	}
+	bytes := created["storageUsedBytes"].(float64)
+	if bytes <= before["storageUsedBytes"].(float64) {
+		t.Fatalf("导图内容未计入存储: %#v", created)
+	}
+	trend, _ := created["trend"].([]any)
+	if len(trend) != 14 {
+		t.Fatalf("趋势必须连续补零14天: %#v", trend)
+	}
+	if today := trend[13].(map[string]any); today["newMaps"] != float64(1) || today["newUsers"].(float64) < 1 {
+		t.Fatalf("今日新增未接入: %#v", today)
+	}
+	if err := os.WriteFile(filepath.Join(s.uploads, "example.png"), []byte("test-image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.uploads, ".upload-in-progress"), []byte("temporary"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := read()["storageUsedBytes"].(float64); got != bytes+10 {
+		t.Fatalf("上传文件统计 = %v; want %v（不含未完成上传）", got, bytes+10)
+	}
+	status, _ := s.do(http.MethodDelete, "/api/v1/maps/"+uid, token, nil)
+	if status != http.StatusNoContent {
+		t.Fatalf("移入回收站 = %d", status)
+	}
+	trashed := read()
+	if trashed["mapCount"] != float64(0) || trashed["storageUsedBytes"] != bytes+10 {
+		t.Fatalf("回收站不应算有效导图，但仍占存储: %#v", trashed)
+	}
+	status, _ = s.do(http.MethodDelete, "/api/v1/trash/"+uid, token, nil)
+	if status != http.StatusNoContent {
+		t.Fatalf("彻底删除 = %d", status)
+	}
+	if got := read()["storageUsedBytes"]; got != float64(10) {
+		t.Fatalf("彻底删除后存储 = %v; want 10", got)
 	}
 }
 

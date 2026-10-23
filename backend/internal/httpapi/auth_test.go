@@ -109,6 +109,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	}
 
 	adminSvc, err := service.NewAdminService(service.AdminServiceConfig{
+		Stats: sqlite.NewAdminStatsRepository(db), Uploads: avatarStore,
 		Users: userRepo, Tokens: sqlite.NewRefreshTokenRepository(db),
 		Audit: sqlite.NewAuditRepository(db), Site: settingsSvc,
 		Invalidator: svc, Tx: txManager, Logger: logger,

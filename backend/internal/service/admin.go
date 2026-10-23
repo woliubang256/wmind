@@ -50,8 +50,15 @@ type UserStatusInvalidator interface {
 	InvalidateUser(uid string)
 }
 
+// StorageUsage 提供上传文件的业务字节数。
+type StorageUsage interface {
+	Usage(context.Context) (int64, error)
+}
+
 // AdminServiceConfig 是 AdminService 的依赖。
 type AdminServiceConfig struct {
+	Stats       domain.AdminStatsRepo
+	Uploads     StorageUsage
 	Users       domain.UserRepo
 	Tokens      domain.RefreshTokenRepo
 	Audit       domain.AuditRepo
@@ -64,6 +71,8 @@ type AdminServiceConfig struct {
 
 // AdminService 实现管理后台的业务规则。
 type AdminService struct {
+	stats       domain.AdminStatsRepo
+	uploads     StorageUsage
 	users       domain.UserRepo
 	tokens      domain.RefreshTokenRepo
 	audit       domain.AuditRepo
@@ -76,6 +85,9 @@ type AdminService struct {
 
 // NewAdminService 构造管理服务。
 func NewAdminService(cfg AdminServiceConfig) (*AdminService, error) {
+	if cfg.Stats == nil || cfg.Uploads == nil {
+		return nil, errors.New("AdminService 需要统计仓储和上传存储")
+	}
 	if cfg.Users == nil {
 		return nil, errors.New("AdminService 需要用户仓储")
 	}
@@ -92,6 +104,7 @@ func NewAdminService(cfg AdminServiceConfig) (*AdminService, error) {
 		cfg.Now = SystemClock
 	}
 	return &AdminService{
+		stats: cfg.Stats, uploads: cfg.Uploads,
 		users: cfg.Users, tokens: cfg.Tokens, audit: cfg.Audit, site: cfg.Site,
 		invalidator: cfg.Invalidator, tx: cfg.Tx, logger: cfg.Logger, now: cfg.Now,
 	}, nil
@@ -432,27 +445,33 @@ func (s *AdminService) ResetPassword(ctx context.Context, uid, password string, 
 	return &ResetPasswordResult{Password: password, Generated: generated}, nil
 }
 
-// Stats 返回管理后台概览。
-//
-// 导图相关计数在 M2 接入 maps 表后填充；现在返回 0 而不是省略字段，
-// 免得前端要写「字段可能不存在」的分支。
-func (s *AdminService) Stats(ctx context.Context) (map[string]any, error) {
-	total, err := s.users.Count(ctx)
+// Stats 返回管理后台概览。趋势按 UTC 自然日连续补齐 14 天。
+func (s *AdminService) Stats(ctx context.Context) (*domain.AdminStats, error) {
+	now := s.now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	from := today.AddDate(0, 0, -13)
+	stats, err := s.stats.Read(ctx, from, today.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
-	active, err := s.users.CountFiltered(ctx, domain.ListUsersInput{Status: domain.UserStatusActive})
+	uploadBytes, err := s.uploads.Usage(ctx)
 	if err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
-	return map[string]any{
-		"userCount":        total,
-		"activeUserCount":  active,
-		"mapCount":         0,
-		"mapCountToday":    0,
-		"storageUsedBytes": 0,
-		"trend":            []any{},
-	}, nil
+	stats.StorageUsedBytes += uploadBytes
+	byDay := make(map[string]domain.AdminTrendPoint, len(stats.Trend))
+	for _, point := range stats.Trend {
+		byDay[point.Date] = point
+	}
+	stats.Trend = make([]domain.AdminTrendPoint, 14)
+	for i := range stats.Trend {
+		day := from.AddDate(0, 0, i).Format("2006-01-02")
+		point := byDay[day]
+		point.Date = day
+		stats.Trend[i] = point
+	}
+	stats.MapCountToday = stats.Trend[13].NewMaps
+	return stats, nil
 }
 
 // AuditQuery 是审计日志的查询条件（对外形态）。

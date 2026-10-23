@@ -900,6 +900,9 @@
   },
   "admin": {
     "overview.title": "管理概览",
+    "overview.activeUserHint": "状态正常且未删除的账号，不代表近期登录人数。",
+    "overview.storageHint": "现存导图文档（含回收站）与上传文件的字节数，不含数据库索引、历史快照或备份。",
+    "overview.trendHint": "按 UTC 自然日统计仍保留的用户与导图创建记录，含回收站；永久删除后不再计入。",
     "overview.description": "站点规模与最近的管理操作。",
     "overview.refresh": "刷新",
     "overview.refreshing": "刷新中…",
