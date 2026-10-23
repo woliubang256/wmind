@@ -389,7 +389,7 @@ export function MindMapViewer({
 
             <RelationshipsLayer annotations={annotations} selectedId={selectedAnnotationId} interactive={!readOnly && Boolean(onSelectRelationship)} interactiveLabel={t('editor.annotation.relationship')} />
 
-            <SummariesLayer annotations={annotations} selectedId={selectedAnnotationId} selection={selection} interactive={!readOnly} />
+            <SummariesLayer annotations={annotations} selectedId={selectedAnnotationId} selection={selection} interactive={!readOnly} interactiveLabel={t('editor.annotation.summary')} />
 
             <TopicsLayer
               layout={layout}

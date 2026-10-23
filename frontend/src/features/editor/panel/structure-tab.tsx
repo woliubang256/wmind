@@ -219,7 +219,7 @@ function Section({
                 <div className="flex items-center gap-1">
                   <RenameField
                     value={row.title}
-                    allowEmpty={kind === 'relationship'}
+                    allowEmpty={kind !== 'boundary'}
                     placeholder={row.detail}
                     onCommit={(next) => onRename(kind, row.id, next)}
                   />
@@ -247,9 +247,8 @@ function Section({
 /**
  * 行内改名。
  *
- * 用本地 state 而不是直接受控于文档：概要和边界仍然**拒绝空标题**，如果输入框的值直接读文档，用户把
- * 内容全删掉的那一瞬间文字会自己跳回来，看起来像输入法在捣乱。
- * 联系允许清空标题，宽命中区使空标题线条仍能再次编辑。
+ * 本地 draft 保留输入过程；边界拒绝空标题，失焦时恢复原值。
+ * 概要和联系允许清空，分别通过矩形和宽线条命中区重新编辑。
  */
 function RenameField({
   value,

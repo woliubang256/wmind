@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { layoutAnnotations } from '../layout/annotations';
 import { layoutMindmap } from '../layout/mindmap';
 import { docWithTree } from '../test-utils';
-import { RelationshipsLayer } from './decorations';
+import { RelationshipsLayer, SummariesLayer } from './decorations';
 
 function render(interactive = false) {
   const doc = docWithTree();
@@ -28,5 +28,25 @@ describe('联系线渲染', () => {
     expect(render(true)).toContain('tabindex="0"');
     expect(render()).not.toContain('data-relationship-hit');
     expect(render()).not.toContain('tabindex');
+  });
+});
+
+describe('空标题概要渲染', () => {
+  it('保留括号和最小矩形命中区域，无障碍名称不写入画布文字', () => {
+    const doc = docWithTree();
+    const sheet = doc.sheets[0]!;
+    sheet.summaries.push({ id: 'empty-summary', topicId: 'a', range: ['a1'], title: '', style: null });
+    const annotations = layoutAnnotations(sheet, layoutMindmap({ sheet, theme: doc.theme }), doc.theme);
+    expect(annotations.summaries[0]!.rect.width).toBeGreaterThanOrEqual(48);
+    expect(annotations.summaries[0]!.rect.height).toBeGreaterThan(0);
+    const svg = renderToStaticMarkup(<svg><SummariesLayer annotations={annotations} interactive interactiveLabel="概要" /></svg>);
+    expect(svg).toContain('aria-label="概要"');
+    expect(svg).toContain('data-summary-id="empty-summary"');
+    expect(svg).toContain('<path');
+    expect(svg).toContain('<rect');
+    expect(svg).not.toContain('>概要<');
+    const exported = renderToStaticMarkup(<svg><SummariesLayer annotations={annotations} /></svg>);
+    expect(exported).not.toContain('aria-label');
+    expect(exported).not.toContain('Summary');
   });
 });

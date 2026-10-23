@@ -219,7 +219,7 @@ export function renameAnnotationCommand(kind: AnnotationKind, id: string, title:
     coalesceKey: `annotation:${kind}:${id}`,
     apply(draft, ctx) {
       const sheet = sheetOf(draft, ctx.sheetId);
-      if (sheet === undefined || (next === '' && kind !== 'relationship')) return;
+      if (sheet === undefined || (next === '' && kind === 'boundary')) return;
       // 两个落点都要改：只改一处的话，读取侧合并时先命中的那一份还是旧标题。
       if (kind === 'relationship') {
         const item = sheet.relationships.find((entry) => entry.id === id);

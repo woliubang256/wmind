@@ -155,11 +155,13 @@ export function SummariesLayer({
   selectedId = null,
   selection = new Set<string>(),
   interactive = false,
+  interactiveLabel = 'Summary',
 }: {
   annotations: AnnotationLayout;
   selectedId?: string | null;
   selection?: ReadonlySet<string>;
   interactive?: boolean;
+  interactiveLabel?: string;
 }) {
   return (
     <g className="layer-summaries">
@@ -169,7 +171,7 @@ export function SummariesLayer({
         return (
           <g key={summary.id} data-summary-id={summary.id} id={interactive ? topicElementId(summary.id) : undefined}
             role={interactive ? "treeitem" : undefined} aria-level={interactive ? 1 : undefined}
-            aria-selected={interactive ? selected : undefined} aria-label={interactive ? summary.title : undefined}
+            aria-selected={interactive ? selected : undefined} aria-label={interactive ? summary.title || interactiveLabel : undefined}
             className={interactive ? "cursor-pointer" : undefined}>
             {/* 独立圆弧括号与节点留白，只在中点连接概要文字。 */}
             <path

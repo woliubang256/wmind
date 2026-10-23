@@ -161,6 +161,18 @@ describe('往返：内容与层级', () => {
 });
 
 describe('往返：附属结构', () => {
+  it('空标题概要往返保留结构和联系，不回填默认文字', () => {
+    const doc = fixture();
+    const summary = { id: 'empty-summary', topicId: 'root', range: ['a', 'b'], title: '', style: null };
+    doc.sheets[0]!.summaries.push(summary);
+    doc.sheets[0]!.rootTopic.summaries.push({ ...summary });
+    doc.sheets[0]!.relationships.push({ id: 'empty-summary-link', end1Id: summary.id, end2Id: 'a', title: '', style: null });
+    const { sheet } = exportThenImport(doc);
+    expect(collectSummaries(sheet)).toEqual([summary]);
+    expect(sheet.rootTopic.summaries[0]!.title).toBe('');
+    expect(sheet.relationships[0]!.end1Id).toBe(summary.id);
+  });
+
   it('联系颜色、线宽、线型、虚线和起终点箭头完整往返', () => {
     const doc = fixture();
     const style = { lineColor: '#123456', lineWidth: 4, borderStyle: 'dot', lineStyle: 'elbow', lineStart: 'arrow', lineEnd: 'none' } as const;

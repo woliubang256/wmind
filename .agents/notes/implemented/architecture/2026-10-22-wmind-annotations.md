@@ -27,6 +27,8 @@ XMind 里最常用的三种注释手段，wmind 一个都没有：
 
 ## Decision
 
+概要清空标题由[空概要保存修复](../../implemented/bug-fix/2026-10-24-wmind-empty-summary-title.md)部分替代；下文拒绝概要空标题的原因保留为原设计记录。概要已有矩形命中、双击和 F2，现允许保存空文字并保留结构；双位置存储契约继续成立。
+
 概要选区、左右方向和避让由[概要完整选区修复](../../implemented/bug-fix/2026-10-23-wmind-summary-selection-placement.md)部分替代；完整可见子树与下级概要共同决定范围，其余分层和读写契约保留。
 
 联系的画布编辑、样式、箭头和包围盒由[联系线编辑](../../implemented/feature/2026-10-23-wmind-relationship-editing.md)部分替代；下文联系不计包围盒、没有箭头的描述属于原设计。

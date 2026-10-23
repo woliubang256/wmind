@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createEditorStore } from '../store/editor-store';
 import { deterministicIds, docWithTree } from '../test-utils';
 import { collectBoundaries, collectSummaries, findTopic } from '../model/traverse';
+import { parseDocument } from '../model/validate';
 import {
   addBoundaryCommand,
   addRelationshipCommand,
@@ -152,6 +153,25 @@ describe('addRelationshipCommand', () => {
 });
 
 describe('renameAnnotationCommand', () => {
+  it.each(['', ' \n\t '])('概要清空标题同时更新两个落点并支持撤销重做和保存往返：%j', (title) => {
+    const store = makeStore();
+    store.getState().dispatch(addSummaryCommand({ topicId: 'a', range: ['a1'], title: '清空前' }));
+    const id = collectSummaries(sheetOf(store))[0]!.id;
+    store.getState().dispatch(renameAnnotationCommand('summary', id, title));
+    expect(annotationTitle(sheetOf(store), 'summary', id)).toBe('');
+    expect(findTopic(store.getState().doc, 'a')!.topic.summaries[0]!.title).toBe('');
+    const saved = parseDocument(JSON.parse(JSON.stringify(store.getState().doc))).document;
+    expect(collectSummaries(saved.sheets[0]!)[0]!.title).toBe('');
+    expect(findTopic(saved, 'a')!.topic.summaries[0]!.title).toBe('');
+    store.getState().undo();
+    expect(annotationTitle(sheetOf(store), 'summary', id)).toBe('清空前');
+    store.getState().redo();
+    expect(annotationTitle(sheetOf(store), 'summary', id)).toBe('');
+    const before = store.getState().past.length;
+    store.getState().dispatch(renameAnnotationCommand('summary', id, title));
+    expect(store.getState().past).toHaveLength(before);
+  });
+
   it('联系可以清空标题，仍能通过线条重新编辑', () => {
     const store = makeStore();
     store.getState().dispatch(addRelationshipCommand({ fromId: 'a1', toId: 'b1', title: '旧' }));
