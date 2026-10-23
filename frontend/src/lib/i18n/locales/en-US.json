@@ -691,7 +691,6 @@
     "count": "{{count}} maps",
     "empty.title": "The recycle bin is empty",
     "empty.body": "Maps you delete from the recent list show up here first.",
-    "deletedAt": "Deleted {{time}}",
     "restore": "Restore",
     "purge": "Delete forever",
     "purge.title": "Delete this map forever?",
@@ -703,7 +702,11 @@
     "emptyConfirm.title": "Empty the recycle bin?",
     "emptyConfirm.body": "All {{count}} maps in the recycle bin will be erased permanently.",
     "emptyConfirm.confirm": "Empty it",
-    "emptied": "Recycle bin emptied"
+    "emptied": "Recycle bin emptied",
+    "deletingSoon": "Deleting soon",
+    "expiryUnavailable": "Deletion time unavailable",
+    "daysUntilDeletion_one": "Deletes in {{count}} day",
+    "daysUntilDeletion_other": "Deletes in {{count}} days"
   },
   "share": {
     "action": "Share",
@@ -1090,7 +1093,11 @@
     "audit.deleteUser": "Deleted a user",
     "audit.changeRole": "Changed a role",
     "audit.resetPassword": "Reset a password",
-    "audit.updateSettings": "Updated settings"
+    "audit.updateSettings": "Updated settings",
+    "settings.groupTrashTitle": "Trash",
+    "settings.groupTrashDescription": "Set the retention period for all deleted maps.",
+    "settings.fieldTrashRetentionDays": "Trash retention period",
+    "settings.hintTrashRetentionDays": "Applies to all maps from the time they enter Trash (1–3650 days). Changes affect existing items; shortening the period may permanently delete expired maps at the next cleanup. Cleanup runs on startup and hourly."
   },
   "validate": {
     "usernameRequired": "Enter a username",

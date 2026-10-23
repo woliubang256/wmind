@@ -138,6 +138,22 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    id: 'trash',
+    titleKey: 'admin.settings.groupTrashTitle',
+    descriptionKey: 'admin.settings.groupTrashDescription',
+    fields: [
+      {
+        key: 'trash.retention_days',
+        labelKey: 'admin.settings.fieldTrashRetentionDays',
+        kind: 'int',
+        min: 1,
+        max: 3650,
+        unitKey: 'admin.settings.unitDays',
+        hintKey: 'admin.settings.hintTrashRetentionDays',
+      },
+    ],
+  },
+  {
     id: 'feature',
     titleKey: 'admin.settings.groupFeatureTitle',
     descriptionKey: 'admin.settings.groupFeatureDescription',

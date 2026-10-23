@@ -518,6 +518,8 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 回收站列表，参数同 `GET /maps`。
 
+条目包含 `deletedAt` 和 `expiresAt`（UTC RFC3339，保留原时间精度）；`expiresAt` 按当前全局 `trash.retention_days` 从真实删除时间计算。恢复清除计时，再次删除重新计时。后台启动及每小时分批永久删除到期项，备份/恢复维护期间暂停；上传文件沿用手动删除语义，不在此自动移除共享资源。
+
 #### `POST /api/v1/trash/{uid}/restore`
 
 恢复导图。若同名冲突不处理（标题可重复）。

@@ -2071,6 +2071,8 @@ components:
         sizeBytes: { type: integer, format: int64 }
         version: { type: integer }
         deleted: { type: boolean }
+        deletedAt: { type: string, format: date-time, description: 'Present for trashed maps; preserves deletion timestamp precision.' }
+        expiresAt: { type: string, format: date-time, description: 'Trash list only; deletedAt plus the current global trash.retention_days policy.' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 

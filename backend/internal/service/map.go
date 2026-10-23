@@ -122,10 +122,15 @@ type MapLimits interface {
 	MapsPerUser() int
 }
 
+type TrashPolicy interface {
+	TrashRetentionDays() int
+}
+
 // MapServiceConfig 是 MapService 的依赖。
 type MapServiceConfig struct {
 	Maps             domain.MapRepo
 	Limits           MapLimits
+	TrashPolicy      TrashPolicy
 	Now              Clock
 	MaxDocumentBytes int64
 }
@@ -137,6 +142,7 @@ type MapServiceConfig struct {
 type MapService struct {
 	maps             domain.MapRepo
 	limits           MapLimits
+	trashPolicy      TrashPolicy
 	now              Clock
 	maxDocumentBytes int64
 }
@@ -153,7 +159,7 @@ func NewMapService(cfg MapServiceConfig) (*MapService, error) {
 		cfg.MaxDocumentBytes = DefaultMaxDocumentBytes
 	}
 	return &MapService{
-		maps: cfg.Maps, limits: cfg.Limits, now: cfg.Now,
+		maps: cfg.Maps, limits: cfg.Limits, trashPolicy: cfg.TrashPolicy, now: cfg.Now,
 		maxDocumentBytes: cfg.MaxDocumentBytes,
 	}, nil
 }
@@ -351,6 +357,16 @@ func (s *MapService) Duplicate(ctx context.Context, uid string, ownerID int64) (
 		Document: source.Document,
 		OwnerID:  ownerID,
 	})
+}
+
+// TrashRetentionDays reads the current global policy for existing trash too.
+func (s *MapService) TrashRetentionDays() int {
+	if s.trashPolicy != nil {
+		if days := s.trashPolicy.TrashRetentionDays(); days > 0 {
+			return days
+		}
+	}
+	return domain.DefaultTrashRetentionDays
 }
 
 // ListTrash 返回回收站列表。

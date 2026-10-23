@@ -65,7 +65,7 @@ export interface MapCardProps {
   actions: MapCardAction[];
   /** 任一操作进行中时禁用全部操作，避免并发点两下建出两张副本。 */
   busy?: boolean;
-  /** 覆盖默认的「更新于 …」，回收站用「删除于 …」。 */
+  /** 覆盖默认的「更新于 …」，回收站用剩余删除期限。 */
   meta?: ReactNode;
   /**
    * 点击卡片打开的地址。`null` 表示这张图现在打不开。

@@ -29,6 +29,7 @@ import (
 	"github.com/woliubang256/wmind/backend/internal/service"
 	"github.com/woliubang256/wmind/backend/internal/settings"
 	"github.com/woliubang256/wmind/backend/internal/storage"
+	"github.com/woliubang256/wmind/backend/internal/trash"
 )
 
 // shutdownTimeout is bounded by the container stop_grace_period with 5s spare.
@@ -88,6 +89,7 @@ func run() error {
 		settingsRepo         domain.SettingsRepo
 		auditRepo            domain.AuditRepo
 		mapRepo              domain.MapRepo
+		trashRepo            domain.TrashRepo
 		themeRepo            domain.ThemeRepo
 		templateRepo         domain.TemplateRepo
 		shareRepo            domain.ShareRepo
@@ -118,6 +120,7 @@ func run() error {
 		settingsRepo = sqliterepo.NewSettingsRepository(db)
 		auditRepo = sqliterepo.NewAuditRepository(db)
 		mapRepo = sqliterepo.NewMapRepository(db)
+		trashRepo = sqliterepo.NewTrashRepository(db)
 		themeRepo = sqliterepo.NewThemeRepository(db)
 		templateRepo = sqliterepo.NewTemplateRepository(db)
 		shareRepo = sqliterepo.NewShareRepository(db)
@@ -154,6 +157,7 @@ func run() error {
 		settingsRepo = postgresrepo.NewSettingsRepository(pool)
 		auditRepo = postgresrepo.NewAuditRepository(pool)
 		mapRepo = postgresrepo.NewMapRepository(pool)
+		trashRepo = postgresrepo.NewTrashRepository(pool)
 		themeRepo = postgresrepo.NewThemeRepository(pool)
 		templateRepo = postgresrepo.NewTemplateRepository(pool)
 		shareRepo = postgresrepo.NewShareRepository(pool)
@@ -234,7 +238,7 @@ func run() error {
 	}
 
 	mapSvc, err := service.NewMapService(service.MapServiceConfig{
-		Maps: mapRepo, Limits: settingsSvc,
+		Maps: mapRepo, Limits: settingsSvc, TrashPolicy: settingsSvc,
 	})
 	if err != nil {
 		return err
@@ -282,6 +286,16 @@ func run() error {
 	backupsDone := make(chan struct{})
 	defer func() { stopBackups(); <-backupsDone; backups.Wait() }()
 	go func() { defer close(backupsDone); backups.Run(backupsCtx) }()
+
+	trashCleaner, err := trash.New(trash.Config{
+		Repository: trashRepo, Policy: settingsSvc, Gate: backups.Gate(), Logger: log,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize trash cleaner: %w", err)
+	}
+	trashDone := make(chan struct{})
+	defer func() { stopBackups(); <-trashDone }()
+	go func() { defer close(trashDone); trashCleaner.Run(backupsCtx) }()
 
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(

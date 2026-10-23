@@ -691,7 +691,6 @@
     "count": "共 {{count}} 张",
     "empty.title": "回收站是空的",
     "empty.body": "在最近列表里删除的导图会先放到这里。",
-    "deletedAt": "删除于 {{time}}",
     "restore": "恢复",
     "purge": "彻底删除",
     "purge.title": "彻底删除这张导图？",
@@ -703,7 +702,10 @@
     "emptyConfirm.title": "清空回收站？",
     "emptyConfirm.body": "回收站里的 {{count}} 张导图将被永久删除，无法恢复。",
     "emptyConfirm.confirm": "清空",
-    "emptied": "回收站已清空"
+    "emptied": "回收站已清空",
+    "daysUntilDeletion": "{{count}} 天后删除",
+    "deletingSoon": "即将删除",
+    "expiryUnavailable": "删除时间暂不可用"
   },
   "share": {
     "action": "分享",
@@ -1090,7 +1092,11 @@
     "audit.deleteUser": "删除用户",
     "audit.changeRole": "调整角色",
     "audit.resetPassword": "重置密码",
-    "audit.updateSettings": "修改设置"
+    "audit.updateSettings": "修改设置",
+    "settings.groupTrashTitle": "回收站",
+    "settings.groupTrashDescription": "统一设置已删除导图的保留期限。",
+    "settings.fieldTrashRetentionDays": "回收站保留天数",
+    "settings.hintTrashRetentionDays": "从移入回收站时计时，全局生效（1–3650 天）。修改影响已有内容，缩短期限可能在下一次清理时永久删除过期导图；系统启动及每小时清理一次。"
   },
   "validate": {
     "usernameRequired": "请填写用户名",

@@ -8,7 +8,7 @@
  * 撤销路径，误触的代价是数据没了。
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -16,10 +16,11 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { EmptyState, PageHeader } from '@/components/ui/panel';
 import { mapApi, type MapSummary } from '@/lib/api/maps';
-import { formatNumber, formatRelative } from '@/lib/format';
+import { formatNumber } from '@/lib/format';
 import { mapKeys } from './queries';
 import { MapCard, MapCardSkeleton } from './map-card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { trashDaysRemaining } from './trash-retention';
 
 const PAGE_SIZE = 24;
 
@@ -28,11 +29,17 @@ export function TrashPage() {
   const queryClient = useQueryClient();
   const [purging, setPurging] = useState<MapSummary | null>(null);
   const [emptying, setEmptying] = useState(false);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const trash = useInfiniteQuery({
     queryKey: mapKeys.trash(),
     queryFn: ({ pageParam }) => mapApi.listTrash({ page: pageParam, pageSize: PAGE_SIZE }),
     initialPageParam: 1,
+    refetchInterval: 60_000,
     getNextPageParam: (lastPage) => {
       const { page, totalPages } = lastPage.pagination;
       return page < totalPages ? page + 1 : undefined;
@@ -111,7 +118,10 @@ export function TrashPage() {
                 key={map.uid}
                 map={map}
                 busy={busy}
-                meta={t('trash.deletedAt', { time: formatRelative(map.updatedAt) })}
+                meta={(() => {
+                  const days = trashDaysRemaining(map.expiresAt, now);
+                  return days === null ? t('trash.expiryUnavailable') : days === 0 ? t('trash.deletingSoon') : t('trash.daysUntilDeletion', { count: days });
+                })()}
                 // 已删除的图读不到，点进去只会是「导图不存在」。
                 href={null}
                 actions={[

@@ -22,6 +22,9 @@ export interface MapSummary {
   sizeBytes: number;
   version: number;
   deleted: boolean;
+  deletedAt?: string;
+  /** Calculated by the server using the current global retention policy. */
+  expiresAt?: string;
   createdAt: string;
   updatedAt: string;
 }

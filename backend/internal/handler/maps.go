@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -28,15 +29,17 @@ func NewMapHandler(maps *service.MapService) *MapHandler {
 // 不含 document：列表一页 20 张图、每张 1 MB 的话响应体就是 20 MB，
 // 而列表页只需要标题与缩略图（docs/04 §5.3）。
 type mapSummaryDTO struct {
-	UID          string `json:"uid"`
-	Title        string `json:"title"`
-	ThumbnailURL string `json:"thumbnailUrl"`
-	NodeCount    int    `json:"nodeCount"`
-	SizeBytes    int64  `json:"sizeBytes"`
-	Version      int    `json:"version"`
-	Deleted      bool   `json:"deleted"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
+	UID          string  `json:"uid"`
+	Title        string  `json:"title"`
+	ThumbnailURL string  `json:"thumbnailUrl"`
+	NodeCount    int     `json:"nodeCount"`
+	SizeBytes    int64   `json:"sizeBytes"`
+	Version      int     `json:"version"`
+	Deleted      bool    `json:"deleted"`
+	DeletedAt    *string `json:"deletedAt,omitempty"`
+	ExpiresAt    *string `json:"expiresAt,omitempty"`
+	CreatedAt    string  `json:"createdAt"`
+	UpdatedAt    string  `json:"updatedAt"`
 }
 
 // mapDetailDTO 是详情，比列表项多 document。
@@ -68,9 +71,19 @@ func toMapSummaryDTO(m *domain.Map) mapSummaryDTO {
 		SizeBytes:    m.SizeBytes,
 		Version:      m.Version,
 		Deleted:      m.IsTrashed(),
+		DeletedAt:    formatMapDeletionTime(m.DeletedAt),
 		CreatedAt:    formatTime(m.CreatedAt),
 		UpdatedAt:    formatTime(m.UpdatedAt),
 	}
+}
+
+// Preserve the repository timestamp precision at retention boundaries.
+func formatMapDeletionTime(at *time.Time) *string {
+	if at == nil {
+		return nil
+	}
+	value := at.UTC().Format(time.RFC3339Nano)
+	return &value
 }
 
 func toMapDetailDTO(m *domain.Map) mapDetailDTO {
@@ -281,8 +294,14 @@ func (h *MapHandler) ListTrash(c *gin.Context) {
 		return
 	}
 	items := make([]mapSummaryDTO, 0, len(maps))
+	retention := time.Duration(h.maps.TrashRetentionDays()) * 24 * time.Hour
 	for _, m := range maps {
-		items = append(items, toMapSummaryDTO(m))
+		item := toMapSummaryDTO(m)
+		if m.DeletedAt != nil {
+			expiresAt := m.DeletedAt.Add(retention)
+			item.ExpiresAt = formatMapDeletionTime(&expiresAt)
+		}
+		items = append(items, item)
 	}
 	response.List(c, items, response.NewPagination(page, pageSize, total))
 }

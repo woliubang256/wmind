@@ -99,6 +99,7 @@ base64，而缩略图最宽 640px、正文 4~8px 高，字体度量差 16% 在�
   推迟了。
 - 回收站里的卡片渲染成不可点容器（`href={null}`）：那些 uid 已经读不到，点进去
   只会得到「导图不存在」。
+- 回收站卡片使用服务端 expiresAt 展示「X 天后删除」或「即将删除」，不再用更新时间推断删除时间；全局设置及后台任务见[回收站保留期限](../../implemented/feature/2026-10-24-wmind-trash-retention.md)。
 
 ## Alternatives considered
 

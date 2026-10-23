@@ -264,6 +264,8 @@ func (s *Service) DefaultRole() string { return s.Snapshot().DefaultRole() }
 // 就该被拦住，而不是等重启。
 func (s *Service) MapsPerUser() int { return s.Snapshot().MapsPerUser() }
 
+func (s *Service) TrashRetentionDays() int { return s.Snapshot().TrashRetentionDays() }
+
 // 编译期确认 Service 满足认证流程需要的站点配置接口。
 //
 // 不 import service 包（会形成反向依赖），只在这里声明方法集——调用方

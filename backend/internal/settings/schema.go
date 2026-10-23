@@ -64,6 +64,7 @@ var specs = []Spec{
 
 	{Key: "limit.maps_per_user", Kind: KindInt, Default: `0`, Min: 0, Max: 1000000},
 	{Key: "limit.upload_max_mb", Kind: KindInt, Default: `10`, Min: 1, Max: 1024},
+	{Key: "trash.retention_days", Kind: KindInt, Default: `30`, Min: 1, Max: 3650},
 
 	{Key: "feature.import_enabled", Kind: KindBool, Default: `true`, Public: true},
 	{Key: "feature.export_enabled", Kind: KindBool, Default: `true`, Public: true},

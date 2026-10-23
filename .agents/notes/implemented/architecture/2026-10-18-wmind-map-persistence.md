@@ -67,6 +67,8 @@ if errors.Is(err, domain.ErrVersionConflict) {
 
 `DELETE /maps/:uid` 只写 `deleted_at`；`DELETE /trash/:uid` 与 `DELETE /trash` 才真删。所有读路径都带 `deleted_at IS NULL`，所以回收站里的图既不在列表里也读不到——想恢复必须走 `POST /trash/:uid/restore`。
 
+回收站还按全局保留天数自动到期，后台启动及每小时分批硬删除，详见[回收站保留期限](../../implemented/feature/2026-10-24-wmind-trash-retention.md)。面向用户的 MapRepo 仍强制 ownerID，全局清理使用独立 TrashRepo。
+
 ### 顺手对齐的两处
 
 - **`MapsPerUser()` 返回 0 表示不限**。写第一版时我按 100 兜底，查 `schema.go` 才发现 `limit.maps_per_user` 默认就是 0，而它的语义是「不限」而不是「一个都不许」。`Create` 里判 `limit > 0` 才算上限。

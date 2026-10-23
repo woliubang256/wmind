@@ -15,6 +15,7 @@ import { ApiError, fieldErrorsFrom } from '@/lib/api/errors';
 import { diffSettings, SETTING_GROUPS, type SettingField } from './settings-schema';
 import { adminKeys } from './queries';
 import { BackupPanel } from './backup-panel';
+import { mapKeys } from '@/features/maps/queries';
 
 export function AdminSettingsPage() {
   const { t } = useTranslation();
@@ -83,6 +84,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
       queryClient.setQueryData(adminKeys.settings, updated);
       // 站点名、注册开关等会出现在登录页与页头，必须让公开配置跟着刷新。
       void queryClient.invalidateQueries({ queryKey: siteKeys.config });
+      if ('trash.retention_days' in patch) void queryClient.invalidateQueries({ queryKey: mapKeys.trash() });
       setDraft(updated);
       setErrors({});
       toast.success(t('admin.settings.saved', { count: dirtyKeys.length }));

@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/woliubang256/wmind/backend/internal/domain"
 )
 
 // Snapshot 是一份不可变的全量设置快照。
@@ -79,6 +81,14 @@ func (s *Snapshot) UploadMaxMB() int {
 // 「一个都不许建」——把 0 当成上限会让新装的站点直接不能建导图。
 func (s *Snapshot) MapsPerUser() int {
 	return s.Int("limit.maps_per_user")
+}
+
+// TrashRetentionDays is the current global retention period, including existing trash.
+func (s *Snapshot) TrashRetentionDays() int {
+	if days := s.Int("trash.retention_days"); days > 0 {
+		return days
+	}
+	return domain.DefaultTrashRetentionDays
 }
 
 // DefaultRole 返回新用户默认角色。

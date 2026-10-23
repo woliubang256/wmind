@@ -121,7 +121,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	// 导图服务：Limits 传真实 settings，这样「导图数量上限」也是真的从
 	// 站点设置里读出来的（默认 0 = 不限），测试不会因为上限差异而漂移。
 	mapSvc, err := service.NewMapService(service.MapServiceConfig{
-		Maps: sqlite.NewMapRepository(db), Limits: settingsSvc,
+		Maps: sqlite.NewMapRepository(db), Limits: settingsSvc, TrashPolicy: settingsSvc,
 	})
 	if err != nil {
 		t.Fatalf("NewMapService: %v", err)
