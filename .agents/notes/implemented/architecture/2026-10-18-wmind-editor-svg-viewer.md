@@ -59,6 +59,12 @@ export const EDITOR_PLUGINS = [panZoomPlugin, collapsePlugin, selectionPlugin, e
 
 键盘契约：`Enter` 提交、`Shift+Enter` 换行、`Esc` 取消（恢复原标题）、失焦提交。
 
+### 底部快捷比例只修改视口
+
+底部缩放读数右侧使用向上箭头，复用共享 `Select` 向上展开 50%、75%、100%、125%、150%、200% 六档；读数仍显示滚轮或适配产生的任意比例，只有匹配预设时才勾选。选择后自动关闭，Esc 还焦点、外部点击关闭与键盘导航共用已有控件行为。
+
+预设与 Ctrl+0 都通过 `zoomedViewport` 以画布可见区域中心为锚点，不改文档、选区、撤销栈与保存状态。编辑和只读预览共享入口，大纲没有画布所以禁用。浏览器 `e2e/zoom-presets.mjs` 验证六档、中心锚点、任意比例、关闭和键盘路径。
+
 ### 分层 + memo，把重渲染边界切在「视口」和「文档」之间
 
 结构：`boundaries → edges → relationships → topics → overlay`。
@@ -92,6 +98,10 @@ export const EDITOR_PLUGINS = [panZoomPlugin, collapsePlugin, selectionPlugin, e
 - 已知限制：折叠徽标超过 99 显示 `99+`，因为再长会撑破节点宽度；`TopicShape` 的 10 种形状都是手写 path，M3 加新形状要同步改这里和 `docs/03` 的形状枚举。
 
 ## Alternatives considered
+
+**直接改 zoom 并保留 x/y**：实现更少，但切换大比例时画布中心会漂移；复用现有锚点换算保证缩放前后中心世界坐标相同。
+
+**新写快捷缩放弹层**：能单独定制外观，但会重复焦点、键盘与边界定位逻辑；共享 Select 的自定义触发器已经允许保留底部读数外观。
 
 **`<canvas>` 渲染**：2000 节点性能更好，且天然没有 DOM 数量问题。放弃原因是可访问性（canvas 里没有可聚焦元素，键盘导航、读屏全废）、导出（要自己实现 SVG 导出）、以及命中测试要手写空间索引。SVG 在 2000 节点这个量级够用。
 

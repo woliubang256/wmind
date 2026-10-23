@@ -552,21 +552,23 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     fitRef.current();
   }, [sheetId]);
 
-  const zoomAtCenter = (factor: number) => {    const element = canvasRef.current;
+  const zoomAtCenter = (factor: number) => {
+    const element = canvasRef.current;
     if (!element) return;
     const rect = element.getBoundingClientRect();
     setViewport((prev) => zoomedViewport(prev, factor, { x: rect.width / 2, y: rect.height / 2 }));
   };
 
-  /** Ctrl+0：回到 100%，以当前视口中心为锚点（和滚轮缩放的手感一致）。 */
-  const resetZoom = useCallback(() => {
+  /** 快捷比例与 Ctrl+0 共用画布中心锚点，不改变文档或撤销历史。 */
+  const setZoom = useCallback((zoom: number) => {
     const element = canvasRef.current;
     if (!element) return;
     const rect = element.getBoundingClientRect();
     setViewport((prev) =>
-      zoomedViewport(prev, 1 / prev.zoom, { x: rect.width / 2, y: rect.height / 2 }),
+      zoomedViewport(prev, zoom / prev.zoom, { x: rect.width / 2, y: rect.height / 2 }),
     );
   }, []);
+  const resetZoom = useCallback(() => setZoom(1), [setZoom]);
 
   /** Ctrl+S：跳过防抖，立刻落盘。 */
   const save = useCallback(() => {
@@ -1284,7 +1286,22 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
       {zen ? null : (
       <footer className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-1.5 text-xs text-muted-foreground">
         <span>{t('editor.nodeCount', { count: countSheetNodes(sheet) })}</span>
-        <span>{t('editor.zoomLevel', { percent: Math.round(viewport.zoom * 100) })}</span>
+        <Select
+          aria-label={t('editor.zoomPresets')}
+          size="sm"
+          menuMinWidth={112}
+          value={Number((viewport.zoom * 100).toFixed(6))}
+          options={[50, 75, 100, 125, 150, 200].map((percent) => ({ value: percent, label: `${percent}%` }))}
+          disabled={view !== 'canvas' || !fonts.ready}
+          onChange={(percent) => setZoom(percent / 100)}
+          renderTrigger={(props) => (
+            <button {...props} title={t('editor.zoomPresets')}
+              className="-my-0.5 inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60">
+              <span>{t('editor.zoomLevel', { percent: Math.round(viewport.zoom * 100) })}</span>
+              <Icon name="chevron-down" className="size-3 rotate-180" />
+            </button>
+          )}
+        />
         {enabled ? (
           <SaveIndicator
             save={saveState}

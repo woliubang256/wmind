@@ -25,6 +25,7 @@ const SUITE = [
   ['templates', '模板选择与管理'],
   ['palettes', '参考色板 / 分类切换 / 旧主题兼容'],
   ['editor-appearance', '控件字号 / 全画布形状 / 分支连线'],
+  ['zoom-presets', '底部快捷缩放 / 中心锚点 / 键盘'],
   ['canvas', '多画布 / 大纲 / ZEN'],
   ['a11y', '画布无障碍'],
   ['annotations', '概要 / 边界 / 联系'],

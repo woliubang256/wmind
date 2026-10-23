@@ -123,6 +123,7 @@
     "exportEntry": "导出",
     "nodeCount": "{{count}} 个节点",
     "zoomLevel": "缩放 {{percent}}%",
+    "zoomPresets": "快捷缩放",
     "unsaved": "未保存",
     "saved": "已保存",
     "emptySelection": "先选中一个主题",

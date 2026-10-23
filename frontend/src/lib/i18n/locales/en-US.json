@@ -123,6 +123,7 @@
     "exportEntry": "Export",
     "nodeCount": "{{count}} topics",
     "zoomLevel": "Zoom {{percent}}%",
+    "zoomPresets": "Zoom presets",
     "unsaved": "Unsaved",
     "saved": "Saved",
     "emptySelection": "Select a topic first",
