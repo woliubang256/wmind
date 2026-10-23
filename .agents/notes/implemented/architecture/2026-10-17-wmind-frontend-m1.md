@@ -32,7 +32,7 @@ M1-6 要把已经做完的后端接口接到界面上：登录/注册、个人�
 
 - `ThemePreference = 'light' | 'dark' | 'system'`，`resolveTheme(preference, systemPrefersDark)` 是纯函数，`systemPrefersDark` 由调用方注入——测试因此不需要 jsdom。
 - `index.html` 里一段内联脚本在 CSS 与 bundle 之前读 `localStorage` 并给 `<html>` 加 `dark`。键名与判定逻辑必须和 `app/theme.ts` 一致，否则会出现「刷新后闪一下再变回来」。
-- 状态放在 zustand 的 `useThemeStore`：顶栏按钮与「个人设置 → 外观」是两个入口，各自 `useState` 时会出现「在设置页切了，顶栏图标没动」。
+- 状态放在 zustand 的 `useThemeStore`，顶栏操作、系统监听与路由切换共享同一偏好。个人设置的重复入口由[设置精简](../simplification/2026-10-24-wmind-account-controls.md)移除，共享状态和持久化继续有效。
 - `system` 档订阅 `matchMedia('(prefers-color-scheme: dark)')` 的 `change`，订阅挂在 `Providers`（只装一次）。订阅放在 store 创建时会泄漏监听，HMR 下还会叠加。
 - 同时更新 `meta[name="theme-color"]`：深色页面配浅色地址栏很割裂。
 
