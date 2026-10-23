@@ -85,16 +85,35 @@ Vite 开发服务器把 `/api` 代理到 `http://127.0.0.1:8080`，浏览器里�
 ```bash
 cd deploy
 cp .env.example .env          # 填好 WMIND_JWT_SECRET
-docker compose up -d          # 默认 SQLite，两个容器
+docker compose pull           # 拉取发布镜像（私有包需先 docker login ghcr.io）
+docker compose up -d --no-build # 默认 SQLite，两个容器
 ```
 
 需要 PostgreSQL 时换一套编排：
 
 ```bash
-docker compose -f docker-compose.postgres.yml up -d
+docker compose -f docker-compose.postgres.yml pull
+docker compose -f docker-compose.postgres.yml up -d --no-build
 ```
 
 > 本项目 SQLite 形态为单 API 实例，数据库卷必须使用本地存储；PostgreSQL 形态可扩展 API 实例。切换数据库驱动不会迁移现有数据。
+
+### 版本与发布
+
+正式版本以根目录 [VERSION](./VERSION) 为准，个人设置入口右侧显示正在运行的后端版本；直接 `go run` 的开发服务显示 `dev`。部署时在 `deploy/.env` 设置 `WMIND_VERSION=v1.0.0` 可固定版本；留为 `latest` 则拉取最新正式镜像。源码本地构建使用 `docker compose up -d --build`。
+
+普通提交和 PR 不触发 CI，推送 `v*` 标签才执行完整校验、构建并发布 GitHub Release。发布页包含自动分类的更新日志、Linux amd64/arm64 部署压缩包、SHA256SUMS，以及对应的 GHCR API/Web 多架构镜像。压缩包只包含二进制、静态前端、示例配置与部署脚本，使用方式见包内 RELEASE.md；解压前可执行 `sha256sum -c SHA256SUMS` 校验。
+
+```bash
+npm run version:next          # 同步 VERSION 和两个 package.json，不自动提交或打标签
+npm run version:check -- v1.0.1
+npm run test:release
+# 提交本次版本变更并通过相关本地检查后：
+git tag -a v1.0.1 -m "wmind v1.0.1"
+git push origin main v1.0.1
+```
+
+版本按十进制进位：`1.0.8 → 1.0.9 → 1.1.0`，`1.9.9 → 2.0.0`。只有所有校验、压缩包和镜像都成功后才创建正式 Release；失败时修复问题并跟进流水线，不把仅创建标签当成已发布。
 
 ## 常用命令
 
