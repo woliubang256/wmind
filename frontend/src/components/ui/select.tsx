@@ -125,7 +125,7 @@ export interface MenuPlacement {
 /**
  * 弹层落点。
  *
- * 高度由调用方**估算**（选项数 × 行高 + 内边距）而不是量真实 DOM：量真实高度
+ * 高度由调用方**估算**（选项数 × 行高 + 内边距 + 边框）而不是量真实 DOM：量真实高度
  * 要「先渲染再测量再挪位置」，中间那一帧会闪一下。选项文字一律 `nowrap` +
  * `truncate`，所以估算与真实高度只差不到一个像素。
  */
@@ -161,6 +161,8 @@ export function placeMenu(
 // ------------------------------------------------------------------ 组件
 
 const ITEM_HEIGHT = { sm: 28, md: 34 } as const;
+// 弹层使用 border-box：p-1 的上下 8px 和 border 的上下 2px 都占外高。
+const MENU_VERTICAL_CHROME = 8 + 2;
 
 export interface SelectProps<T extends string | number = string> {
   value: T;
@@ -239,7 +241,7 @@ export function Select<T extends string | number = string>({
       setPlacement(
         placeMenu(
           rect,
-          options.length * ITEM_HEIGHT[size] + 8,
+          options.length * ITEM_HEIGHT[size] + MENU_VERTICAL_CHROME,
           { width: window.innerWidth, height: window.innerHeight },
           { minWidth: Math.max(menuMinWidth, rect.width), maxHeight: 320 },
         ),
@@ -263,8 +265,24 @@ export function Select<T extends string | number = string>({
   // 原地不动。回调 ref 只在节点真正挂载时调一次，正好是我们要的时机。
   const attachList = useCallback((node: HTMLDivElement | null) => {
     listRef.current = node;
-    if (node !== null) node.focus();
+    if (node !== null) node.focus({ preventScroll: true });
   }, []);
+
+  // aria-activedescendant 不会替我们滚动；只滚列表，避免 scrollIntoView 连带挪动页面。
+  const listVisible = open && placement !== null;
+  useEffect(() => {
+    const list = listRef.current;
+    if (!listVisible || list === null) return;
+    const item = list.children.item(active);
+    if (!(item instanceof HTMLElement)) return;
+    const box = list.getBoundingClientRect();
+    const optionBox = item.getBoundingClientRect();
+    const style = getComputedStyle(list);
+    const top = box.top + list.clientTop + parseFloat(style.paddingTop);
+    const bottom = box.top + list.clientTop + list.clientHeight - parseFloat(style.paddingBottom);
+    if (optionBox.top < top) list.scrollTop -= top - optionBox.top;
+    else if (optionBox.bottom > bottom) list.scrollTop += optionBox.bottom - bottom;
+  }, [active, listVisible]);
 
   // 点外面关闭。用 `pointerdown` 而不是 `click`：后者在 mousedown 之后才触发，
   // 中间的 focus 变化会先把弹层关掉一次。
