@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ── 第 1 级：版本序列 ────────────────────────────────────────────────────────
@@ -207,8 +210,54 @@ func TestCompareSchemasDetectsExtraTableOnSQLiteSide(t *testing.T) {
 
 // ── 真实迁移集的自检 ────────────────────────────────────────────────────────
 
+// Run in a subprocess: the regression held the only database connection until
+// introspectPostgres's two-minute deadline, so a goroutine timeout would leave
+// a blocked query alive in the test process. The child also tests a second run
+// where the migrations return ErrNoChange.
+func TestPostgresIntrospectionReleasesMigrationConnection(t *testing.T) {
+	if os.Getenv("WMIND_TEST_DATABASE_URL") == "" {
+		t.Skip("WMIND_TEST_DATABASE_URL not set")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestPostgresIntrospectionSubprocess$", "-test.v")
+	cmd.Env = append(os.Environ(), "WMIND_PARITY_INTROSPECTION_CHILD=1")
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("PostgreSQL introspection still waits for the migration connection: %v\n%s", ctx.Err(), output)
+	}
+	if err != nil {
+		t.Fatalf("PostgreSQL introspection child failed: %v\n%s", err, output)
+	}
+	t.Logf("%s", output)
+}
+
+func TestPostgresIntrospectionSubprocess(t *testing.T) {
+	if os.Getenv("WMIND_PARITY_INTROSPECTION_CHILD") != "1" {
+		t.Skip("only runs as the isolated introspection regression subprocess")
+	}
+	lite, err := introspectSQLite()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 1; attempt <= 2; attempt++ {
+		pg, err := introspectPostgres(os.Getenv("WMIND_TEST_DATABASE_URL"))
+		if err != nil {
+			t.Fatalf("introspection attempt %d: %v", attempt, err)
+		}
+		if problems := compareSchemas(pg, lite); len(problems) != 0 {
+			t.Fatalf("real migrated schemas differ: %v", problems)
+		}
+		for dialect, got := range map[string]*schema{"postgres": pg, "sqlite": lite} {
+			if _, ok := got.Indexes["idx_maps_trash_retention"]; !ok {
+				t.Fatalf("%s did not apply migration 0004's retention index", dialect)
+			}
+		}
+	}
+}
+
 // 直接对仓库里真正的 SQLite 迁移集跑一遍：既验证 DDL 可执行，
-// 也把「12 张表」这个事实钉住，防止后续误删表。
+// 也把完整业务表集合钉住，防止后续误删表。
 func TestRealSQLiteMigrationProducesExpectedTables(t *testing.T) {
 	got, err := introspectSQLite()
 	if err != nil {
@@ -218,7 +267,7 @@ func TestRealSQLiteMigrationProducesExpectedTables(t *testing.T) {
 	want := []string{
 		"audit_logs", "files", "map_revisions", "maps", "refresh_tokens",
 		"settings", "share_links", "templates", "themes", "user_devices",
-		"user_tokens", "users",
+		"user_tokens", "user_two_factor", "users",
 	}
 
 	if len(got.Columns) != len(want) {
@@ -242,6 +291,11 @@ func TestRealSQLiteMigrationProducesExpectedTables(t *testing.T) {
 	for _, name := range []string{"uid", "owner_id", "document", "version", "deleted_at"} {
 		if !contains(maps, name) {
 			t.Errorf("maps 表缺少列 %s（实际: %v）", name, maps)
+		}
+	}
+	for _, name := range []string{"user_id", "state", "revision"} {
+		if !contains(columnNames(got.Columns["user_two_factor"]), name) {
+			t.Errorf("user_two_factor 表缺少列 %s", name)
 		}
 	}
 

@@ -343,15 +343,19 @@ func introspectSQLite() (*schema, error) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := sqlite.Open(filepath.Join(dir, "parity.db"))
+	path := filepath.Join(dir, "parity.db")
+	migrationDB, err := sqlite.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := runMigrations(migrationDB, "sqlite"); err != nil {
+		return nil, err
+	}
+	db, err := sqlite.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
-
-	if err := runMigrations(db, "sqlite"); err != nil {
-		return nil, err
-	}
 
 	out := &schema{Columns: map[string][]column{}, Indexes: map[string]index{}}
 
@@ -430,16 +434,20 @@ func introspectPostgres(url string) (*schema, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
+	migrationDB, err := sql.Open("pgx", url)
+	if err != nil {
+		return nil, err
+	}
+	migrationDB.SetMaxOpenConns(1)
+	if err := runMigrations(migrationDB, "postgres"); err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("pgx", url)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
-
-	if err := runMigrations(db, "postgres"); err != nil {
-		return nil, err
-	}
 
 	out := &schema{Columns: map[string][]column{}, Indexes: map[string]index{}}
 
@@ -495,13 +503,28 @@ func introspectPostgres(url string) (*schema, error) {
 
 // ── 共用 ─────────────────────────────────────────────────────────────────────
 
-// runMigrations 在一个刚建好的空库上跑一遍迁移。
-func runMigrations(db *sql.DB, driver string) error {
+// runMigrations 拥有迁移专用 db，返回前关闭；内省必须另开连接。
+func runMigrations(db *sql.DB, driver string) (err error) {
 	var (
 		src      source.Driver
 		dbDriver database.Driver
-		err      error
+		m        *migrate.Migrate
 	)
+	defer func() { err = errors.Join(err, db.Close()) }()
+	defer func() {
+		if m != nil {
+			sourceErr, databaseErr := m.Close()
+			err = errors.Join(err, sourceErr, databaseErr)
+			return
+		}
+		// 初始化中途失败也释放已经成功创建的资源。
+		if dbDriver != nil {
+			err = errors.Join(err, dbDriver.Close())
+		}
+		if src != nil {
+			err = errors.Join(err, src.Close())
+		}
+	}()
 
 	switch driver {
 	case "sqlite":
@@ -522,14 +545,13 @@ func runMigrations(db *sql.DB, driver string) error {
 		return fmt.Errorf("未知驱动 %q", driver)
 	}
 
-	m, err := migrate.NewWithInstance("iofs", src, driver, dbDriver)
+	m, err = migrate.NewWithInstance("iofs", src, driver, dbDriver)
 	if err != nil {
 		return err
 	}
 
-	// 同 internal/migrate：不能调用 m.Close()。它会连带关闭传进来的 *sql.DB，
-	// 而本函数返回后还要用同一个连接做 introspect，届时会报
-	// "sql: database is closed"。iofs source 只持有内存中的 embed.FS。
+	// pgx 迁移驱动为会话锁固定持有 *sql.Conn，必须连同迁移器关闭，
+	// 不能留给内省复用单连接池，否则后续查询永远拿不到连接。
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return err
 	}
