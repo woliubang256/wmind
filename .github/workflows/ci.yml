@@ -153,7 +153,6 @@ jobs:
           build-args: VERSION=${{ github.ref_name }}
           tags: |
             ghcr.io/woliubang256/wmind-api:${{ github.ref_name }}
-            ghcr.io/woliubang256/wmind-api:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -170,13 +169,17 @@ jobs:
           push: true
           tags: |
             ghcr.io/woliubang256/wmind-web:${{ github.ref_name }}
-            ghcr.io/woliubang256/wmind-web:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
           cache-from: type=gha,scope=wmind-web
           cache-to: type=gha,mode=max,scope=wmind-web
+
+      - name: Promote both images to latest
+        run: |
+          docker buildx imagetools create --tag "ghcr.io/woliubang256/wmind-api:latest" "ghcr.io/woliubang256/wmind-api:$GITHUB_REF_NAME"
+          docker buildx imagetools create --tag "ghcr.io/woliubang256/wmind-web:latest" "ghcr.io/woliubang256/wmind-web:$GITHUB_REF_NAME"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
