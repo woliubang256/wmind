@@ -41,6 +41,8 @@ XMind 主题是一堆 SVG/CSS 属性分组，本项目使用校准过对比度�
 
 认领失败时回退到默认配色并记 `palette-fallback`——docs/06 §2.1.3 的原话。
 
+[分支与边框映射修复](../bug-fix/2026-10-24-wmind-xmind-connection-mapping.md)纠正旧属性表：主题边框读取 `border-line-*`，分支读取 `line-*` 与 `line-class`，联系和外框按自身线条语义处理。这里的 id、图片与配色认领策略继续保留。
+
 ### 字号 pt → px
 
 XMind 用 `pt`，本项目用 `px`。不换算的话 XMind 默认的 `24pt` 中心主题会变成 24px，比本项目默认的 30px 明显小一圈，「导入结果看起来不像原来那张图」。按 1pt = 4/3 px 换算，24pt → 32px。

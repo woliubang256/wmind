@@ -38,22 +38,31 @@ const TEXT_ALIGNS = ['left', 'center', 'right'] as const;
 const TEXT_DECORATIONS = ['none', 'underline', 'line-through'] as const;
 const FONT_STYLES = ['normal', 'italic'] as const;
 
-/**
- * `border-line-pattern` → `lineStyle`。
- *
- * docs/03 §5.3 给的规则是 `solid → straight`、`curve → curve`、
- * `dot`/`dash` → `elbow`。dot/dash 映射成 elbow 看着奇怪，但那是文档定的
- * 语义：本项目没有虚线分支线，取几何形状最接近的折线。
- */
-const LINE_STYLE_ALIASES: Record<string, LineStyle> = {
-  solid: 'straight',
+/** 线型与虚实是两个维度；几何只能从 line-class / relationshipShape 读取。 */
+const LINE_CLASSES: Record<string, LineStyle> = {
   curve: 'curve',
-  dot: 'elbow',
-  dash: 'elbow',
+  curved: 'curve',
   straight: 'straight',
   elbow: 'elbow',
+  roundedElbow: 'elbow',
+  bight: 'elbow',
+  fold: 'elbow',
   none: 'none',
 };
+
+export type XmindStyleKind = 'topic' | 'relationship' | 'boundary';
+
+function lineClass(value: string | undefined): LineStyle | undefined {
+  return value === undefined ? undefined : LINE_CLASSES[value.trim().split('.').pop() ?? ''];
+}
+
+function arrowClass(value: string | undefined): Style['lineEnd'] | undefined {
+  const name = value?.trim().split('.').pop();
+  if (name === 'none') return 'none';
+  if (name === 'triangle' || name === 'arrow') return 'arrow';
+  if (name === 'circle' || name === 'dot') return 'dot';
+  return undefined;
+}
 
 /**
  * 转换一组样式属性。
@@ -61,7 +70,7 @@ const LINE_STYLE_ALIASES: Record<string, LineStyle> = {
  * `ctx` 用来留痕：字体被归一、渐变被拍平都要让用户看见，否则「导入后字体
  * 变了」会被当成 bug 而不是降级。
  */
-export function toPartialStyle(input: unknown, ctx: ImportContext): Partial<Style> {
+export function toPartialStyle(input: unknown, ctx: ImportContext, kind: XmindStyleKind = 'topic'): Partial<Style> {
   if (!isRecord(input)) return {};
   const properties = input as Properties;
   const out: Partial<Style> = {};
@@ -83,13 +92,15 @@ export function toPartialStyle(input: unknown, ctx: ImportContext): Partial<Styl
     }
   }
 
-  const borderColor = readColor(properties, 'line-color');
+  // 主题边框用 border-line-*；外框自身的轮廓才使用 line-*。
+  const borderPrefix = kind === 'topic' ? 'border-line' : 'line';
+  const borderColor = readColor(properties, `${borderPrefix}-color`);
   if (borderColor !== undefined) out.borderColor = borderColor ?? '#000000';
 
-  const borderWidth = readNumber(properties, 'line-width');
+  const borderWidth = readNumber(properties, `${borderPrefix}-width`);
   if (borderWidth !== undefined) out.borderWidth = borderWidth;
 
-  const borderStyle = readEnum(properties, 'line-pattern', BORDER_STYLES);
+  const borderStyle = readEnum(properties, `${borderPrefix}-pattern`, BORDER_STYLES);
   if (borderStyle !== undefined) out.borderStyle = borderStyle as BorderStyle;
 
   const rawFamily = read(properties, 'fo:font-family');
@@ -128,21 +139,21 @@ export function toPartialStyle(input: unknown, ctx: ImportContext): Partial<Styl
   const align = readEnum(properties, 'fo:text-align', TEXT_ALIGNS);
   if (align !== undefined) out.textAlign = align as TextAlign;
 
-  const lineColor = readColor(properties, 'border-line-color');
+  const lineColor = readColor(properties, 'line-color');
   if (lineColor !== undefined) out.lineColor = lineColor ?? '#000000';
 
-  const lineWidth = readNumber(properties, 'border-line-width');
+  const lineWidth = readNumber(properties, 'line-width');
   if (lineWidth !== undefined) out.lineWidth = lineWidth;
 
-  const linePattern = read(properties, 'border-line-pattern');
-  if (linePattern !== undefined) {
-    const mapped = LINE_STYLE_ALIASES[linePattern.trim().toLowerCase()];
-    if (mapped !== undefined) out.lineStyle = mapped;
-  }
+  const geometry = lineClass(read(properties, kind === 'relationship' ? 'shape-class' : 'line-class'));
+  if (geometry !== undefined) out.lineStyle = geometry;
+  if (read(properties, 'line-pattern')?.trim() === 'none') out.lineStyle = 'none';
 
-  const starts = readEnum(properties, 'line-start-marker', ['none', 'arrow', 'dot'] as const);
+  const starts = arrowClass(read(properties, 'arrow-begin-class'))
+    ?? readEnum(properties, 'line-start-marker', ['none', 'arrow', 'dot'] as const);
   if (starts !== undefined) out.lineStart = starts;
-  const ends = readEnum(properties, 'line-end-marker', ['none', 'arrow', 'dot'] as const);
+  const ends = arrowClass(read(properties, 'arrow-end-class'))
+    ?? readEnum(properties, 'line-end-marker', ['none', 'arrow', 'dot'] as const);
   if (ends !== undefined) out.lineEnd = ends;
 
   return out;

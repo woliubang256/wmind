@@ -182,7 +182,7 @@ export function toTheme(raw: unknown, ctx: ImportContext): Theme | null {
     subTopic: overlay(base.subTopic, toPartialStyle(groups.subTopic, ctx)),
     floatingTopic: overlay(base.floatingTopic, toPartialStyle(groups.floatingTopic, ctx)),
     summaryTopic: overlay(base.summaryTopic, toPartialStyle(groups.summaryTopic, ctx)),
-    boundary: overlay(base.boundary, toPartialStyle(groups.boundary, ctx)),
-    relationship: overlay(base.relationship, toPartialStyle(groups.relationship, ctx)),
+    boundary: overlay(base.boundary, toPartialStyle(groups.boundary, ctx, 'boundary')),
+    relationship: overlay(base.relationship, toPartialStyle(groups.relationship, ctx, 'relationship')),
   };
 }

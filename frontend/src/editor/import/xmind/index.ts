@@ -21,6 +21,7 @@ import type { ImportAdapter, ImportContext, ImportInput } from '../types';
 import { looksLikeZip } from '../zip';
 import { parseContentXml, parseLegacyStyles } from './legacy';
 import { parseContentJson } from './modern';
+import { isLegacyWmindMetadata, restoreLegacyWmindStyles } from './wmind-compat';
 
 export const xmindAdapter: ImportAdapter = {
   id: 'xmind',
@@ -81,5 +82,6 @@ function parseModern(input: ImportInput, ctx: ImportContext) {
     throw new ImportError('PARSE_FAILED', { fileName: input.fileName }, error);
   }
 
+  if (isLegacyWmindMetadata(zip.text('metadata.json'))) restoreLegacyWmindStyles(parsed);
   return parseContentJson(parsed, input.fileName, ctx, zip.resources());
 }

@@ -5,8 +5,7 @@
  * `content.json`」证明不了任何事——字段名写错、range 少一个括号、字号写成 px，
  * 文件在 XMind 里可能打开、也可能悄悄丢内容，而这些都只有读回来才看得见。
  *
- * 导入侧是现成的（`import/xmind/`），拿它当规格说明书比自己再写一份断言可靠：
- * 两边不同步时，往返测试立刻红。
+ * 往返之外直接断言 ZIP 原始属性：读写两端可能同时写反，不能互相充当唯一规格。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -51,6 +50,20 @@ function entry(bytes: Uint8Array, name: string): unknown {
 }
 
 describe('XMind 包结构', () => {
+  it('使用 XMind 标准字段区分边框与分支连线，不能只验证自家往返', () => {
+    const doc = fixture();
+    doc.sheets[0]!.rootTopic.children.attached[0]!.style = {
+      borderColor: '#111111', borderWidth: 0, borderStyle: 'none',
+      lineColor: '#123456', lineWidth: 4, lineStyle: 'elbow',
+    };
+    const { result } = exportThenImport(doc);
+    const content = entry(result.bytes, 'content.json') as { rootTopic: { children: { attached: { style: { properties: Record<string, string> } }[] } } }[];
+    expect(content[0]!.rootTopic.children.attached[0]!.style.properties).toMatchObject({
+      'border-line-color': '#111111', 'border-line-width': '0', 'border-line-pattern': 'none',
+      'line-color': '#123456', 'line-width': '4', 'line-class': 'org.xmind.branchConnection.elbow',
+    });
+    expect(entry(result.bytes, 'metadata.json')).toMatchObject({ wmindStyleVersion: 2 });
+  });
   it('三个结构文件齐全，content.json 是画布数组', () => {
     const { result } = exportThenImport(fixture());
     const files = unzipSync(result.bytes);

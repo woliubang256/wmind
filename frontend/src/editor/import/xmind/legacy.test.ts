@@ -186,8 +186,8 @@ describe('样式', () => {
     const topic = branch(parse().document, 0);
     expect(topic?.style?.shape).toBe('rounded-rect');
     expect(topic?.style?.fill).toBe('#FFEECC');
-    expect(topic?.style?.borderColor).toBe('#336699');
-    expect(topic?.style?.borderWidth).toBe(2);
+    expect(topic?.style?.lineColor).toBe('#336699');
+    expect(topic?.style?.lineWidth).toBe(2);
     expect(topic?.style?.fontFamily).toBe('sans');
     // 14pt → 19px（1pt = 4/3 px，四舍五入）
     expect(topic?.style?.fontSize).toBe(19);

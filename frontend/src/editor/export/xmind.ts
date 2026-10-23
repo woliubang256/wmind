@@ -73,16 +73,11 @@ const SHAPE_CLASS: Record<ShapeClass, string> = {
   none: 'org.xmind.ui.none',
 };
 
-/**
- * 本项目连线样式 → XMind `border-line-pattern`。
- *
- * `elbow` 写 `dash`：导入侧把 `dash` / `dot` 都读成 `elbow`（本项目没有虚线分支线，
- * 取几何形状最接近的那个）。反过来写 `dash` 至少能让「不是直线」这件事表达出来。
- */
-const LINE_PATTERN: Record<LineStyle, string> = {
-  straight: 'solid',
+/** XMind 使用 class 表示几何，pattern 只表示线条虚实。 */
+const LINE_GEOMETRY: Record<LineStyle, string> = {
+  straight: 'straight',
   curve: 'curve',
-  elbow: 'dash',
+  elbow: 'elbow',
   none: 'none',
 };
 
@@ -109,18 +104,19 @@ function styleProperties(style: ComputedStyle): Record<string, string> {
     'shape-class': SHAPE_CLASS[style.shape],
     'svg:fill': style.fill ?? 'none',
     'svg:fill-pattern': style.fillPattern,
-    'line-color': style.borderColor,
-    'line-width': String(style.borderWidth),
-    'line-pattern': style.borderStyle,
+    'border-line-color': style.borderColor,
+    'border-line-width': String(style.borderWidth),
+    'border-line-pattern': style.borderStyle,
     'fo:font-size': `${round2(style.fontSize * 0.75)}pt`,
     'fo:font-weight': String(style.fontWeight),
     'fo:font-style': style.fontStyle,
     'fo:color': style.textColor,
     'fo:text-decoration': style.textDecoration,
     'fo:text-align': style.textAlign,
-    'border-line-color': style.lineColor,
-    'border-line-width': String(style.lineWidth),
-    'border-line-pattern': LINE_PATTERN[style.lineStyle],
+    'line-color': style.lineColor,
+    'line-width': String(style.lineWidth),
+    'line-pattern': style.lineStyle === 'none' ? 'none' : 'solid',
+    'line-class': `org.xmind.branchConnection.${LINE_GEOMETRY[style.lineStyle]}`,
   };
 }
 
@@ -390,10 +386,12 @@ function sheetToXmind(
         end2Id: relationship.end2Id,
         ...(relationship.title === '' ? {} : { title: relationship.title }),
         style: { properties: {
-          'border-line-color': style.lineColor,
-          'border-line-width': String(style.lineWidth),
-          'border-line-pattern': LINE_PATTERN[style.lineStyle],
+          'line-color': style.lineColor,
+          'line-width': String(style.lineWidth),
+          'shape-class': `org.xmind.relationshipShape.${style.lineStyle === 'curve' ? 'curved' : LINE_GEOMETRY[style.lineStyle]}`,
           'line-pattern': style.borderStyle,
+          'arrow-begin-class': `org.xmind.arrowShape.${style.lineStart === 'arrow' ? 'triangle' : style.lineStart === 'dot' ? 'circle' : 'none'}`,
+          'arrow-end-class': `org.xmind.arrowShape.${style.lineEnd === 'arrow' ? 'triangle' : style.lineEnd === 'dot' ? 'circle' : 'none'}`,
           'line-start-marker': style.lineStart,
           'line-end-marker': style.lineEnd,
         } },
@@ -470,6 +468,7 @@ export function buildXmind(
   const metadata = {
     // XMind 靠 `creator` 判断是不是自己写的；写 wmind 既诚实又不影响打开。
     creator: { name: 'wmind', version: document.formatVersion },
+    wmindStyleVersion: 2,
     activeSheetId: ctx.sheets[0]?.id ?? '',
     // 这两项声明「按新版数据结构与布局引擎写」，缺了 XMind 会走兼容路径。
     dataStructureVersion: '2',

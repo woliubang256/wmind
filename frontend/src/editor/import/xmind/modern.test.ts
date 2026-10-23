@@ -51,7 +51,7 @@ function fixture(): unknown {
                   'fo:font-size': '12pt',
                   'fo:font-weight': 'bold',
                   'fo:color': '#333333',
-                  'line-pattern': 'dash',
+                  'border-line-pattern': 'dash',
                 },
               },
               children: { attached: [{ id: 'a1', title: '子 A1' }] },

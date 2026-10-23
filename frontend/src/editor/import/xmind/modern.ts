@@ -250,7 +250,7 @@ function convertRelationship(raw: unknown, state: SheetState, ctx: ImportContext
     end1Id: end1,
     end2Id: end2,
     title: ctx.title(textOf(node.title)),
-    style: isRecord(node.style) ? toPartialStyle(node.style.properties, ctx) : null,
+    style: isRecord(node.style) ? toPartialStyle(node.style.properties, ctx, 'relationship') : null,
     ...(parseRelationshipRouting(node.wmindRouting) ? { routing: parseRelationshipRouting(node.wmindRouting) } : {}),
   };
 }
