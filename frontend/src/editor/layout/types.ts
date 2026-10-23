@@ -7,7 +7,7 @@
  * 和将来的服务端渲染。
  */
 
-import type { ComputedStyle, LineEnd, LineStyle } from '../model/types';
+import type { ComputedStyle, LineEnd, LineStyle, Marker } from '../model/types';
 
 export interface Rect {
   x: number;
@@ -116,6 +116,17 @@ export interface ImageSize {
   height: number;
 }
 
+export interface MarkerLayout {
+  items: readonly Marker[];
+  size: number;
+  gap: number;
+  columns: number;
+  width: number;
+  height: number;
+  inline: boolean;
+  rowWidth: number;
+}
+
 export interface TopicSize {
   width: number;
   height: number;
@@ -123,4 +134,5 @@ export interface TopicSize {
   lines: string[];
   /** 节点内的图片；没有图片为 null。 */
   image: ImageSize | null;
+  markers?: MarkerLayout;
 }

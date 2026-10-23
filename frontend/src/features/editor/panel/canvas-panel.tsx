@@ -12,11 +12,12 @@ import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { Icon } from '@/components/ui/icon';
 import { cn } from '@/lib/utils';
 
-export type PanelTab = 'style' | 'palette' | 'speaker' | 'structure';
+export type PanelTab = 'style' | 'palette' | 'speaker' | 'structure' | 'markers';
 
 const TABS: { id: PanelTab; labelKey: string }[] = [
   { id: 'style', labelKey: 'editor.panel.tabs.style' },
   { id: 'palette', labelKey: 'editor.panel.tabs.palette' },
+  { id: 'markers', labelKey: 'editor.panel.tabs.markers' },
   { id: 'structure', labelKey: 'editor.panel.tabs.structure' },
   { id: 'speaker', labelKey: 'editor.panel.tabs.speaker' },
 ];
@@ -57,7 +58,7 @@ export function CanvasPanel({
       className="flex w-72 shrink-0 flex-col border-l border-border/70 bg-card"
     >
       <div className="flex items-center gap-1 border-b border-border/70 px-1.5 py-1">
-        <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex flex-1 gap-0.5">
+        <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
           {TABS.map((item, index) => {
             const active = item.id === tab;
             return (
@@ -72,7 +73,7 @@ export function CanvasPanel({
                 tabIndex={active ? 0 : -1}
                 onClick={() => onTab(item.id)}
                 className={cn(
-                  'flex-1 rounded-md px-2 py-1 text-xs transition-colors',
+                  'flex-1 rounded-md px-1.5 py-1 text-xs transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   active
                     ? 'bg-primary/10 font-semibold text-foreground'

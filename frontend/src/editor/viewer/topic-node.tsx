@@ -9,11 +9,13 @@
 
 import { memo } from 'react';
 import type { ComputedStyle } from '../model/types';
-import type { ImageSize, NodeBox } from '../layout/types';
+import type { ImageSize, MarkerLayout, NodeBox } from '../layout/types';
 import { NODE_METRICS } from '../layout/constants';
 import { fontStack } from '../theme/fonts';
 import { topicElementId } from './a11y-ids';
 import { TopicShape } from './shapes';
+import { MarkerIcon } from './marker-icon';
+import { topicContentGeometry } from '../layout/topic-content';
 
 export interface TopicNodeProps {
   box: NodeBox;
@@ -28,6 +30,7 @@ export interface TopicNodeProps {
   title: string;
   /** 节点内的图片（含地址与显示尺寸）；没有图片为 null。 */
   image?: ImageSize | null;
+  markers?: MarkerLayout;
   selected: boolean;
   editing: boolean;
   /**
@@ -55,29 +58,15 @@ export const TopicNode = memo(function TopicNode({
   lines,
   title,
   image = null,
+  markers,
   selected,
   editing,
   showBadges = true,
   treeItem = false,
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
-  const textHeight = lines.length * lineHeight;
   const showImage = image !== null && image.src !== '';
-
-  // 内容块（文本 + 可选图片）整体在盒子里竖直居中。不能像没有图片时那样
-  // 直接把「文本中心」对齐盒子中心——那会把文字压到图片上。
-  const contentHeight = showImage ? textHeight + NODE_METRICS.imageGap + image.height : textHeight;
-  const contentTop = box.y + (box.height - contentHeight) / 2;
-  const firstY = contentTop + lineHeight / 2;
-  const imageY = contentTop + textHeight + NODE_METRICS.imageGap;
-  const imageX = box.x + (box.width - (showImage ? image.width : 0)) / 2;
-
-  const anchor = style.textAlign === 'left' ? 'start' : style.textAlign === 'right' ? 'end' : 'middle';
-  const textX = style.textAlign === 'left'
-    ? box.x + NODE_METRICS.paddingX
-    : style.textAlign === 'right'
-      ? box.x + box.width - NODE_METRICS.paddingX
-      : box.x + box.width / 2;
+  const { textX, textAnchor: anchor, firstY, imageX, imageY, markerRects } = topicContentGeometry(box, style, lines, image, markers);
 
   // 折叠徽标放在「远离根」的一侧：左侧分支在左边缘，右侧在右边缘，
   // 自上而下的结构（org-chart）在下沿。
@@ -128,6 +117,9 @@ export const TopicNode = memo(function TopicNode({
           aria-hidden="true"
         />
       ) : null}
+
+      {markerRects.map(({ marker, x, y, size }, index) => <MarkerIcon key={`${marker.markerId}-${index}`} markerId={marker.markerId} backdrop
+        x={x} y={y} width={size} height={size} pointerEvents="none" />)}
 
       <text
         x={textX}
@@ -223,6 +215,7 @@ function areEqual(prev: TopicNodeProps, next: TopicNodeProps): boolean {
     prev.lines === next.lines &&
     prev.title === next.title &&
     prev.image === next.image &&
+    prev.markers === next.markers &&
     prev.showBadges === next.showBadges &&
     prev.selected === next.selected &&
     prev.editing === next.editing &&

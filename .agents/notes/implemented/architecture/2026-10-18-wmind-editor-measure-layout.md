@@ -71,7 +71,7 @@ Map 的插入顺序天然是 LRU 顺序：命中后 `delete` 再 `set` 挪到队
 - 布局结果完全可预测：同一份文档 + 同一套常量 = 同一份坐标，方便截图对比与回归。
 - 比 d3 的轮廓合并松 10%~20%，长分支多时右侧会偏长。等 M3 有真实导图对比再评估是否值得换。
 - 测量缓存与样式缓存（`resolveStyle`）都是模块级、有上限的；长时间编辑不会无限增长。
-- 已知限制：`subtreeHeight` 按「节点高度」累加，没有考虑节点下方的标记/备注图标——M3 引入图标后高度要重新计算，`measureTopic` 是唯一的改动点。
+- 标记在 `measureTopic` 参与内容宽高测量，固定窄宽时换行，所有结构沿用新的主题尺寸；具体内容定位契约见[主题 Marker](../../implemented/feature/2026-10-23-wmind-topic-markers.md)。备注图标尚未引入。
 
 ## Alternatives considered
 

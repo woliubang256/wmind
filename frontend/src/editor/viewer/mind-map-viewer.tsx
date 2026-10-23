@@ -30,6 +30,7 @@ import { EdgesLayer, TopicsLayer } from './layers';
 import { BoundariesLayer, RelationshipsLayer, SummariesLayer } from './decorations';
 import { CULL_THRESHOLD } from './cull';
 import { RelationshipEditor } from './relationship-editor';
+import { topicContentGeometry } from '../layout/topic-content';
 
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
 
@@ -410,6 +411,7 @@ export function MindMapViewer({
             key={editingBox.id}
             box={editingBox}
             style={editingStyle}
+            contentRect={editingSize?.markers ? topicContentGeometry(editingBox, editingStyle, editingSize.lines, editingSize.image, editingSize.markers).textRect : undefined}
             textHeight={editingSize ? editingSize.lines.length * Math.round(editingStyle.fontSize * 1.4) : editingBox.height}
             viewport={viewport}
             initialValue={findTitle(sheet, editingBox.id)}
@@ -443,6 +445,7 @@ interface EditingOverlayProps {
    * 带大图的节点就会弹出一块把图整个盖住的白框。只覆盖文本那一段更符合直觉。
    */
   textHeight: number;
+  contentRect?: Rect;
   viewport: Viewport;
   initialValue: string;
   onCommit(value: string, options?: CommitTitleOptions): void;
@@ -458,7 +461,7 @@ interface EditingOverlayProps {
  *
  * 位置按当前 viewport 换算成屏幕坐标——所以缩放、平移时输入框会跟着走。
  */
-function EditingOverlay({ box, style, textHeight, viewport, initialValue, onCommit, onCancel }: EditingOverlayProps) {
+function EditingOverlay({ box, style, textHeight, contentRect, viewport, initialValue, onCommit, onCancel }: EditingOverlayProps) {
   const [value, setValue] = useState(initialValue);
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const settled = useRef(false);
@@ -512,11 +515,11 @@ function EditingOverlay({ box, style, textHeight, viewport, initialValue, onComm
       spellCheck={false}
       className="absolute m-0 resize-none overflow-hidden rounded-md border-2 bg-white p-0 outline-none"
       style={{
-        left: viewport.x + box.x * zoom,
-        top: viewport.y + box.y * zoom,
-        width: box.width * zoom,
-        height: Math.max(textHeight * zoom + 16, lineHeight * zoom + 16),
-        padding: `${8 * zoom}px ${12 * zoom}px`,
+        left: viewport.x + (contentRect ? contentRect.x - 2 : box.x) * zoom,
+        top: viewport.y + (contentRect ? contentRect.y - 2 : box.y) * zoom,
+        width: (contentRect ? contentRect.width + 4 : box.width) * zoom,
+        height: contentRect ? (contentRect.height + 4) * zoom : Math.max(textHeight * zoom + 16, lineHeight * zoom + 16),
+        padding: contentRect ? 0 : `${8 * zoom}px ${12 * zoom}px`,
         fontFamily: fontStack(style.fontFamily),
         fontSize: style.fontSize * zoom,
         fontWeight: style.fontWeight,

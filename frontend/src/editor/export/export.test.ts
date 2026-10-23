@@ -64,6 +64,18 @@ describe('内容包围盒', () => {
 });
 
 describe('导出上下文', () => {
+  it('主题标记和手动联系走向出现在 SVG，交互控制柄不导出', () => {
+    const doc = docWith(); const sheet = doc.sheets[0]!;
+    sheet.rootTopic.markers = [{ groupId: 'flag', markerId: 'flag-red' }];
+    sheet.relationships = [{ id: 'r', end1Id: 'c-0-0', end2Id: 'c-0-1', title: '', style: { lineStyle: 'curve' },
+      routing: { start: { x: 100, y: -100 }, end: { x: -100, y: 100 } } }];
+    const svg = buildExportSvg(buildExportContext(doc, 'sheet-0', opts()));
+    expect(svg).toContain('data-marker-id="flag-red"');
+    expect(svg).toContain('data-marker-background=""');
+    expect(svg).toMatch(/ C [\d. -]+/);
+    expect(svg).not.toContain('data-relationship-control');
+    expect(svg).not.toContain('data-relationship-hit');
+  });
   it('只导当前画布', () => {
     const doc = docWith({ sheets: 3 });
     const ctx = buildExportContext(doc, 'sheet-1', opts({ scope: 'current' }));

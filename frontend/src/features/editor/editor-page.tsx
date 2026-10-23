@@ -52,6 +52,8 @@ import {
 import { CanvasPanel, type PanelTab } from './panel/canvas-panel';
 import { StyleTab } from './panel/style-tab';
 import { PaletteTab } from './panel/palette-tab';
+import { MarkerTab } from './panel/marker-tab';
+import { toggleMarkerCommand, clearMarkersCommand } from '@/editor/commands/marker';
 import { useHotkeys } from '@/editor/interaction/hotkeys';
 import { isTextEntryTarget } from '@/editor/interaction/keymap';
 import { useEditorActions } from '@/editor/interaction/use-editor-actions';
@@ -865,6 +867,12 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </div>
         ) : null}
 
+        {!preview ? <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.marker.title')}
+          hint={t('editor.marker.hint')} aria-pressed={panelOpen && panelTab === 'markers'}
+          onClick={() => { setPanelTab('markers'); setPanelOpen(true); }}>
+          <Icon name="flag" className="size-4" />
+        </ToolbarButton> : null}
+
         <div className="flex items-center gap-0.5">
           <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomOut')} onClick={() => zoomAtCenter(1 / 1.2)}>
             <Icon name="zoom-out" className="size-4" />
@@ -1113,6 +1121,11 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                     onStructure={(next) => store.getState().dispatch(changeStructureCommand(next))}
                     onReset={() => store.getState().dispatch(resetStyleCommand(panelTargets))}
                   />
+                ) : null}
+                {panelTab === 'markers' ? (
+                  <MarkerTab topics={selection.flatMap((id) => { const found = findTopicInSheet(sheet, id); return found ? [found.topic] : []; })}
+                    onToggle={(markerId) => store.getState().dispatch(toggleMarkerCommand(selection, markerId))}
+                    onClear={() => store.getState().dispatch(clearMarkersCommand(selection))} />
                 ) : null}
                 {panelTab === 'palette' ? (
                   <PaletteTab theme={doc.theme} onChange={applyTheme} canPersist={enabled} />

@@ -46,9 +46,11 @@ export type IconName =
   | 'menu'
   | 'summary'
   | 'boundary'
-  | 'relationship';
+  | 'relationship'
+  | 'flag';
 
 const paths: Record<IconName, ReactNode> = {
+  flag: <><path d="M5 21V3"/><path d="M5 3h14l-3 5 3 5H5"/></>,
   'arrow-right': <><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>,
   clock: <><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>,
   'file-plus': <><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></>,

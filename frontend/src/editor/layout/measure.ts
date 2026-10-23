@@ -19,7 +19,7 @@
 import type { ComputedStyle, FontFamily, Topic, TopicImage } from '../model/types';
 import { canvasFont } from '../theme/fonts';
 import { IMAGE_METRICS, NODE_METRICS } from './constants';
-import type { ImageSize, TopicSize } from './types';
+import type { ImageSize, MarkerLayout, TopicSize } from './types';
 
 export interface FontSpec {
   family: FontFamily;
@@ -346,25 +346,40 @@ export function measureTopic(
   const font = fontOf(style);
   const available = style.autoWidth
     ? maxContentWidth
-    : Math.max(minContentWidth, style.width - paddingX * 2);
+    : Math.max(1, style.width - paddingX * 2);
 
-  const measured = measureText(topic.title, font, available, impl);
+  const count = topic.markers.length;
+  const markerSize = Math.max(16, Math.min(24, style.fontSize));
+  const gap = 6;
+  const fullMarkerWidth = count * markerSize + Math.max(0, count - 1) * gap;
+  const inline = fullMarkerWidth + gap + minContentWidth <= available;
+  const columns = Math.max(1, Math.min(count, Math.floor((available + gap) / (markerSize + gap))));
+  const markerWidth = columns * markerSize + Math.max(0, columns - 1) * gap;
+  const markerHeight = Math.ceil(count / columns) * (markerSize + gap) - gap;
+  const prefix = count && inline ? fullMarkerWidth + gap : 0;
+  const measured = measureText(topic.title, font, available - prefix, impl);
+  const contentWidth = count ? inline ? measured.width + prefix : Math.max(measured.width, markerWidth) : measured.width;
+  const rowWidth = style.autoWidth ? Math.min(maxContentWidth, Math.max(minContentWidth, contentWidth)) : available;
+  const markers: MarkerLayout | undefined = count ? { items: topic.markers, size: markerSize, gap, columns: inline ? count : columns,
+    width: inline ? fullMarkerWidth : markerWidth, height: inline ? markerSize : markerHeight, inline, rowWidth } : undefined;
+  const headerHeight = markers ? inline ? Math.max(measured.height, markerSize) : markerHeight + gap + measured.height : measured.height;
 
   const image = topic.image === null ? null : imageDisplaySize(topic.image);
 
   let width = style.autoWidth
-    ? Math.min(maxContentWidth, Math.max(minContentWidth, measured.width)) + paddingX * 2
+    ? rowWidth + paddingX * 2
     : style.width;
   if (image !== null) width = Math.max(width, image.width + paddingX * 2);
 
   const height = image === null
-    ? measured.height + paddingY * 2
-    : measured.height + imageGap + image.height + paddingY * 2;
+    ? headerHeight + paddingY * 2
+    : headerHeight + imageGap + image.height + paddingY * 2;
 
   return {
     width: roundHalf(width),
     height: roundHalf(height),
     lines: measured.lines,
     image,
+    ...(markers ? { markers } : {}),
   };
 }
