@@ -104,6 +104,9 @@
     "languageHint": "只影响这台设备上的界面文字，不会改变导图内容。"
   },
   "editor": {
+    "toolbar.edit": "编辑",
+    "toolbar.view": "界面",
+    "toolbar.actions": "操作",
     "back": "返回",
     "titlePlaceholder": "未命名导图",
     "undo": "撤销",

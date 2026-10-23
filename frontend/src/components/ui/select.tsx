@@ -34,7 +34,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentPropsWithRef,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
@@ -176,6 +178,8 @@ export interface SelectProps<T extends string | number = string> {
   menuMinWidth?: number;
   invalid?: boolean;
   placeholder?: string;
+  /** 自定义入口须转发 ref、ARIA 与事件；选项、键盘和焦点仍由 Select 管理。 */
+  renderTrigger?: (props: ComponentPropsWithRef<'button'>) => ReactNode;
 }
 
 export function Select<T extends string | number = string>({
@@ -189,6 +193,7 @@ export function Select<T extends string | number = string>({
   menuMinWidth = 0,
   invalid = false,
   placeholder = '',
+  renderTrigger,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
 }: SelectProps<T>) {
@@ -373,36 +378,33 @@ export function Select<T extends string | number = string>({
 
   const compact = size === 'sm';
 
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        id={id}
-        type="button"
-        role="combobox"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        aria-label={ariaLabel}
-        aria-labelledby={ariaLabelledBy}
-        aria-invalid={invalid || undefined}
-        disabled={disabled}
-        // 值挂一份到 DOM 上：自绘下拉没有 `inputValue()`，界面验收要断言
-        // 「现在选的是哪个」只能读属性。读可见文字不行——文字是给人看的，
-        // 会被翻译、会被截断。
-        data-value={String(value)}
-        onClick={() => (open ? close() : openMenu(selectedIndex))}
-        onKeyDown={onTriggerKeyDown}
-        className={cn(
-          'flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background font-normal outline-none transition',
-          'hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring',
-          'aria-[invalid=true]:border-destructive aria-[invalid=true]:ring-destructive/30',
-          'disabled:cursor-not-allowed disabled:opacity-60',
-          compact ? 'h-8 px-2 text-xs' : 'h-11 rounded-xl px-3 text-sm',
-          open && 'ring-2 ring-ring',
-          className,
-        )}
-      >
+  const triggerProps: ComponentPropsWithRef<'button'> & { 'data-value': string } = {
+    ref: triggerRef,
+    id,
+    type: 'button',
+    role: 'combobox',
+    'aria-haspopup': 'listbox',
+    'aria-expanded': open,
+    'aria-controls': open ? listId : undefined,
+    'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledBy,
+    'aria-invalid': invalid || undefined,
+    disabled,
+    // 自绘下拉没有 inputValue()，保留原值供界面验收读取。
+    'data-value': String(value),
+    onClick: () => (open ? close() : openMenu(selectedIndex)),
+    onKeyDown: onTriggerKeyDown,
+    className: cn(
+      'flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background font-normal outline-none transition',
+      'hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring',
+      'aria-[invalid=true]:border-destructive aria-[invalid=true]:ring-destructive/30',
+      'disabled:cursor-not-allowed disabled:opacity-60',
+      compact ? 'h-8 px-2 text-xs' : 'h-11 rounded-xl px-3 text-sm',
+      open && 'ring-2 ring-ring',
+      className,
+    ),
+    children: (
+      <>
         <span className={cn('truncate text-left', selected === undefined && 'text-muted-foreground/70')}>
           {selected?.label ?? placeholder}
         </span>
@@ -410,7 +412,13 @@ export function Select<T extends string | number = string>({
           name="chevron-down"
           className={cn('shrink-0 opacity-60 transition-transform', compact ? 'size-3.5' : 'size-4', open && 'rotate-180')}
         />
-      </button>
+      </>
+    ),
+  };
+
+  return (
+    <>
+      {renderTrigger ? renderTrigger(triggerProps) : <button {...triggerProps} />}
 
       {open && placement !== null && portalTarget !== null
         ? createPortal(

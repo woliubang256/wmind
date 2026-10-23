@@ -830,207 +830,218 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </span>
         ) : null}
 
-        <div className="flex items-center gap-0.5">
-          <ToolbarButton
-            variant="ghost"
-            size="icon"
-            aria-label={t('editor.undo')} shortcut="⌘ / Ctrl + Z" disabledReason={t('editor.hint.noUndo')}
-            disabled={pastCount === 0}
-            onClick={() => store.getState().undo()}
-          >
-            <Icon name="undo" className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            variant="ghost"
-            size="icon"
-            aria-label={t('editor.redo')} shortcut="⌘ / Ctrl + Shift + Z" disabledReason={t('editor.hint.noRedo')}
-            disabled={futureCount === 0}
-            onClick={() => store.getState().redo()}
-          >
-            <Icon name="redo" className="size-4" />
-          </ToolbarButton>
-        </div>
-
-        {!preview ? (
-          <div className="flex items-center gap-0.5">
-            <ToolbarButton variant="ghost" size="sm" className="gap-1.5 px-2" aria-label={t('editor.addSibling')} shortcut="Enter"
-              hint={t('editor.addSibling')} disabled={selection.length !== 1 || selectedTopics.length !== 1 || activeId === sheet.rootTopic.id}
-              disabledReason={activeId === sheet.rootTopic.id && selection.length === 1 ? t('editor.hint.rootSibling') : t('editor.hint.oneTopic')}
-              onClick={() => store.getState().dispatch(addSiblingCommand(activeId))}><Icon name="list" className="size-4" />{t('editor.addSibling')}</ToolbarButton>
-            <ToolbarButton variant="ghost" size="sm" className="gap-1.5 px-2" aria-label={t('editor.addChild')} shortcut="Tab"
-              hint={t('editor.addChild')} disabled={selection.length !== 1 || selectedTopics.length !== 1} disabledReason={t('editor.hint.oneTopic')}
-              onClick={() => store.getState().dispatch(addChildCommand(activeId))}><Icon name="waypoints" className="size-4" />{t('editor.addChild')}</ToolbarButton>
-            <InsertMenu topics={selectedTopics.length} selection={selection.length} onInsert={openInsert} />
-            <ToolbarButton
-              variant="ghost"
-              size="icon"
-              aria-label={t('editor.delete')} shortcut="Delete" hint={t('editor.hint.delete')} disabledReason={t('editor.emptySelection')}
-              disabled={selection.length === 0}
-              onClick={() => store.getState().dispatch(removeTopicsCommand(selection))}
-            >
-              <Icon name="trash" className="size-4" />
-            </ToolbarButton>
-            <ToolbarButton
-              variant="ghost"
-              size="icon"
-              aria-label={t('editor.collapse')} shortcut="⌘ / Ctrl + ." hint={t('editor.hint.collapse')} disabledReason={t('editor.hint.oneTopic')}
-              disabled={selection.length !== 1}
-              onClick={() => store.getState().dispatch(toggleCollapseCommand(selection[0] ?? ''))}
-            >
-              <Icon name="chevron-right" className="size-4" />
-            </ToolbarButton>
-          </div>
-        ) : null}
-
-        {!preview ? (
-          <div className="flex items-center gap-0.5">
-            <ToolbarButton
-              variant="ghost"
-              size="icon"
-              aria-label={t('editor.annotation.summary')}
-              hint={t('editor.hint.summary')} disabledReason={t('editor.hint.summarySelection')}
-              disabled={summaryTarget === null}
-              onClick={addSummary}
-            >
-              <Icon name="summary" className="size-4" />
-            </ToolbarButton>
-            <ToolbarButton
-              variant="ghost"
-              size="icon"
-              aria-label={t('editor.annotation.boundary')}
-              hint={t('editor.hint.boundary')} disabledReason={t('editor.hint.boundarySelection')}
-              disabled={selection.length === 0 || selection.some((id) => !layout.boxes.has(id))}
-              onClick={addBoundary}
-            >
-              <Icon name="boundary" className="size-4" />
-            </ToolbarButton>
-            <ToolbarButton
-              variant="ghost"
-              size="icon"
-              aria-label={t('editor.annotation.relationship')}
-              hint={t('editor.hint.relationship')} disabledReason={t('editor.hint.relationshipSelection')}
-              disabled={selection.length !== 2}
-              onClick={addRelationship}
-            >
-              <Icon name="relationship" className="size-4" />
-            </ToolbarButton>
-          </div>
-        ) : null}
-
-        {!preview ? <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.marker.title')}
-          hint={t('editor.marker.hint')} aria-pressed={panelOpen && panelTab === 'markers'}
-          onClick={() => { setPanelTab('markers'); setPanelOpen(true); }}>
-          <Icon name="flag" className="size-4" />
-        </ToolbarButton> : null}
-
-        <div className="flex items-center gap-0.5">
-          <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomOut')} onClick={() => zoomAtCenter(1 / 1.2)}>
-            <Icon name="zoom-out" className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomIn')} onClick={() => zoomAtCenter(1.2)}>
-            <Icon name="zoom-in" className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.fit')} shortcut="⌘ / Ctrl + 1" onClick={fit}>
-            <Icon name="maximize" className="size-4" />
-          </ToolbarButton>
-        </div>
-
-        {/* 结构切换。四个选项，用紧凑型自绘下拉，和工具栏其它按钮同一套观感。 */}
-        {!preview ? (
-          <Select
-            aria-label={t('editor.structure')}
-            size="sm"
-            className="h-9 w-auto min-w-28 text-sm"
-            // 触发器只有「思维导图」四个字宽，而选项里「逻辑图（向右）」要长一倍，
-            // 不铺开弹层就会看到一串「逻辑图（…」。
-            menuMinWidth={200}
-            value={sheet.structure}
-            options={STRUCTURES.map((value) => ({ value, label: t(`editor.structures.${value}`) }))}
-            onChange={(next) =>
-              store.getState().dispatch(changeStructureCommand(next as StructureClass))
-            }
-          />
-        ) : null}
-
-        {!preview ? (
-          <ToolbarButton
-            variant="ghost"
-            size="icon"
-            aria-label={panelOpen ? t('editor.panel.hide') : t('editor.panel.show')}
-            aria-pressed={panelOpen}
-            onClick={() => setPanelOpen((value) => !value)}
-          >
-            <Icon name="settings" className="size-4" />
-          </ToolbarButton>
-        ) : null}
-
-        {/*
-          「另存为模板」只在允许用户模板时出现。它是把当前导图复制一份存起来，
-          属于写操作；站点关掉用户模板后还留一个必然 403 的按钮没有意义。
-        */}
-        {!preview && config.userTemplateEnabled ? (
-          <ToolbarButton variant="ghost" size="icon" aria-label={t('templates.saveAs')} onClick={() => setSaveTemplateOpen(true)}>
-            <Icon name="waypoints" className="size-4" />
-          </ToolbarButton>
-        ) : null}
-
-        {/*
-          分享与导出都跟着站点开关走。两个都是「点了必然失败」的按钮：
-          站点关掉分享后 `POST /shares` 回 403 `SHARE_DISABLED`，而导出虽然
-          全在浏览器里做、服务端拦不住，但把一个管理员明确关掉的能力继续摆在
-          工具栏上，等于让设置项看起来没生效。
-        */}
-        {config.shareEnabled ? (
-          <ToolbarButton hint={t('share.action')} variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
-            <Icon name="link" className="mr-1.5 size-4" />
-            {t('share.action')}
-          </ToolbarButton>
-        ) : null}
-
-        {config.exportEnabled ? (
-          <ToolbarButton hint={t('editor.exportEntry')} variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
-            <Icon name="download" className="mr-1.5 size-4" />
-            {t('editor.exportEntry')}
-          </ToolbarButton>
-        ) : null}
-
-        {/*
-          视图切换（画布 / 大纲）与 ZEN。三个都是「看同一份文档的不同方式」，
-          所以并排放在最右边，且都只在编辑态出现。
-        */}
-        {!preview ? (
-          <>
-            <ToolbarButton
-              variant={view === 'outline' ? 'secondary' : 'ghost'}
-              size="icon"
-              aria-label={t('editor.outline.toggle')}
-              aria-pressed={view === 'outline'}
-              onClick={() => setView((value) => (value === 'outline' ? 'canvas' : 'outline'))}
-            >
-              <Icon name="list" className="size-4" />
-            </ToolbarButton>
-            {view === 'canvas' ? (
+        <div data-editor-toolbar className="flex min-w-0 max-w-full basis-full flex-wrap items-center gap-x-2 gap-y-1 xl:basis-auto">
+          <div role="group" aria-label={t('editor.toolbar.edit')} className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5">
+            <div className="flex items-center gap-0.5">
               <ToolbarButton
                 variant="ghost"
                 size="icon"
-                aria-label={t('editor.zen.enter')}
-                onClick={() => setZen(true)}
+                aria-label={t('editor.undo')} shortcut="⌘ / Ctrl + Z" disabledReason={t('editor.hint.noUndo')}
+                disabled={pastCount === 0}
+                onClick={() => store.getState().undo()}
               >
+                <Icon name="undo" className="size-4" />
+              </ToolbarButton>
+              <ToolbarButton
+                variant="ghost"
+                size="icon"
+                aria-label={t('editor.redo')} shortcut="⌘ / Ctrl + Shift + Z" disabledReason={t('editor.hint.noRedo')}
+                disabled={futureCount === 0}
+                onClick={() => store.getState().redo()}
+              >
+                <Icon name="redo" className="size-4" />
+              </ToolbarButton>
+            </div>
+
+            {!preview ? (
+              <div className="flex items-center gap-0.5">
+                <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.addSibling')} shortcut="Enter"
+                  hint={t('editor.addSibling')} disabled={selection.length !== 1 || selectedTopics.length !== 1 || activeId === sheet.rootTopic.id}
+                  disabledReason={activeId === sheet.rootTopic.id && selection.length === 1 ? t('editor.hint.rootSibling') : t('editor.hint.oneTopic')}
+                  onClick={() => store.getState().dispatch(addSiblingCommand(activeId))}><Icon name="waypoints" className="size-4" /></ToolbarButton>
+                <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.addChild')} shortcut="Tab"
+                  hint={t('editor.addChild')} disabled={selection.length !== 1 || selectedTopics.length !== 1} disabledReason={t('editor.hint.oneTopic')}
+                  onClick={() => store.getState().dispatch(addChildCommand(activeId))}><Icon name="topic-child" className="size-4" /></ToolbarButton>
+                <InsertMenu topics={selectedTopics.length} selection={selection.length} onInsert={openInsert} />
+                <ToolbarButton
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('editor.delete')} shortcut="Delete" hint={t('editor.hint.delete')} disabledReason={t('editor.emptySelection')}
+                  disabled={selection.length === 0}
+                  onClick={() => store.getState().dispatch(removeTopicsCommand(selection))}
+                >
+                  <Icon name="trash" className="size-4" />
+                </ToolbarButton>
+                <ToolbarButton
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('editor.collapse')} shortcut="⌘ / Ctrl + ." hint={t('editor.hint.collapse')} disabledReason={t('editor.hint.oneTopic')}
+                  disabled={selection.length !== 1}
+                  onClick={() => store.getState().dispatch(toggleCollapseCommand(selection[0] ?? ''))}
+                >
+                  <Icon name="chevron-right" className="size-4" />
+                </ToolbarButton>
+              </div>
+            ) : null}
+
+            {!preview ? (
+              <div className="flex items-center gap-0.5">
+                <ToolbarButton
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('editor.annotation.summary')}
+                  hint={t('editor.hint.summary')} disabledReason={t('editor.hint.summarySelection')}
+                  disabled={summaryTarget === null}
+                  onClick={addSummary}
+                >
+                  <Icon name="summary" className="size-4" />
+                </ToolbarButton>
+                <ToolbarButton
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('editor.annotation.boundary')}
+                  hint={t('editor.hint.boundary')} disabledReason={t('editor.hint.boundarySelection')}
+                  disabled={selection.length === 0 || selection.some((id) => !layout.boxes.has(id))}
+                  onClick={addBoundary}
+                >
+                  <Icon name="boundary" className="size-4" />
+                </ToolbarButton>
+                <ToolbarButton
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('editor.annotation.relationship')}
+                  hint={t('editor.hint.relationship')} disabledReason={t('editor.hint.relationshipSelection')}
+                  disabled={selection.length !== 2}
+                  onClick={addRelationship}
+                >
+                  <Icon name="relationship" className="size-4" />
+                </ToolbarButton>
+              </div>
+            ) : null}
+
+            {!preview ? <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.marker.title')}
+              hint={t('editor.marker.hint')} aria-pressed={panelOpen && panelTab === 'markers'}
+              onClick={() => { setPanelTab('markers'); setPanelOpen(true); }}>
+              <Icon name="flag" className="size-4" />
+            </ToolbarButton> : null}
+          </div>
+
+          <div role="group" aria-label={t('editor.toolbar.view')} className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5 border-l border-border/80 pl-2">
+            <div className="flex items-center gap-0.5">
+              <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomOut')} onClick={() => zoomAtCenter(1 / 1.2)}>
+                <Icon name="zoom-out" className="size-4" />
+              </ToolbarButton>
+              <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomIn')} onClick={() => zoomAtCenter(1.2)}>
+                <Icon name="zoom-in" className="size-4" />
+              </ToolbarButton>
+              <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.fit')} shortcut="⌘ / Ctrl + 1" onClick={fit}>
                 <Icon name="maximize" className="size-4" />
               </ToolbarButton>
-            ) : null}
-          </>
-        ) : null}
+            </div>
 
-        <ToolbarButton
-          hint={preview ? t('editor.exitPreview') : t('editor.preview')}
-          variant={preview ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setPreview((value) => !value)}
-        >
-          <Icon name="eye" className="mr-1.5 size-4" />
-          {preview ? t('editor.exitPreview') : t('editor.preview')}
-        </ToolbarButton>
+            {/* 结构入口复用图标提示，选项、键盘与焦点仍交给共享 Select。 */}
+            {!preview ? (
+              <Select
+                aria-label={t('editor.structure')}
+                size="sm"
+                renderTrigger={(props) => (
+                  <ToolbarButton {...props} variant="ghost" size="icon" className="gap-0.5"
+                    hint={`${t('editor.structure')}: ${t(`editor.structures.${sheet.structure}`)}`}>
+                    <Icon name="mindmap" className="size-4" /><Icon name="chevron-down" className="size-3" />
+                  </ToolbarButton>
+                )}
+                menuMinWidth={200}
+                value={sheet.structure}
+                options={STRUCTURES.map((value) => ({ value, label: t(`editor.structures.${value}`) }))}
+                onChange={(next) =>
+                  store.getState().dispatch(changeStructureCommand(next as StructureClass))
+                }
+              />
+            ) : null}
+
+            {!preview ? (
+              <ToolbarButton
+                variant="ghost"
+                size="icon"
+                aria-label={panelOpen ? t('editor.panel.hide') : t('editor.panel.show')}
+                aria-pressed={panelOpen}
+                onClick={() => setPanelOpen((value) => !value)}
+              >
+                <Icon name={panelOpen ? 'panel-right-close' : 'panel-right-open'} className="size-4" />
+              </ToolbarButton>
+            ) : null}
+
+            {/*
+              视图切换（画布 / 大纲）与 ZEN。三个都是「看同一份文档的不同方式」，
+              因此统一放在界面分组，且都只在编辑态出现。
+            */}
+            {!preview ? (
+              <>
+                <ToolbarButton
+                  variant={view === 'outline' ? 'secondary' : 'ghost'}
+                  size="icon"
+                  aria-label={t('editor.outline.toggle')}
+                  aria-pressed={view === 'outline'}
+                  onClick={() => setView((value) => (value === 'outline' ? 'canvas' : 'outline'))}
+                >
+                  <Icon name="list" className="size-4" />
+                </ToolbarButton>
+                {view === 'canvas' ? (
+                  <ToolbarButton
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t('editor.zen.enter')}
+                    onClick={() => setZen(true)}
+                  >
+                    <Icon name="maximize" className="size-4" />
+                  </ToolbarButton>
+                ) : null}
+              </>
+            ) : null}
+
+            <ToolbarButton
+              aria-label={preview ? t('editor.exitPreview') : t('editor.preview')}
+              aria-pressed={preview}
+              variant={preview ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setPreview((value) => !value)}
+            >
+              <Icon name="eye" className="size-4" />
+            </ToolbarButton>
+          </div>
+
+          {(!preview && config.userTemplateEnabled) || config.shareEnabled || config.exportEnabled ? (
+            <div role="group" aria-label={t('editor.toolbar.actions')} className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5 border-l border-border/80 pl-2">
+              {/*
+                「另存为模板」只在允许用户模板时出现。它是把当前导图复制一份存起来，
+                属于写操作；站点关掉用户模板后还留一个必然 403 的按钮没有意义。
+              */}
+              {!preview && config.userTemplateEnabled ? (
+                <ToolbarButton variant="ghost" size="icon" aria-label={t('templates.saveAs')} onClick={() => setSaveTemplateOpen(true)}>
+                  <Icon name="save" className="size-4" />
+                </ToolbarButton>
+              ) : null}
+
+              {/*
+                分享与导出都跟着站点开关走。两个都是「点了必然失败」的按钮：
+                站点关掉分享后 `POST /shares` 回 403 `SHARE_DISABLED`，而导出虽然
+                全在浏览器里做、服务端拦不住，但把一个管理员明确关掉的能力继续摆在
+                工具栏上，等于让设置项看起来没生效。
+              */}
+              {config.shareEnabled ? (
+                <ToolbarButton aria-label={t('share.action')} variant="ghost" size="icon" onClick={() => setShareOpen(true)}>
+                  <Icon name="link" className="size-4" />
+                </ToolbarButton>
+              ) : null}
+
+              {config.exportEnabled ? (
+                <ToolbarButton aria-label={t('editor.exportEntry')} variant="ghost" size="icon" onClick={() => setExportOpen(true)}>
+                  <Icon name="download" className="size-4" />
+                </ToolbarButton>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </header>
       )}
 

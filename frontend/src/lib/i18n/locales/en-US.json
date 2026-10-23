@@ -104,6 +104,9 @@
     "languageHint": "Only changes the interface on this device. Map content is untouched."
   },
   "editor": {
+    "toolbar.edit": "Editing",
+    "toolbar.view": "View",
+    "toolbar.actions": "Actions",
     "back": "Back",
     "titlePlaceholder": "Untitled map",
     "undo": "Undo",

@@ -10,6 +10,38 @@ run(async () => {
     await uiLogin(page, user);
     await page.goto(`${BASE}/maps/demo`);
     await waitForCanvas(page);
+    const toolbar = page.locator('[data-editor-toolbar]');
+    assert.equal(await toolbar.locator('button').evaluateAll((buttons) => buttons.every((button) => !button.textContent.trim() && !!button.getAttribute('aria-label'))), true);
+    for (const name of ['编辑', '界面', '操作']) await toolbar.getByRole('group', { name, exact: true }).waitFor();
+    check('工具栏按编辑、界面、操作分组，所有入口仅显示图标并保留可访问名称', true);
+    const structure = toolbar.getByRole('combobox', { name: '结构', exact: true });
+    const initialStructure = await structure.getAttribute('data-value');
+    await structure.focus();
+    assert.match(await page.getByRole('tooltip').textContent(), /思维导图/);
+    await structure.press('ArrowDown');
+    await page.getByRole('listbox').press('End');
+    await page.getByRole('listbox').press('Enter');
+    assert.notEqual(await structure.getAttribute('data-value'), initialStructure);
+    assert.equal(await structure.evaluate((node) => node === document.activeElement), true);
+    await toolbar.getByRole('button', { name: '撤销', exact: true }).click();
+    assert.equal(await structure.getAttribute('data-value'), initialStructure);
+    check('图标结构入口显示当前结构提示，支持键盘切换、返回焦点和撤销', true);
+    const panel = toolbar.getByRole('button', { name: '隐藏面板', exact: true });
+    await panel.click();
+    await toolbar.getByRole('button', { name: '显示面板', exact: true }).click();
+    check('侧栏图标可以隐藏并恢复面板', true);
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      assert.equal(await toolbar.locator('button').evaluateAll((buttons) => buttons.every((button) => {
+        const rect = button.getBoundingClientRect();
+        return rect.left >= 0 && rect.right <= window.innerWidth;
+      })), true);
+      if (process.env.SCREENSHOT_PATH && width === 1440) await page.locator('header').last().screenshot({ path: process.env.SCREENSHOT_PATH });
+    }
+    check('桌面和窄屏工具栏入口均在视口内', true);
+    // 后面的提示用例依赖空历史；重新载入演示文档。
+    await page.reload();
+    await waitForCanvas(page);
     const undo = page.getByRole('button', { name: '撤销', exact: true });
     await undo.hover();
     await page.getByRole('tooltip').waitFor({ timeout: 2500 });
@@ -27,8 +59,15 @@ run(async () => {
     assert.equal(await page.getByRole('button', { name: '新建同级主题', exact: true }).getAttribute('aria-disabled'), 'true');
     await page.getByRole('button', { name: '插入', exact: true }).click();
     assert.equal(await page.getByRole('menuitem', { name: /新建同级主题/ }).count(), 0);
+    assert.equal(await page.getByRole('menuitem').evaluateAll((items) => items.every((item) => item.querySelector('svg') && item.textContent.trim())), true);
     await page.keyboard.press('Escape');
     check('根主题禁用同级，Insert 不包含主题创建操作', true);
+    await page.getByRole('button', { name: '插入', exact: true }).click();
+    await page.getByRole('menuitem', { name: '链接', exact: true }).click();
+    assert.equal(await page.getByRole('menuitem').evaluateAll((items) => items.every((item) => item.querySelector('svg') && item.textContent.trim())), true);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    check('Insert 及链接子菜单每项都有图标和文字', true);
     const branch = page.locator('g.wmind-topic').filter({ hasText: /^用户研究/ }).first();
     await branch.click();
     const level = await branch.getAttribute('aria-level');
