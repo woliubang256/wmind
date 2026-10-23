@@ -83,9 +83,11 @@ XMind 里最常用的三种注释手段，wmind 一个都没有：
 - 新增 25 个单测（`commands/annotation.test.ts` 13 个、`layout/annotations.test.ts`
   12 个）与一套界面验收 `e2e/annotations.mjs`（IE-ANN-01…11）。
 - 已知未做：概要/边界/联系不支持拖动改范围、不支持多选后批量改样式；
-  联系线没有箭头（XMind 也没有）。
+  联系线编辑、双端箭头与控制柄见[联系编辑](../feature/2026-10-23-wmind-relationship-editing.md)。
 
 边界的边框使用固定屏幕宽度的透明描边命中区，标题也可选择；填充不接管指针事件，内部主题与空白框选保持原行为。编辑器 SelectionPlugin 负责鼠标与 Enter/空格激活边界，结构面板和画布共用激活态，Delete/Backspace/工具栏共用删除与撤销命令。只读、导出和缩略图不生成命中区或键盘入口。
+
+annotation-delete.mjs 浏览器回归 9/9，覆盖边框/标题命中、控制柄聚焦、输入框原生删除、Delete/Backspace/工具栏统一目标、撤销重做、Esc 取消及只读模式；内部主题保持可选择。
 
 ## Alternatives considered
 

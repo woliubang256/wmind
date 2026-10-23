@@ -38,6 +38,13 @@ run(async () => {
       await boundary.locator('text').click(); assert.equal(await boundary.getAttribute('aria-pressed'), 'true');
       await page.keyboard.press('Delete'); assert.equal(await boundary.count(), 0); assert.equal(await topics.count(), 3); await undo();
       check('边界标题可选中、删除、撤销，内部主题保留', true);
+      const hit = boundary.locator('[data-boundary-hit]'); const box = await hit.boundingBox();
+      await page.mouse.click(box.x + box.width - 1, box.y + box.height / 2);
+      assert.equal(await boundary.getAttribute('aria-pressed'), 'true');
+      await page.getByRole('button', { name: '删除所选', exact: true }).click();
+      assert.equal(await boundary.count(), 0); await undo();
+      await page.getByRole('button', { name: '重做', exact: true }).click(); assert.equal(await boundary.count(), 0); await undo();
+      check('边界边框可选中，工具栏删除及重做正常', true);
       await boundary.focus(); await page.keyboard.press('Space'); await page.keyboard.press('Backspace');
       assert.equal(await boundary.count(), 0); await undo();
       check('边界支持键盘选中与删除', true);
