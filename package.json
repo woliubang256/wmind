@@ -1,6 +1,6 @@
 {
   "name": "wmind",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "wmind — 可自托管的思维导图系统",
   "license": "MIT",
@@ -9,6 +9,9 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "version:next": "node scripts/release.mjs bump",
+    "version:check": "node scripts/release.mjs check",
+    "test:release": "node --test scripts/release*.test.mjs deploy/nginx.test.mjs",
     "verify-agent-note-tree": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts",
     "verify-agent-note-format": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-format.ts",
     "verify-archived": "node --experimental-strip-types .agents/skills/write-notes-like-deepseek/scripts/verify-archived-agent-notes.ts",

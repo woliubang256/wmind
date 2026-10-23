@@ -9,8 +9,8 @@ BACKEND  := backend
 FRONTEND := frontend
 
 # 版本号注入到 config.Version，由 GET /site/config 返回。
-# 优先用 git 描述（v1.2.3-4-gabc123），没有 tag 时退化成短哈希，再不行用 dev。
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# VERSION 是发布元数据的唯一来源；可显式覆盖以构建测试版本。
+VERSION ?= $(shell node scripts/release.mjs version)
 LDFLAGS := -X github.com/woliubang256/wmind/backend/internal/config.Version=$(VERSION)
 
 .PHONY: help
