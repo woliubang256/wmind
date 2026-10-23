@@ -8,19 +8,20 @@
  *
  * - 主题标题：取 `layout.sizes.lines`（折行后的实际行），不是 `topic.title`——
  *   标题里的 `\n` 在渲染时被拆成多行，取原文会多算换行符。
- * - 边界标题、关系线标题：这两处没有单独的 `font-family`，继承 SVG 根上的
- *   `sans`（见 `export-canvas.tsx`）。
+ * - 可见边界、关系线、概要与启用的页脚：没有单独的 `font-family`，继承 SVG
+ *   根上的 `sans`（见 `export-canvas.tsx`），字重跟随实际渲染。
  * - **备注不算**：备注不画在画布上，为它报缺字是误报。
- * - 标签、任务、附件与内容入口：取布局中的实际显示行，采用 sans。
+ * - 标签、任务与附件：取布局中的 badge / 显示行，采用 sans 400；图标的提示文字不算。
  *
  * 纯函数：`ExportContext` 里已经有每张画布的布局与解析后的样式，不需要 DOM。
  */
 
 import type { FontFamily } from '../model/types';
+import { layoutAnnotations } from '../layout/annotations';
 import { coverageOf, uncoveredChars } from '../theme/coverage';
 import type { ExportContext } from './context';
 
-/** 边界与关系线标题继承的字体族（`ExportCanvas` 的根 `font-family`）。 */
+/** 附加文字及装饰继承的字体族（`ExportCanvas` 的根 `font-family`）。 */
 const DECORATION_FAMILY: FontFamily = 'sans';
 
 export interface FallbackReport {
@@ -46,14 +47,18 @@ export interface PaintedRun {
  */
 export function paintedRuns(ctx: ExportContext): PaintedRun[] {
   const runs: PaintedRun[] = [];
+  const addDecoration = (text: string, weight = 400) => {
+    if (text !== '') runs.push({ text, family: DECORATION_FAMILY, weight, style: 'normal' });
+  };
 
   for (const sheet of ctx.sheets) {
     for (const box of sheet.layout.boxes.values()) {
       const size = sheet.layout.sizes.get(box.id);
       const style = sheet.layout.styles.get(box.id);
       const lines = size?.lines ?? [];
+      for (const badge of size?.details?.badges ?? []) addDecoration(badge.lines.join(''));
+      for (const detail of size?.details?.lines ?? []) addDecoration(detail.text);
       if (lines.length === 0) continue;
-      for (const detail of size?.details?.lines ?? []) runs.push({ text: detail.text, family: DECORATION_FAMILY, weight: 400, style: 'normal' });
       runs.push({
         text: lines.join(''),
         family: style?.fontFamily ?? DECORATION_FAMILY,
@@ -62,18 +67,15 @@ export function paintedRuns(ctx: ExportContext): PaintedRun[] {
       });
     }
 
-    // 边界与关系线的标题没有独立字体，继承 SVG 根上的 `sans`。
-    for (const boundary of sheet.sheet.boundaries) {
-      if (boundary.title !== '') {
-        runs.push({ text: boundary.title, family: DECORATION_FAMILY, weight: 400, style: 'normal' });
-      }
-    }
-    for (const relationship of sheet.sheet.relationships) {
-      if (relationship.title !== '') {
-        runs.push({ text: relationship.title, family: DECORATION_FAMILY, weight: 400, style: 'normal' });
-      }
-    }
+    // 与 SVG 共用可见注解：包含主题级结构，排除折叠或隐藏的注解。
+    const annotations = layoutAnnotations(sheet.sheet, sheet.layout, sheet.theme);
+    for (const boundary of annotations.boundaries) addDecoration(boundary.title, 600);
+    for (const relationship of annotations.relationships) addDecoration(relationship.title);
+    for (const summary of annotations.summaries) addDecoration(summary.lines.join(''), summary.style.fontWeight);
   }
+
+  if (ctx.date !== null) addDecoration(ctx.date);
+  if (ctx.brand) addDecoration(ctx.brandText);
 
   return runs;
 }
