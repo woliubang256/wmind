@@ -163,6 +163,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 路由组 | 维度 | 限额 |
 | --- | --- | --- |
 | `POST /auth/login` | IP + 用户名 | 5 次 / 分钟，连续失败 5 次锁定 15 分钟 |
+| `POST /auth/login/challenge` | IP | 60 次 / 分钟，挑战有效期 120 秒 |
 | `POST /auth/register` | IP | 3 次 / 小时 |
 | `POST /auth/refresh` | IP | 30 次 / 分钟 |
 | `POST /maps/{uid}/shares` | 用户 | 30 次 / 分钟 |
@@ -338,14 +339,20 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 > **一期注册即生效**：不接入 SMTP，因此注册成功后用户 `status` 直接为 `active`，无需任何邮件确认。二期若启用邮箱验证（`auth.email_verification_required = true`），用户将以 `status = pending` 创建、不下发令牌，响应体追加 `requiresEmailVerification: true` 与 `emailSent` 字段，登录时返回 `AUTH_ACCOUNT_PENDING`。归档设计见 [09-技术决策记录](./09-技术决策记录.md) ADR-012。
 
+#### `POST /api/v1/auth/login/challenge`
+
+提交 `{ "identifier": "alice@example.com" }`，统一返回 `challengeId`、RSA-2048 公钥 JWK 和 `expiresIn: 120`，不表示账号存在，不签发会话。响应使用 `Cache-Control: no-store`。浏览器使用 Web Crypto RSA-OAEP、SHA-256，以 `wmind/login/v1:` 加 `challengeId` 的 UTF-8 字节作为 label 加密密码。
+
 #### `POST /api/v1/auth/login`
 
 ```json
 // 请求
-{ "identifier": "alice@example.com", "password": "********" }
+{ "identifier": "alice@example.com", "challengeId": "一次性挑战", "encryptedPassword": "RSA-OAEP-256密文的Base64" }
 ```
 
-`identifier` 同时接受邮箱与用户名。失败统一返回 `AUTH_INVALID_CREDENTIALS`（401），不区分「用户不存在」与「密码错误」。账号被禁用返回 `AUTH_ACCOUNT_DISABLED`（403）。
+`identifier` 同时接受邮箱与用户名。拒绝原 `password` 字段及混合提交（400），挑战在解密和密码验证之前原子消费，过期、已消费或密文无效返回 `AUTH_LOGIN_CHALLENGE_INVALID`（422）。每次主动重试重新获取挑战，不自动重放密文。HTTPS 仍是部署前提，非本机开发的 HTTP 页面不允许密码登录。
+
+密码校验失败统一返回 `AUTH_INVALID_CREDENTIALS`（401），不区分「用户不存在」与「密码错误」。账号被禁用返回 `AUTH_ACCOUNT_DISABLED`（403）。已有 bcrypt 账号无需重设密码，启用 2FA 时密码步骤只签发原有第二因子挑战。
 
 #### `POST /api/v1/auth/refresh`
 
@@ -944,19 +951,17 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 分组 | 数量 | 说明 |
 | --- | --- | --- |
 | 公开 | 3 | `health/live`、`health/ready`、`site/config` |
-| 认证与个人 | 8 | register / login / refresh / logout / me / `PATCH users/me` / password / avatar |
+| 认证与个人 | 15 | 原有 8 项、登录加密挑战、2FA 的验证/状态/设置/启用/停用/恢复码 6 项 |
 | 导图 | 12 | 列表、创建、读取、保存、重命名、删除、复制、缩略图、回收站 ×4 |
 | 模板 | 5 | 列表、单条（含 `document`）、创建（从导图另存为）、改名、删除 |
 | 主题 | 4 | 列表、创建、更新、删除 |
 | 文件 | 1 | 上传（读取走 `/uploads` 静态目录；**没有删除接口**，`DELETE files/{uid}` 已从一期移除） |
 | **分享** | **7** | 登录态 5（创建、导图维度列表、我的分享、修改、撤销）+ 公开 2（读取、密码校验） |
 | 导出 | 0（设计 1） | `GET /maps/{uid}/export` 设计已定但**尚未注册**，现在访问返回 404（M6 落地） |
-| 管理 | 9 | 用户 ×5（含重置密码）、设置 ×2、统计、审计日志 |
-| **合计** | **49** | 逐条核对 `router.go` 的实际注册数 |
+| 管理 | 16 | 用户 ×5（含重置密码）、设置 ×2、统计、审计日志，以及备份恢复 7 项 |
+| **合计** | **63** | 逐条核对 `router.go` 的实际注册数 |
 
-> 合计按**已注册**的路由数统计，不按设计条目数：导出那条只有设计、没有路由，算进去会变成 50。相比 v1.1 的 55 个减少 6 个——移除 7 个（`forgot-password` / `reset-password` / `verify-email` / `resend-verification` / `admin/mail/test` / `GET files/{uid}` / `DELETE files/{uid}`），分享的「公开读取」与「密码校验」由一条拆成两条（+1）。
->
-> 二期接入邮件后，注册数与设计条目数同步回到 55。`POST /admin/users/{uid}/reset-password` 一期即为正式接口（非占位），二期也不会移除——它与邮件重置是并存的两条找回路径。
+> 合计仅统计已注册路由。原有 49 项加上 6 项双因素认证、7 项备份恢复和 1 项登录加密挑战，共 63 项；设计中的服务端导出和邮件接口不计入。`POST /admin/users/{uid}/reset-password` 为正式接口，与后续邮件找回并存。
 
 ---
 
@@ -1004,6 +1009,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 422 | `IMPORT_PARSE_FAILED` | 导入文件解析失败 |
 | 422 | `SETTINGS_INVALID` | 设置项非法 |
 | 429 | `AUTH_TOO_MANY_ATTEMPTS` | 登录尝试过多，已锁定 |
+| 422 | `AUTH_LOGIN_CHALLENGE_INVALID` | 登录加密挑战过期、已消费或密文无效，请重新获取挑战 |
 | 429 | `RATE_LIMITED` | 请求过于频繁 |
 | 500 | `INTERNAL_ERROR` | 服务器内部错误 |
 | 500 | `EXPORT_RENDER_FAILED` | 导出渲染失败 |

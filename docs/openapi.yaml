@@ -186,12 +186,51 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /api/v1/auth/login/challenge:
+    post:
+      tags: [auth]
+      summary: 获取登录密码加密公钥与一次性挑战
+      description: |
+        不查询账号是否存在。响应 no-store，不签发会话或 Cookie。挑战有效期 120 秒，
+        绑定规范化账号；登录时须通过 Web Crypto 的 RSA-OAEP/SHA-256 加密密码，
+        OAEP label 为 UTF-8 编码的 `wmind/login/v1:` 加 challengeId。仍须使用 HTTPS。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [identifier]
+              properties:
+                identifier: { type: string, minLength: 1, maxLength: 320 }
+      responses:
+        '200':
+          description: 统一加密挑战，不表示账号存在
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Envelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/EncryptedLoginChallenge' }
+        '400':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /api/v1/auth/login:
     post:
       tags: [auth]
       summary: 登录
       description: |
         `identifier` 同时接受邮箱与用户名。启用 2FA 时返回五分钟挑战，必须调用 `/auth/2fa/verify`。
+
+        先调用 `/auth/login/challenge`，提交绑定挑战的 RSA-OAEP-256 密码密文；
+        不接受原 password 字段（包括混合请求）。挑战在解密和密码校验前原子消费，
+        过期、已使用或篡改返回 422 AUTH_LOGIN_CHALLENGE_INVALID。响应 no-store。
 
         失败一律 `AUTH_INVALID_CREDENTIALS`，不区分「用户不存在」与「密码错误」
         ——区分开等于免费提供账号枚举接口。连续失败达到阈值后返回 429
@@ -216,6 +255,10 @@ paths:
                         oneOf:
                           - { $ref: '#/components/schemas/AuthSession' }
                           - { $ref: '#/components/schemas/TwoFactorChallenge' }
+        '400':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
         '401':
           $ref: '#/components/responses/Error'
         '403':
@@ -1963,10 +2006,30 @@ components:
 
     LoginInput:
       type: object
-      required: [identifier, password]
+      additionalProperties: false
+      required: [identifier, challengeId, encryptedPassword]
       properties:
-        identifier: { type: string, description: 邮箱或用户名 }
-        password: { type: string }
+        identifier: { type: string, minLength: 1, maxLength: 320, description: 邮箱或用户名 }
+        challengeId: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        encryptedPassword: { type: string, minLength: 344, maxLength: 344, description: RSA-OAEP-256 密文的标准 Base64，不含原密码 }
+
+    EncryptedLoginChallenge:
+      type: object
+      required: [challengeId, publicKey, expiresIn]
+      properties:
+        challengeId: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        expiresIn: { type: integer, const: 120 }
+        publicKey:
+          type: object
+          description: RSA-2048 公钥 JWK，只允许 encrypt，不含私钥参数
+          required: [kty, n, e, alg, ext, key_ops]
+          properties:
+            kty: { type: string, const: RSA }
+            n: { type: string }
+            e: { type: string, const: AQAB }
+            alg: { type: string, const: RSA-OAEP-256 }
+            ext: { type: boolean, const: true }
+            key_ops: { type: array, items: { type: string, const: encrypt } }
 
     TwoFactorChallenge:
       type: object

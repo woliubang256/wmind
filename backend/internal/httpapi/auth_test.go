@@ -174,6 +174,10 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	t.Cleanup(func() { stopBackups(); backups.Wait() })
 
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
+	loginEncryption, err := service.NewLoginEncryption(sqlite.NewLoginChallengeRepository(db), "http-test-encryption-key-long-enough")
+	if err != nil {
+		t.Fatal(err)
+	}
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
 			Env:  config.EnvDevelopment,
@@ -183,7 +187,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 			Storage: config.Storage{Dir: uploads},
 		},
 		Logger:           logger,
-		Auth:             handler.NewAuthHandler(svc, cookie, nil),
+		Auth:             handler.NewAuthHandler(svc, cookie, nil, loginEncryption),
 		Sessions:         svc,
 		RegistrationOpen: settingsSvc.RegistrationEnabled,
 		Users:            handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
@@ -264,6 +268,14 @@ func (r *apiResponse) UnmarshalJSON(raw []byte) error {
 
 func (s *authTestServer) do(method, path, token string, body any) (int, apiResponse) {
 	s.t.Helper()
+	// Existing behavioral tests express the password they intend to verify;
+	// the transport helper sends the same encrypted envelope as the browser.
+	// Protocol rejection tests use a raw HTTP request instead.
+	if method == http.MethodPost && path == "/api/v1/auth/login" {
+		if credentials, ok := body.(map[string]string); ok && credentials["password"] != "" {
+			body = s.encryptedLogin(credentials["identifier"], credentials["password"])
+		}
+	}
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)

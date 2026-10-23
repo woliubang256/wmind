@@ -323,6 +323,10 @@ func registerAuth(v1 *gin.RouterGroup, deps Deps, limiters authLimiters) {
 		limiters.register.Middleware(middleware.ClientIPKey),
 		deps.Auth.Register)
 	g.POST("/login", deps.Auth.Login)
+	g.POST("/login/challenge", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.Next()
+	}, middleware.NewRateLimiter(60, time.Minute, 60).Middleware(middleware.ClientIPKey), deps.Auth.LoginChallenge)
 	g.POST("/2fa/verify", middleware.NewRateLimiter(10, time.Minute, 10).Middleware(middleware.ClientIPKey), deps.Auth.VerifyTwoFactor)
 	g.POST("/refresh", limiters.refresh.Middleware(middleware.ClientIPKey), deps.Auth.Refresh)
 	g.POST("/logout", deps.Auth.Logout)

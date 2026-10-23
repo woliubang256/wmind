@@ -83,6 +83,7 @@ func run() error {
 		backupProtectedPaths []string
 		backupRepo           domain.BackupRepository
 		factorRepo           domain.TwoFactorRepo
+		loginChallengeRepo   domain.LoginChallengeRepo
 		statsRepo            domain.AdminStatsRepo
 		userRepo             domain.UserRepo
 		tokenRepo            domain.RefreshTokenRepo
@@ -115,6 +116,7 @@ func run() error {
 		backupProtectedPaths = append(backupProtectedPaths, cfg.DB.SQLitePath)
 		statsRepo = sqliterepo.NewAdminStatsRepository(db)
 		factorRepo = sqliterepo.NewTwoFactorRepository(db)
+		loginChallengeRepo = sqliterepo.NewLoginChallengeRepository(db)
 		userRepo = sqliterepo.NewUserRepository(db)
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
 		settingsRepo = sqliterepo.NewSettingsRepository(db)
@@ -152,6 +154,7 @@ func run() error {
 		backupRepo = postgresrepo.NewBackupRepository(pool)
 		statsRepo = postgresrepo.NewAdminStatsRepository(pool)
 		factorRepo = postgresrepo.NewTwoFactorRepository(pool)
+		loginChallengeRepo = postgresrepo.NewLoginChallengeRepository(pool)
 		userRepo = postgresrepo.NewUserRepository(pool)
 		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
 		settingsRepo = postgresrepo.NewSettingsRepository(pool)
@@ -298,10 +301,15 @@ func run() error {
 	go func() { defer close(trashDone); trashCleaner.Run(backupsCtx) }()
 
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
+	loginEncryption, err := service.NewLoginEncryption(loginChallengeRepo, factorKey)
+	if err != nil {
+		return fmt.Errorf("initialize login encryption: %w", err)
+	}
 	authHandler := handler.NewAuthHandler(
 		authSvc,
 		cookie,
 		middleware.NewRateLimiter(5, time.Minute, 5),
+		loginEncryption,
 	)
 
 	router := httpapi.NewRouter(httpapi.Deps{

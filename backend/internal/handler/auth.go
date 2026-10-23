@@ -5,6 +5,8 @@
 package handler
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -48,8 +50,9 @@ func DefaultCookieConfig(secure bool, maxAge time.Duration) CookieConfig {
 
 // AuthHandler 处理认证相关接口。
 type AuthHandler struct {
-	svc    *service.AuthService
-	cookie CookieConfig
+	svc             *service.AuthService
+	cookie          CookieConfig
+	loginEncryption *service.LoginEncryption
 	// loginLimiter 按「IP + 账号」限制登录尝试频率。为空表示不限流
 	// （单测与内部调用）。
 	loginLimiter *middleware.RateLimiter
@@ -60,11 +63,11 @@ type AuthHandler struct {
 // 登录限流放在 handler 而不是中间件，是因为限流维度里包含账号，
 // 而账号在请求体里——中间件要拿到它就得先读一遍 body 再塞回去，
 // 反而更脆。注册与刷新只按 IP，走中间件即可。
-func NewAuthHandler(svc *service.AuthService, cookie CookieConfig, loginLimiter *middleware.RateLimiter) *AuthHandler {
+func NewAuthHandler(svc *service.AuthService, cookie CookieConfig, loginLimiter *middleware.RateLimiter, loginEncryption *service.LoginEncryption) *AuthHandler {
 	if cookie.Name == "" {
 		cookie = DefaultCookieConfig(false, 7*24*time.Hour)
 	}
-	return &AuthHandler{svc: svc, cookie: cookie, loginLimiter: loginLimiter}
+	return &AuthHandler{svc: svc, cookie: cookie, loginLimiter: loginLimiter, loginEncryption: loginEncryption}
 }
 
 type registerRequest struct {
@@ -94,23 +97,67 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 type loginRequest struct {
-	Identifier string `json:"identifier"`
-	Password   string `json:"password"`
+	Identifier        string `json:"identifier"`
+	ChallengeID       string `json:"challengeId"`
+	EncryptedPassword string `json:"encryptedPassword"`
+}
+
+// bindLoginJSON rejects legacy plaintext, mixed and oversized bodies without
+// reflecting decoder errors or credential values into responses/logs.
+func bindLoginJSON(c *gin.Context, target any) bool {
+	c.Header("Cache-Control", "no-store")
+	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		response.Fail(c, apperr.New(apperr.CodeBadRequest, ""))
+		return false
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		response.Fail(c, apperr.New(apperr.CodeBadRequest, ""))
+		return false
+	}
+	return true
+}
+
+func (h *AuthHandler) LoginChallenge(c *gin.Context) {
+	var req struct {
+		Identifier string `json:"identifier"`
+	}
+	if !bindLoginJSON(c, &req) {
+		return
+	}
+	if h.loginEncryption == nil {
+		response.Fail(c, apperr.New(apperr.CodeServiceUnavailable, ""))
+		return
+	}
+	challenge, err := h.loginEncryption.Issue(c.Request.Context(), req.Identifier)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, challenge)
 }
 
 // Login 处理 POST /api/v1/auth/login。
 func (h *AuthHandler) Login(c *gin.Context) {
-	c.Header("Cache-Control", "no-store")
 	var req loginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, apperr.Wrap(apperr.CodeBadRequest, err))
+	if !bindLoginJSON(c, &req) {
 		return
 	}
 	if !h.allowLoginAttempt(c, req.Identifier) {
 		return
 	}
+	if h.loginEncryption == nil {
+		response.Fail(c, apperr.New(apperr.CodeServiceUnavailable, ""))
+		return
+	}
+	password, err := h.loginEncryption.Decrypt(c.Request.Context(), req.Identifier, req.ChallengeID, req.EncryptedPassword)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
 	result, err := h.svc.Login(c.Request.Context(), service.LoginInput{
-		Identifier: req.Identifier, Password: req.Password,
+		Identifier: req.Identifier, Password: password,
 		ClientIP: c.ClientIP(), Meta: h.sessionMeta(c),
 	})
 	if err != nil {
