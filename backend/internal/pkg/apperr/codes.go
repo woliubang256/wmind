@@ -10,12 +10,13 @@ type Code string
 
 // 一期错误码。与 docs/04-后端设计与API规范.md §6 的错误码表一一对应。
 const (
-	CodeBadRequest           Code = "BAD_REQUEST"
-	CodeBackupBusy           Code = "BACKUP_BUSY"
-	CodeBackupConfigInvalid  Code = "BACKUP_CONFIG_INVALID"
-	CodeBackupRemoteFailed   Code = "BACKUP_REMOTE_FAILED"
-	CodeBackupArchiveInvalid Code = "BACKUP_ARCHIVE_INVALID"
-	CodeBackupStageInvalid   Code = "BACKUP_STAGE_INVALID"
+	CodeAuthLoginChallengeInvalid Code = "AUTH_LOGIN_CHALLENGE_INVALID"
+	CodeBadRequest                Code = "BAD_REQUEST"
+	CodeBackupBusy                Code = "BACKUP_BUSY"
+	CodeBackupConfigInvalid       Code = "BACKUP_CONFIG_INVALID"
+	CodeBackupRemoteFailed        Code = "BACKUP_REMOTE_FAILED"
+	CodeBackupArchiveInvalid      Code = "BACKUP_ARCHIVE_INVALID"
+	CodeBackupStageInvalid        Code = "BACKUP_STAGE_INVALID"
 
 	CodeAuthTwoFactorInvalid   Code = "AUTH_2FA_INVALID"
 	CodeAuthTwoFactorExpired   Code = "AUTH_2FA_EXPIRED"
@@ -91,15 +92,16 @@ type spec struct {
 }
 
 var registry = map[Code]spec{
-	CodeBackupBusy:           {http.StatusConflict, "备份或恢复任务正在执行，请稍后重试"},
-	CodeBackupConfigInvalid:  {http.StatusUnprocessableEntity, "备份配置无效，请检查 Cron、时区和存储配置"},
-	CodeBackupRemoteFailed:   {http.StatusBadGateway, "存储连接测试失败，请检查地址、凭据与写入/删除权限"},
-	CodeBackupArchiveInvalid: {http.StatusUnprocessableEntity, "备份包损坏，或格式、数据库版本、加密密钥不兼容"},
-	CodeBackupStageInvalid:   {http.StatusConflict, "恢复文件已过期或不可用，请重新上传"},
-	CodeBadRequest:           {http.StatusBadRequest, "请求体格式错误"},
-	CodeAuthTwoFactorInvalid: {http.StatusUnprocessableEntity, "验证码无效、已使用或已过期"},
-	CodeAuthTwoFactorExpired: {http.StatusUnprocessableEntity, "验证已过期，请重新开始"},
-	CodeAuthTwoFactorState:   {http.StatusConflict, "双因素认证状态已改变，请刷新后重试"},
+	CodeAuthLoginChallengeInvalid: {http.StatusUnprocessableEntity, "登录验证已失效，请重试"},
+	CodeBackupBusy:                {http.StatusConflict, "备份或恢复任务正在执行，请稍后重试"},
+	CodeBackupConfigInvalid:       {http.StatusUnprocessableEntity, "备份配置无效，请检查 Cron、时区和存储配置"},
+	CodeBackupRemoteFailed:        {http.StatusBadGateway, "存储连接测试失败，请检查地址、凭据与写入/删除权限"},
+	CodeBackupArchiveInvalid:      {http.StatusUnprocessableEntity, "备份包损坏，或格式、数据库版本、加密密钥不兼容"},
+	CodeBackupStageInvalid:        {http.StatusConflict, "恢复文件已过期或不可用，请重新上传"},
+	CodeBadRequest:                {http.StatusBadRequest, "请求体格式错误"},
+	CodeAuthTwoFactorInvalid:      {http.StatusUnprocessableEntity, "验证码无效、已使用或已过期"},
+	CodeAuthTwoFactorExpired:      {http.StatusUnprocessableEntity, "验证已过期，请重新开始"},
+	CodeAuthTwoFactorState:        {http.StatusConflict, "双因素认证状态已改变，请刷新后重试"},
 
 	CodeAuthInvalidCredentials: {http.StatusUnauthorized, "账号或密码错误"},
 	CodeAuthTokenExpired:       {http.StatusUnauthorized, "登录状态已过期"},
