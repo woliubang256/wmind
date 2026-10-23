@@ -171,7 +171,7 @@ export function SummariesLayer({
             role={interactive ? "treeitem" : undefined} aria-level={interactive ? 1 : undefined}
             aria-selected={interactive ? selected : undefined} aria-label={interactive ? summary.title : undefined}
             className={interactive ? "cursor-pointer" : undefined}>
-            {/* 括号：从被概要范围的右缘上下两端收进来，再连到概要节点。 */}
+            {/* 独立圆弧括号与节点留白，只在中点连接概要文字。 */}
             <path
               d={summary.brace}
               fill="none"

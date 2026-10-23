@@ -17,7 +17,7 @@
  * 关系线是两点之间的一段弧。谁都没有自己的坐标系。
  */
 
-import { collectBoundaries, collectSummaries } from '../model/traverse';
+import { collectBoundaries, collectSummaries, walkSheet } from '../model/traverse';
 import type { Boundary, LineEnd, LineStyle, Relationship, RelationshipRouting, Sheet, Style, Summary, Theme } from '../model/types';
 import { measureText } from './measure';
 import type { ComputedStyle } from '../model/types';
@@ -28,13 +28,17 @@ export const ANNOTATION_METRICS = {
   /** 边界框相对覆盖范围的留白。 */
   boundaryPadding: 16,
   /** 概要节点与被概要范围的间距。 */
-  summaryGap: 26,
+  summaryGap: 44,
+  /** 节点到独立括号、括号到文字的留白。 */
+  braceGap: 16,
+  connectorGap: 12,
+  bracePadding: 4,
   summaryPaddingX: 10,
   summaryPaddingY: 6,
   /** 概要标题的最大宽度，超过就折行。 */
   summaryMaxWidth: 180,
-  /** 括号两端的圆角半径。 */
-  braceArm: 12,
+  /** 圆弧括号的水平宽度。 */
+  braceArm: 16,
   /** 关系线的虚线节奏。 */
   relationshipDash: '5 4',
 } as const;
@@ -46,6 +50,8 @@ export interface SummaryAnnotation {
   title: string;
   lines: string[];
   rect: Rect;
+  /** 括号、短连接段与文字的完整范围，用于父级概要和导出。 */
+  bounds: Rect;
   /** 括号的 SVG `d`：贴着范围外缘，开口朝向被概要的主题。 */
   brace: string;
   /** 从括号中点连到概要节点的横线。 */
@@ -130,23 +136,22 @@ export function unionRect(rects: readonly Rect[], pad = 0): Rect | null {
 }
 
 /**
- * 括号路径（开口朝左的 `]`）。
- *
- * 上端从被概要范围的右缘横着出来，拐弯后沿竖线走到下端，再拐回右缘。
- * `arm` 取 `min(braceArm, 高度/2)`：范围只有一个节点时高度很小，硬画 12px
- * 的圆角会让两端叠在一起，看起来像一团。
+ * 独立的半椭圆括号，开口朝内容；两端不接触任何节点。
  */
 export function bracePath(rect: Rect, arm = ANNOTATION_METRICS.braceArm, side: 'left' | 'right' = 'right'): string {
   const x = side === 'left' ? rect.x : rect.x + rect.width;
-  const bx = x + (side === 'left' ? -1 : 1) * ANNOTATION_METRICS.summaryGap / 2;
-  const top = rect.y;
-  const bottom = rect.y + rect.height;
-  const radius = Math.min(arm, rect.height / 2);
+  const direction = side === 'left' ? -1 : 1;
+  const near = x + direction * ANNOTATION_METRICS.braceGap;
+  const far = near + direction * arm;
+  const top = rect.y - ANNOTATION_METRICS.bracePadding;
+  const bottom = rect.y + rect.height + ANNOTATION_METRICS.bracePadding;
+  const cy = (top + bottom) / 2;
+  const ry = (bottom - top) / 2;
+  const k = 0.5522847498;
   return [
-    `M ${x} ${top}`,
-    `Q ${bx} ${top} ${bx} ${top + radius}`,
-    `L ${bx} ${bottom - radius}`,
-    `Q ${bx} ${bottom} ${x} ${bottom}`,
+    `M ${near} ${top}`,
+    `C ${near + direction * arm * k} ${top} ${far} ${cy - ry * k} ${far} ${cy}`,
+    `C ${far} ${cy + ry * k} ${near + direction * arm * k} ${bottom} ${near} ${bottom}`,
   ].join(' ');
 }
 
@@ -214,11 +219,18 @@ function layoutSummary(
   };
   // 每次跳过一个阻挡盒子的外缘，坐标单调向外推进，最多处理全部障碍一次。
   const gap = 12;
-  const obstacles = occupied.filter((box) => rect.y < box.y + box.height + gap && rect.y + rect.height + gap > box.y);
+  const top = Math.min(range.y - ANNOTATION_METRICS.bracePadding, rect.y);
+  const bottom = Math.max(range.y + range.height + ANNOTATION_METRICS.bracePadding, rect.y + rect.height);
+  const obstacles = occupied.filter((box) => top < box.y + box.height + gap && bottom + gap > box.y);
   obstacles.sort((a, b) => side === 'left' ? b.x + b.width - a.x - a.width : a.x - b.x);
   for (const box of obstacles) {
-    if (rect.x < box.x + box.width + gap && rect.x + rect.width + gap > box.x) {
-      rect.x = side === 'left' ? box.x - gap - rect.width : box.x + box.width + gap;
+    const near = side === 'left' ? rect.x + rect.width + ANNOTATION_METRICS.connectorGap + ANNOTATION_METRICS.braceArm
+      : rect.x - ANNOTATION_METRICS.connectorGap - ANNOTATION_METRICS.braceArm;
+    const left = side === 'left' ? rect.x : near;
+    const right = side === 'left' ? near : rect.x + rect.width;
+    if (left < box.x + box.width + gap && right + gap > box.x) {
+      const distance = gap + ANNOTATION_METRICS.connectorGap + ANNOTATION_METRICS.braceArm;
+      rect.x = side === 'left' ? box.x - distance - rect.width : box.x + box.width + distance;
     }
   }
   return {
@@ -336,12 +348,36 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
   const summary: SummaryStyle = summaryStyle(theme);
 
   const summaries: SummaryAnnotation[] = [];
-  for (const item of collectSummaries(sheet)) {
-    const rects = rectsOf(layout, item.range);
+  const paths = new Map<string, readonly string[]>();
+  walkSheet(sheet, (topic, context) => {
+    if (!layout.boxes.has(topic.id)) return false;
+    paths.set(topic.id, context.path);
+  });
+  const candidates = collectSummaries(sheet).map((item, order) => {
+    const selected = new Set(item.range);
+    const covered = new Set([...paths].filter(([, path]) => path.some((id) => selected.has(id))).map(([id]) => id));
+    return { item, order, covered };
+  });
+  const placedRanges = new Map<string, ReadonlySet<string>>();
+  // 严格子集先放，父级才能包住下级；对外保留文档顺序。
+  for (const { item, covered } of [...candidates].sort((a, b) => a.covered.size - b.covered.size || a.order - b.order)) {
+    const inner = summaries.filter((entry) => {
+      const child = placedRanges.get(entry.id)!;
+      return child.size < covered.size && [...child].every((id) => covered.has(id));
+    });
+    const rects = [...rectsOf(layout, [...covered]), ...inner.map((entry) => entry.bounds)];
     const range = unionRect(rects);
     if (range === null) continue;
     const side = item.range.filter((id) => layout.boxes.has(id)).every((id) => layout.boxes.get(id)!.side === 'left') ? 'left' : 'right';
-    const placed = layoutSummary(item, range, summary, side, [...layout.boxes.values(), ...summaries.map((entry) => entry.rect)]);
+    const placed = layoutSummary(item, range, summary, side, [...layout.boxes.values(), ...summaries.map((entry) => entry.bounds)]);
+    const direction = side === 'left' ? -1 : 1;
+    const textEdge = placed.rect.x + (side === 'left' ? placed.rect.width : 0);
+    const fromX = textEdge - direction * ANNOTATION_METRICS.connectorGap;
+    const shift = fromX - (side === 'left' ? range.x : range.x + range.width) - direction * (ANNOTATION_METRICS.braceGap + ANNOTATION_METRICS.braceArm);
+    const braceRange = { ...range, x: range.x + shift };
+    const braceBounds = { x: Math.min(fromX, fromX - direction * ANNOTATION_METRICS.braceArm),
+      y: range.y - ANNOTATION_METRICS.bracePadding, width: ANNOTATION_METRICS.braceArm,
+      height: range.height + ANNOTATION_METRICS.bracePadding * 2 };
     summaries.push({
       id: item.id,
       topicId: item.topicId,
@@ -349,14 +385,18 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
       title: item.title,
       lines: placed.lines,
       rect: placed.rect,
-      brace: bracePath(range, ANNOTATION_METRICS.braceArm, side),
+      bounds: unionRect([placed.rect, braceBounds], summary.borderWidth / 2)!,
+      brace: bracePath(braceRange, ANNOTATION_METRICS.braceArm, side),
       connector: {
-        from: { x: side === 'left' ? range.x - ANNOTATION_METRICS.summaryGap / 2 : range.x + range.width + ANNOTATION_METRICS.summaryGap / 2, y: range.y + range.height / 2 },
+        from: { x: fromX, y: range.y + range.height / 2 },
         to: { x: placed.rect.x + (side === 'left' ? placed.rect.width : 0), y: placed.rect.y + placed.rect.height / 2 },
       },
       style: summary,
     });
+    placedRanges.set(item.id, covered);
   }
+  const order = new Map(candidates.map((entry) => [entry.item.id, entry.order]));
+  summaries.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
 
   const boundaries: BoundaryAnnotation[] = [];
   for (const boundary of collectBoundaries(sheet)) {
@@ -411,7 +451,7 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
   // 联系的曲线、箭头与标题也可能越过主题范围，导出和适应视野必须计算它们。
   const bounds = unionRect([
     ...boundaries.map((item) => item.rect),
-    ...summaries.map((item) => item.rect),
+    ...summaries.map((item) => item.bounds),
     ...relationships.map((item) => item.bounds),
   ]);
 

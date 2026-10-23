@@ -46,21 +46,25 @@ describe('unionRect', () => {
 });
 
 describe('bracePath', () => {
-  it('开口朝左：两端贴住范围右缘，竖线在右侧 gap/2 处', () => {
+  it('圆弧括号与节点保留间距，不使用中间直竖线', () => {
     const d = bracePath({ x: 100, y: 50, width: 80, height: 60 });
-    const x = 180;
-    const bx = x + ANNOTATION_METRICS.summaryGap / 2;
-    expect(d.startsWith(`M ${x} 50`)).toBe(true);
-    expect(d).toContain(`Q ${bx} 50`);
-    expect(d).toContain(`L ${bx} ${110 - 12}`);
+    const coordinates = d.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const xs = coordinates.filter((_, i) => i % 2 === 0);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(196);
+    expect(d.match(/ C /g)).toHaveLength(2);
+    expect(d).not.toMatch(/ [LHVQ] /);
+  });
+  it('开口朝左：两端与范围分离，中点向外鼓出', () => {
+    const d = bracePath({ x: 100, y: 50, width: 80, height: 60 });
+    expect(d.startsWith('M 196 46')).toBe(true);
+    expect(d).toContain('212 80');
   });
 
-  it('范围很矮时圆角半径收到一半高度，两端不会叠成一团', () => {
+  it('很矮范围也保持有限的半椭圆，不反折', () => {
     const d = bracePath({ x: 0, y: 0, width: 40, height: 8 });
-    const bx = 40 + ANNOTATION_METRICS.summaryGap / 2;
-    // radius = min(12, 8/2) = 4
-    expect(d).toContain(`Q ${bx} 0 ${bx} 4`);
-    expect(d).toContain(`Q ${bx} 8`);
+    expect(d.startsWith('M 56 -4')).toBe(true);
+    expect(d).toContain('72 4');
+    expect(d.endsWith('56 12')).toBe(true);
   });
 });
 
@@ -88,6 +92,42 @@ describe('relationshipArc', () => {
 });
 
 describe('layoutAnnotations', () => {
+  it.each(['logic-right', 'logic-left'] as const)('父主题概要放在完整可见子树外侧：%s', (structure) => {
+    const { sheet, theme } = sheetWith({ structure, summaries: [summary({ topicId: 'root', range: ['a'] })] });
+    const layout = layoutMindmap({ sheet, theme });
+    const item = layoutAnnotations(sheet, layout, theme).summaries[0]!;
+    const boxes = ['a', 'a1', 'a2'].map((id) => layout.boxes.get(id)!);
+    const edge = structure === 'logic-left' ? Math.min(...boxes.map((box) => box.x)) : Math.max(...boxes.map((box) => box.x + box.width));
+    const xs = item.brace.match(/-?\d+(?:\.\d+)?/g)!.map(Number).filter((_, i) => i % 2 === 0);
+    if (structure === 'logic-left') {
+      expect(Math.max(...xs)).toBeLessThanOrEqual(edge - 16);
+      expect(item.connector.from.x).toBeLessThan(edge - 16);
+    } else {
+      expect(Math.min(...xs)).toBeGreaterThanOrEqual(edge + 16);
+      expect(item.connector.from.x).toBeGreaterThan(edge + 16);
+    }
+  });
+  it('父级概要包含下级概要，几何不依赖创建顺序', () => {
+    const outer = summary({ id: 'outer', topicId: 'root', range: ['a'] });
+    const inner = summary({ id: 'inner', title: '下级概要' });
+    const { sheet, theme } = sheetWith({ structure: 'logic-right', summaries: [outer, inner] });
+    const layout = layoutMindmap({ sheet, theme });
+    const first = layoutAnnotations(sheet, layout, theme).summaries;
+    const parent = first.find((item) => item.id === 'outer')!;
+    const child = first.find((item) => item.id === 'inner')!;
+    expect(parent.connector.from.x).toBeGreaterThanOrEqual(child.rect.x + child.rect.width + 16);
+    const reverse = layoutAnnotations({ ...sheet, summaries: [inner, outer] }, layout, theme).summaries;
+    expect(reverse.find((item) => item.id === 'outer')).toEqual(parent);
+    expect(reverse.find((item) => item.id === 'inner')).toEqual(child);
+    expect(first.map((item) => item.id)).toEqual(['outer', 'inner']);
+  });
+  it('折叠后概要收回到可见父主题外侧，展开后覆盖后代', () => {
+    const { sheet, theme } = sheetWith({ structure: 'logic-right', summaries: [summary({ range: ['a'] })] });
+    const expanded = layoutAnnotations(sheet, layoutMindmap({ sheet, theme }), theme).summaries[0]!;
+    sheet.rootTopic.children.attached[0]!.collapsed = true;
+    const collapsed = layoutAnnotations(sheet, layoutMindmap({ sheet, theme }), theme).summaries[0]!;
+    expect(collapsed.connector.from.x).toBeLessThan(expanded.connector.from.x - 30);
+  });
   it('联系可解析概要的可见矩形，概要到主题与概要到概要都生成线条', () => {
     const { sheet, theme } = sheetWith({ summaries: [summary(), summary({ id: 's2', topicId: 'b', range: ['b1'] })],
       relationships: [
@@ -245,8 +285,11 @@ describe('layoutAnnotations', () => {
 
     expect(withoutSummary.bounds).toBeNull();
     const item = withSummary.summaries[0]!;
-    // 只有概要这一条附属结构时，包围盒就是它自己的矩形。
-    expect(withSummary.bounds!.x + withSummary.bounds!.width).toBeCloseTo(item.rect.x + item.rect.width, 5);
+    // 范围包含括号和描边，而不只是概要文字框。
+    expect(withSummary.bounds).toEqual(item.bounds);
+    expect(item.bounds.x).toBeLessThan(item.connector.from.x);
+    expect(item.bounds.y).toBeLessThan(item.rect.y);
+    expect(item.bounds.x + item.bounds.width).toBeGreaterThan(item.rect.x + item.rect.width);
     // 而且它确实比最右侧的节点还要靠右——否则这个包围盒没有意义。
     const rightmostBox = Math.max(...[...layout.boxes.values()].map((box) => box.x + box.width));
     expect(item.rect.x + item.rect.width).toBeGreaterThan(rightmostBox);

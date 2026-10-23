@@ -4,8 +4,8 @@ import { BASE, api, check, ensureUser, launchBrowser, makeUser, newPage, run, su
 run(async () => {
   const user = makeUser('sumend'); const token = await ensureUser(user); const title = '概要端点验收';
   const created = await api('/maps', { method: 'POST', token, body: { title, document: { format: 'wmind', formatVersion: '1.0', title,
-    sheets: [{ id: 'sh', title: '画布', structure: 'mindmap', rootTopic: { id: 'root', title, children: { attached: [{ id: 'a', title: '主题甲' }, { id: 'b', title: '主题乙' }] } },
-      summaries: [{ id: 's1', topicId: 'root', range: ['a'], title: '概要甲', style: null }, { id: 's2', topicId: 'root', range: ['b'], title: '概要乙', style: null }] }] } } });
+    sheets: [{ id: 'sh', title: '画布', structure: 'logic-right', rootTopic: { id: 'root', title, children: { attached: [{ id: 'a', title: '主题甲', children: { attached: [{ id: 'a1', title: '完整可见后代' }] } }, { id: 'b', title: '主题乙' }] } },
+      summaries: [{ id: 'outer', topicId: 'root', range: ['a', 'b'], title: '父级概要', style: null }, { id: 's1', topicId: 'root', range: ['a'], title: '概要甲', style: null }, { id: 's2', topicId: 'root', range: ['b'], title: '概要乙', style: null }] }] } } });
   const browser = await launchBrowser();
   try {
     const { page, errors } = await newPage(browser); await uiLogin(page, user); await page.goto(`${BASE}/maps/${created.data.uid}`); await waitForCanvas(page);
@@ -13,6 +13,14 @@ run(async () => {
     const node = (id) => page.locator(`g.wmind-topic[data-topic-id="${id}"]`);
     const clickSum = (id, extra = {}) => sum(id).locator('text').first().click(extra);
     const relationship = () => page.locator('[data-relationship-id]');
+    const geometry = await page.evaluate(() => {
+      const bounds = (selector) => { const b = document.querySelector(selector).getBBox(); return { x: b.x, right: b.x + b.width }; };
+      return { child: bounds('[data-topic-id="a1"]'), inner: bounds('[data-summary-id="s1"]'), outer: bounds('[data-summary-id="outer"]'), path: document.querySelector('[data-summary-id="s1"] path').getAttribute('d') };
+    });
+    assert.ok(geometry.inner.x >= geometry.child.right + 15); check('概要留白位于完整可见子树外', true);
+    assert.ok(geometry.outer.x >= geometry.inner.right + 15); check('先创建父级概要也包住下级概要', true);
+    assert.equal((geometry.path.match(/ C /g) || []).length, 2); check('概要使用独立圆弧括号', true);
+    await page.screenshot({ path: '/tmp/wmind-summary-nested.png' });
     await clickSum('s1'); assert.equal(await sum('s1').getAttribute('aria-selected'), 'true');
     await page.getByRole('button', { name: '插入', exact: true }).click(); assert.equal(await page.getByRole('menuitem', { name: '标签', exact: true }).getAttribute('aria-disabled'), 'true'); await page.keyboard.press('Escape'); check('概要直接选中，主题 Insert 不误作用到根', true);
     await node('b').click({ modifiers: ['Shift'] }); await page.getByRole('button', { name: '联系', exact: true }).first().click(); assert.equal(await relationship().count(), 1); check('概要到主题建立联系', true);
