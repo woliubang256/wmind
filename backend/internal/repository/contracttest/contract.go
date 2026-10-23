@@ -22,6 +22,7 @@ import (
 // 用结构体而不是六个位置参数：仓储会随里程碑增加，位置参数每次都要改所有
 // 调用点，而且调用点漏传一个时编译错误只提示「参数不够」。
 type Repos struct {
+	TwoFactor domain.TwoFactorRepo
 	Users     domain.UserRepo
 	Maps      domain.MapRepo
 	Tokens    domain.RefreshTokenRepo
@@ -39,6 +40,58 @@ func Run(t *testing.T, r Repos) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	uid := ulid.Make().String()
 	users, maps, tx := r.Users, r.Maps, r.Tx
+	t.Run("two factor state isolation, revision and rollback", func(t *testing.T) {
+		u, err := users.Create(ctx, domain.CreateUserInput{UID: "mfa" + uid, Username: "mfa" + uid, Email: "mfa" + uid + "@example.test", PasswordHash: "hash", Role: domain.RoleUser, Status: domain.UserStatusActive, Now: now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		empty, err := r.TwoFactor.Get(ctx, u.ID, false)
+		if err != nil || empty.Enabled {
+			t.Fatalf("initial state: %v %v", empty, err)
+		}
+		err = tx.WithTx(ctx, func(ctx context.Context) error {
+			if err := r.TwoFactor.Ensure(ctx, u.ID); err != nil {
+				return err
+			}
+			v, err := r.TwoFactor.Get(ctx, u.ID, true)
+			if err != nil {
+				return err
+			}
+			stale := *v
+			v.Enabled = true
+			v.Secret = "encrypted-only"
+			v.RecoveryHashes = []string{"hash"}
+			if err := r.TwoFactor.Save(ctx, u.ID, v); err != nil {
+				return err
+			}
+			if err := r.TwoFactor.Save(ctx, u.ID, &stale); !errors.Is(err, domain.ErrVersionConflict) {
+				t.Fatalf("stale save: %v", err)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		abort := errors.New("abort")
+		err = tx.WithTx(ctx, func(ctx context.Context) error {
+			v, e := r.TwoFactor.Get(ctx, u.ID, true)
+			if e != nil {
+				return e
+			}
+			v.Enabled = false
+			if e = r.TwoFactor.Save(ctx, u.ID, v); e != nil {
+				return e
+			}
+			return abort
+		})
+		if !errors.Is(err, abort) {
+			t.Fatal(err)
+		}
+		v, err := r.TwoFactor.Get(ctx, u.ID, false)
+		if err != nil || !v.Enabled || v.Revision != 1 || len(v.RecoveryHashes) != 1 {
+			t.Fatalf("rollback state: %v %v", v, err)
+		}
+	})
 
 	t.Run("user CRUD, lookup, filtering, and duplicate mapping", func(t *testing.T) {
 		user, err := users.Create(ctx, domain.CreateUserInput{

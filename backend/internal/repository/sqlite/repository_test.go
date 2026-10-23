@@ -27,5 +27,6 @@ func TestRepositoryContract(t *testing.T) {
 		Shares:    NewShareRepository(db),
 		Templates: NewTemplateRepository(db),
 		Themes:    NewThemeRepository(db),
+		TwoFactor: NewTwoFactorRepository(db),
 	})
 }

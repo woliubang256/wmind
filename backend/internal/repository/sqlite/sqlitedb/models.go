@@ -149,3 +149,9 @@ type UserToken struct {
 	UsedAt    *string
 	CreatedAt string
 }
+
+type UserTwoFactor struct {
+	UserID   int64
+	State    string
+	Revision int64
+}

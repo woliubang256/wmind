@@ -155,3 +155,9 @@ type UserToken struct {
 	UsedAt    pgtype.Timestamptz
 	CreatedAt pgtype.Timestamptz
 }
+
+type UserTwoFactor struct {
+	UserID   int64
+	State    string
+	Revision int64
+}
