@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { UserAvatar } from '@/components/user-avatar';
 import { Input, SelectField, TextField } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
@@ -210,13 +211,7 @@ export function AdminUsersPage() {
                     <tr key={user.uid} className="align-middle transition-colors hover:bg-accent/40">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
-                          {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt="" className="size-9 shrink-0 rounded-xl object-cover ring-1 ring-border" />
-                          ) : (
-                            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-secondary text-secondary-foreground">
-                              <Icon name="user" className="size-4" />
-                            </span>
-                          )}
+                          <UserAvatar user={user} className="size-9 rounded-xl" />
                           <div className="min-w-0">
                             <p className="truncate font-medium">
                               {user.nickname || user.username}

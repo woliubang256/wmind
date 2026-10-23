@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { LocaleSwitcher } from '@/components/locale-switcher';
+import { UserAvatar } from '@/components/user-avatar';
 import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useThemeStore } from './theme-store';
@@ -224,6 +225,7 @@ export function AppLayout() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1">
+            {user ? <UserAvatar user={user} className="mr-1" /> : null}
             <span className="hidden max-w-32 truncate pr-1 text-sm text-muted-foreground lg:inline">
               {user?.nickname || user?.username}
             </span>

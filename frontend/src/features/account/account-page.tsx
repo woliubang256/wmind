@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { UserAvatar } from '@/components/user-avatar';
 import { TextField } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
 import { RadioGroup } from '@/components/ui/radio-group';
@@ -92,13 +93,7 @@ function AvatarCard({ user }: { user: NonNullable<ReturnType<typeof useCurrentUs
   return (
     <Card title={t('account.avatar')} description={t('account.avatarHint')}>
       <div className="flex flex-wrap items-center gap-4">
-        {user.avatarUrl ? (
-          <img src={user.avatarUrl} alt="" className="size-16 rounded-2xl object-cover ring-1 ring-border" />
-        ) : (
-          <span className="grid size-16 place-items-center rounded-2xl bg-secondary text-secondary-foreground">
-            <Icon name="user" className="size-6" />
-          </span>
-        )}
+        <UserAvatar user={user} className="size-16 rounded-2xl text-2xl" />
         <div className="space-y-2">
           <input
             ref={inputRef}

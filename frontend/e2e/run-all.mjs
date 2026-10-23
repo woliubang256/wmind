@@ -21,6 +21,7 @@ const SUITE = [
   ['errors', '错误处理（断网提示）'],
   ['register', '关闭注册'],
   ['locale', '登录页语言切换'],
+  ['avatars', '头像来源优先级 / 上传与回退'],
   ['two-factor', '账户双因素认证'],
   ['templates', '模板选择与管理'],
   ['palettes', '参考色板 / 分类切换 / 旧主题兼容'],
