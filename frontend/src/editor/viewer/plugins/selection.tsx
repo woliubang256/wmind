@@ -31,16 +31,16 @@ export function SelectionPlugin() {
 
       const { selection, setSelection, toggleSelection } = latest.current;
 
-      const node = target.closest('[data-topic-id]');
+      const node = target.closest('[data-topic-id], [data-summary-id]');
       if (node) {
-        const id = node.getAttribute('data-topic-id');
+        const id = node.getAttribute('data-topic-id') ?? node.getAttribute('data-summary-id');
         if (!id) return;
         if (event.shiftKey || event.metaKey || event.ctrlKey) toggleSelection(id);
         // 点在**已选中**的节点上且没有修饰键时保持选区不动。
         // 多选之后要能把这一组一起拖走，而 pointerdown 就把选区收敛成一个
         // 的话，拖拽插件拿到的永远只有一个节点。收敛由拖拽插件在
         // 「没越过阈值 = 一次点击」时做。
-        else if (!selection.has(id)) setSelection([id]);
+        else if (!selection.has(id) || node.hasAttribute('data-summary-id')) setSelection([id]);
         return;
       }
 

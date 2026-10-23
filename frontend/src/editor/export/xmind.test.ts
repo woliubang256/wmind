@@ -98,6 +98,15 @@ describe('往返：内容与层级', () => {
     expect(sheet.rootTopic.children.attached.map((t) => t.id)).toEqual(['a', 'b']);
   });
 
+  it('概要联系在 XMind 往返后仍保留端点身份', () => {
+    const doc = fixture();
+    doc.sheets[0]!.summaries = [{ id: 'sum-link', topicId: 'root', range: ['a', 'b'], title: '概要', style: null }];
+    doc.sheets[0]!.relationships = [{ id: 'rel-sum', end1Id: 'sum-link', end2Id: 'a', title: '', style: null }];
+    const { sheet } = exportThenImport(doc);
+    expect(sheet.relationships).toHaveLength(1);
+    expect(sheet.relationships[0]!.end1Id).toBe('sum-link');
+  });
+
   it('备注、标签、标记、链接、折叠都带过去', () => {
     const doc = fixture();
     const a = doc.sheets[0]!.rootTopic.children.attached[0]!;

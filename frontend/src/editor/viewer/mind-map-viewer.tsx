@@ -319,6 +319,7 @@ export function MindMapViewer({
   const editingBox = editingId ? layout.boxes.get(editingId) : undefined;
   const editingStyle = editingId ? layout.styles.get(editingId) : undefined;
   const editingSize = editingId ? layout.sizes.get(editingId) : undefined;
+  const editingSummary = annotations.summaries.find((item) => item.id === editingId);
   const editingRelationship = annotations.relationships.find((item) => item.id === editingRelationshipId);
 
   /*
@@ -378,7 +379,7 @@ export function MindMapViewer({
 
             <RelationshipsLayer annotations={annotations} selectedId={selectedAnnotationId} interactive={!readOnly && Boolean(onSelectRelationship)} interactiveLabel={t('editor.annotation.relationship')} />
 
-            <SummariesLayer annotations={annotations} selectedId={selectedAnnotationId} />
+            <SummariesLayer annotations={annotations} selectedId={selectedAnnotationId} selection={selection} interactive={!readOnly} />
 
             <TopicsLayer
               layout={layout}
@@ -405,6 +406,10 @@ export function MindMapViewer({
               setEditingRelationshipId(null);
             }} />
         ) : null}
+
+        {!readOnly && editingSummary && onCommitTitle ? <RelationshipEditor key={editingSummary.id} title={editingSummary.title}
+          label={{ x: editingSummary.rect.x + editingSummary.rect.width / 2, y: editingSummary.rect.y + editingSummary.rect.height / 2 }} viewport={viewport}
+          onFinish={(value, restoreFocus) => { if (value !== null) onCommitTitle(editingSummary.id, value, { restoreFocus }); else cancelEdit(); }} /> : null}
 
         {!readOnly && editingBox && editingStyle && onCommitTitle ? (
           <EditingOverlay

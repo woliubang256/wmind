@@ -168,7 +168,7 @@ export function resolveDrop(
 
 /** 框选：返回与矩形相交的节点 id。 */
 export function boxesInRect(
-  boxes: ReadonlyMap<string, NodeBox>,
+  boxes: ReadonlyMap<string, { id: string; x: number; y: number; width: number; height: number }>,
   rect: { x: number; y: number; width: number; height: number },
 ): string[] {
   const left = Math.min(rect.x, rect.x + rect.width);

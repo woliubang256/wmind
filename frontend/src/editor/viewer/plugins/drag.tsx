@@ -126,7 +126,7 @@ export function DragPlugin() {
 
       // 拖动已选中的节点时带上整个选区：多选拖拽是基本操作，
       // 否则用户得一个一个拖。
-      const ids = selection.has(id) ? [...selection] : [id];
+      const ids = selection.has(id) ? [...selection].filter((item) => latest.current.layout.boxes.has(item)) : [id];
       session.current = {
         ids,
         anchorId: id,

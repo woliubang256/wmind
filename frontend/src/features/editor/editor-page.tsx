@@ -29,7 +29,7 @@ import { ToolbarButton } from './toolbar-button';
 import { InsertTopicMenu } from './insert-topic-menu';
 import { Icon } from '@/components/ui/icon';
 import { Select } from '@/components/ui/select';
-import { countSheetNodes, findTopicInSheet, sheetById } from '@/editor/model/traverse';
+import { collectSummaries, countSheetNodes, findTopicInSheet, sheetById } from '@/editor/model/traverse';
 import { newSheetId } from '@/editor/model/ids';
 import { parseDocument } from '@/editor/model/validate';
 import { createEditorStore } from '@/editor/store/editor-store';
@@ -376,7 +376,11 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     const infos: SelectedTopicInfo[] = [];
     for (const id of selection) {
       const found = findTopicInSheet(sheet, id);
-      if (!found) continue; // 已删除但还没从选中里清掉的 id
+      if (!found) {
+        const summary = collectSummaries(sheet).find((item) => item.id === id);
+        if (summary) infos.push({ title: summary.title, level: 1, childCount: 0, collapsed: false });
+        continue;
+      }
       infos.push({
         title: found.topic.title.trim() || t('editor.a11y.untitled'),
         level: found.depth + 1,
@@ -435,7 +439,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     [store],
   );
 
-  const summaryTarget = useMemo(() => getSummaryTarget(sheet, selection), [sheet, selection]);
+  const summaryTarget = useMemo(() => selection.every((id) => findTopicInSheet(sheet, id)) ? getSummaryTarget(sheet, selection) : null, [sheet, selection]);
 
   const addSummary = useCallback(() => {
     if (summaryTarget === null) return;
@@ -631,7 +635,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
       const state = store.getState();
       const current = sheetById(state.doc, state.sheetId);
       const isCoverTopic = id === current.rootTopic.id && current.id === state.doc.sheets[0]?.id;
-      state.dispatch(isCoverTopic ? changeTitleCommand(title) : renameTopicCommand(id, title));
+      state.dispatch(collectSummaries(current).some((item) => item.id === id) ? renameAnnotationCommand('summary', id, title) : isCoverTopic ? changeTitleCommand(title) : renameTopicCommand(id, title));
     },
     [store],
   );
@@ -849,7 +853,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               size="icon"
               aria-label={t('editor.annotation.boundary')}
               hint={t('editor.hint.boundary')} disabledReason={t('editor.hint.boundarySelection')}
-              disabled={selection.length === 0}
+              disabled={selection.length === 0 || selection.some((id) => !layout.boxes.has(id))}
               onClick={addBoundary}
             >
               <Icon name="boundary" className="size-4" />
@@ -1062,7 +1066,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                 editingId={preview ? null : editingId}
                 selectedAnnotationId={preview ? null : activeAnnotation?.id ?? null}
                 ariaLabel={doc.title}
-                onSelectionChange={(ids) => { store.getState().select(ids); setActiveAnnotation(null); }}
+                onSelectionChange={(ids) => { store.getState().select(ids);
+                  const summary = ids.length === 1 && collectSummaries(sheet).find((item) => item.id === ids[0]);
+                  setActiveAnnotation(summary ? { kind: 'summary', id: summary.id } : null);
+                }}
                 onSelectRelationship={(id) => {
                   store.getState().select([]);
                   store.getState().setEditing(null);

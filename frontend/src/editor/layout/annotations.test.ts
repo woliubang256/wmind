@@ -88,6 +88,16 @@ describe('relationshipArc', () => {
 });
 
 describe('layoutAnnotations', () => {
+  it('联系可解析概要的可见矩形，概要到主题与概要到概要都生成线条', () => {
+    const { sheet, theme } = sheetWith({ summaries: [summary(), summary({ id: 's2', topicId: 'b', range: ['b1'] })],
+      relationships: [
+        { id: 'r1', end1Id: 's1', end2Id: 'b1', title: '', style: null },
+        { id: 'r2', end1Id: 's1', end2Id: 's2', title: '', style: null },
+      ] });
+    const result = layoutAnnotations(sheet, layoutMindmap({ sheet, theme }), theme);
+    expect(result.relationships).toHaveLength(2);
+    expect(result.relationships.every((item) => !item.path.includes('NaN'))).toBe(true);
+  });
   it('控制柄落在主题中心时端点仍在边缘，箭头不藏进主题', () => {
     const { sheet, theme } = sheetWith({ relationships: [{ id: 'r', end1Id: 'a1', end2Id: 'b1', title: '', style: { lineStyle: 'curve' },
       routing: { start: { x: 0, y: 0 }, end: { x: 0, y: 0 } } }] });

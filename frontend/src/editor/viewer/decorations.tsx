@@ -15,6 +15,7 @@
 
 import type { AnnotationLayout, SummaryAnnotation } from '../layout/annotations';
 import type { LineEnd } from '../model/types';
+import { topicElementId } from './a11y-ids';
 import type { Point } from '../layout/types';
 
 /** 选中态的高亮色。用 `currentColor` 拿不到主题变量，这里取一个中性蓝。 */
@@ -141,17 +142,24 @@ function RelationshipEnd({ kind, point, angle, color, width, end }: {
 export function SummariesLayer({
   annotations,
   selectedId = null,
+  selection = new Set<string>(),
+  interactive = false,
 }: {
   annotations: AnnotationLayout;
   selectedId?: string | null;
+  selection?: ReadonlySet<string>;
+  interactive?: boolean;
 }) {
   return (
     <g className="layer-summaries">
       {annotations.summaries.map((summary: SummaryAnnotation) => {
-        const selected = selectedId === summary.id;
+        const selected = selectedId === summary.id || selection.has(summary.id);
         const stroke = selected ? SELECTED : summary.style.borderColor;
         return (
-          <g key={summary.id} data-summary-id={summary.id}>
+          <g key={summary.id} data-summary-id={summary.id} id={interactive ? topicElementId(summary.id) : undefined}
+            role={interactive ? "treeitem" : undefined} aria-level={interactive ? 1 : undefined}
+            aria-selected={interactive ? selected : undefined} aria-label={interactive ? summary.title : undefined}
+            className={interactive ? "cursor-pointer" : undefined}>
             {/* 括号：从被概要范围的右缘上下两端收进来，再连到概要节点。 */}
             <path
               d={summary.brace}

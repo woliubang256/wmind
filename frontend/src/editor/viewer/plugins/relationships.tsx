@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { endpointRect } from '../../layout/annotations';
 import type { Point } from '../../layout/types';
 import type { RelationshipRouting } from '../../model/types';
 import { useViewer } from '../viewer-context';
@@ -24,8 +25,8 @@ export function RelationshipsPlugin() {
     const routingAt = (id: string, points: Point[], index: number, point: Point): RelationshipRouting | null => {
       const view = latest.current;
       const relationship = view.sheet.relationships.find((item) => item.id === id);
-      const a = relationship && view.layout.boxes.get(relationship.end1Id);
-      const b = relationship && view.layout.boxes.get(relationship.end2Id);
+      const a = relationship && endpointRect(view.layout, view.annotations.summaries, relationship.end1Id);
+      const b = relationship && endpointRect(view.layout, view.annotations.summaries, relationship.end2Id);
       if (!a || !b) return null;
       const next = points.map((entry, i) => i === index ? point : entry);
       const start = next[0], end = next[1] ?? next[0];

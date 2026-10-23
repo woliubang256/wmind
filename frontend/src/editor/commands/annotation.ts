@@ -139,7 +139,11 @@ export interface AddRelationshipInput {
   title?: string;
 }
 
-/** 新增联系（关系线）。两端必须是两个不同的、存在的主题。 */
+export function relationshipEndpointExists(sheet: Sheet, id: string): boolean {
+  return findTopicInSheet(sheet, id) !== null || collectSummaries(sheet).some((item) => item.id === id);
+}
+
+/** 联系两端可以是主题或概要。 */
 export function addRelationshipCommand(input: AddRelationshipInput): EditorCommand {
   return defineCommand({
     type: 'annotation.addRelationship',
@@ -148,8 +152,8 @@ export function addRelationshipCommand(input: AddRelationshipInput): EditorComma
       const sheet = sheetOf(draft, ctx.sheetId);
       if (sheet === undefined) return;
       if (input.fromId === input.toId) return;
-      if (findTopicInSheet(sheet, input.fromId) === null) return;
-      if (findTopicInSheet(sheet, input.toId) === null) return;
+      if (!relationshipEndpointExists(sheet, input.fromId)) return;
+      if (!relationshipEndpointExists(sheet, input.toId)) return;
       const relationship: Relationship = {
         id: ctx.nextId(),
         end1Id: input.fromId,
@@ -259,6 +263,7 @@ export function removeAnnotationCommand(kind: AnnotationKind, id: string): Edito
         }
         return;
       }
+      sheet.relationships = sheet.relationships.filter((item) => item.end1Id !== id && item.end2Id !== id);
       const index = sheet.summaries.findIndex((item) => item.id === id);
       if (index >= 0) sheet.summaries.splice(index, 1);
       for (const topic of flattenTopics(sheet)) {

@@ -380,8 +380,8 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
 
   const relationships: RelationshipAnnotation[] = [];
   for (const relationship of sheet.relationships) {
-    const from = layout.boxes.get(relationship.end1Id);
-    const to = layout.boxes.get(relationship.end2Id);
+    const from = endpointRect(layout, summaries, relationship.end1Id);
+    const to = endpointRect(layout, summaries, relationship.end2Id);
     if (from === undefined || to === undefined) continue;
     const style = relationshipStyle(theme, relationship.style);
     if (style.lineStyle === 'none') continue;
@@ -419,3 +419,8 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
 }
 
 export type { Boundary, Relationship };
+
+/** 可见端点统一解析，控制柄与正式几何使用同一组矩形。 */
+export function endpointRect(layout: LayoutResult, summaries: readonly SummaryAnnotation[], id: string): Rect | undefined {
+  return layout.boxes.get(id) ?? summaries.find((item) => item.id === id)?.rect;
+}

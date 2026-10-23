@@ -9,6 +9,7 @@
 import { createTopic } from '../model/create';
 import { cloneTopic } from '../model/clone';
 import {
+  collectSummaries,
   countDescendants,
   findTopic,
   isDescendant,
@@ -49,6 +50,9 @@ function collectIds(topic: Topic, out: Set<string> = new Set()): Set<string> {
  * 悬空数据会随着保存写回后端，越积越多。
  */
 function purgeReferences(sheet: Sheet, removed: Set<string>): void {
+  for (const item of collectSummaries(sheet)) {
+    if (removed.has(item.topicId) || item.range.every((id) => removed.has(id))) removed.add(item.id);
+  }
   sheet.relationships = sheet.relationships.filter(
     (r) => !removed.has(r.end1Id) && !removed.has(r.end2Id),
   );
@@ -57,7 +61,7 @@ function purgeReferences(sheet: Sheet, removed: Set<string>): void {
     .filter((b) => b.range.length > 0);
   sheet.summaries = sheet.summaries
     .map((s) => ({ ...s, range: s.range.filter((id) => !removed.has(id)) }))
-    .filter((s) => s.range.length > 0 && !removed.has(s.topicId));
+    .filter((s) => s.range.length > 0 && !removed.has(s.topicId) && !removed.has(s.id));
 
   walkSheet(sheet, (topic) => {
     if (topic.boundaries.length > 0) {
@@ -68,7 +72,7 @@ function purgeReferences(sheet: Sheet, removed: Set<string>): void {
     if (topic.summaries.length > 0) {
       topic.summaries = topic.summaries
         .map((s) => ({ ...s, range: s.range.filter((id) => !removed.has(id)) }))
-        .filter((s) => s.range.length > 0);
+        .filter((s) => s.range.length > 0 && !removed.has(s.id));
     }
   });
 }
@@ -122,12 +126,17 @@ export function removeTopicsCommand(ids: readonly string[]): EditorCommand {
   return defineCommand({
     type: 'topic.remove',
     label: ids.length > 1 ? `删除 ${ids.length} 个主题` : '删除主题',
-    apply(draft): CommandResult | void {
+    apply(draft, ctx): CommandResult | void {
       const removed = new Set<string>();
       let sheet: Sheet | null = null;
       let parentId: string | null = null;
 
+      const activeSheet = draft.sheets.find((item) => item.id === ctx.sheetId);
+      const summariesBefore = activeSheet ? collectSummaries(activeSheet) : [];
       for (const id of ids) {
+        if (activeSheet && collectSummaries(activeSheet).some((item) => item.id === id)) {
+          removed.add(id); sheet = activeSheet; continue;
+        }
         const found = findTopic(draft, id);
         if (!found) continue;
         // 根节点是整个画布的锚，删掉它文档就空了。折叠成「不可删」而不是
@@ -140,6 +149,9 @@ export function removeTopicsCommand(ids: readonly string[]): EditorCommand {
       }
 
       if (removed.size === 0 || !sheet) return;
+      for (const item of summariesBefore) {
+        if (removed.has(item.topicId) || item.range.every((id) => removed.has(id))) removed.add(item.id);
+      }
       purgeReferences(sheet, removed);
       return { select: parentId ? [parentId] : [] };
     },

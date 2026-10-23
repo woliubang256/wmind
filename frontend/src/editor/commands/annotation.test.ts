@@ -122,6 +122,19 @@ describe('addBoundaryCommand', () => {
 });
 
 describe('addRelationshipCommand', () => {
+  it('概要能连接主题与另一条概要，删除概要同时清理联系并可撤销', () => {
+    const store = makeStore();
+    store.getState().dispatch(addSummaryCommand({ topicId: 'a', range: ['a1'], title: '概要甲' }));
+    store.getState().dispatch(addSummaryCommand({ topicId: 'b', range: ['b1'], title: '概要乙' }));
+    const [a, b] = collectSummaries(sheetOf(store));
+    store.getState().dispatch(addRelationshipCommand({ fromId: a!.id, toId: 'b1' }));
+    store.getState().dispatch(addRelationshipCommand({ fromId: a!.id, toId: b!.id }));
+    expect(sheetOf(store).relationships).toHaveLength(2);
+    store.getState().dispatch(removeAnnotationCommand('summary', a!.id));
+    expect(sheetOf(store).relationships).toHaveLength(0);
+    store.getState().undo();
+    expect(sheetOf(store).relationships).toHaveLength(2);
+  });
   it('两端不同且都存在时建立联系', () => {
     const store = makeStore();
     store.getState().dispatch(addRelationshipCommand({ fromId: 'a1', toId: 'b1' }));

@@ -270,8 +270,10 @@ function convertSummary(raw: unknown, state: SheetState, fallbackTopicId: string
   const range = remapRange(node.range, state);
   if (range.length === 0) return null;
   const topicId = state.ids.get(read(node, 'topicId') ?? '') ?? fallbackTopicId;
+  const id = typeof raw.id === 'string' && raw.id !== '' ? raw.id : `sum-${range[0]}`;
+  state.ids.set(id, id);
   return {
-    id: typeof raw.id === 'string' && raw.id !== '' ? raw.id : `sum-${range[0]}`,
+    id,
     topicId,
     range,
     title: textOf(raw.title),
@@ -306,10 +308,6 @@ function convertSheet(
 
   hoistDetached(rootTopic, floating);
 
-  const relationships = asArray(node.relationships)
-    .map((item) => convertRelationship(item, state, ctx))
-    .filter((item): item is Relationship => item !== null);
-
   const boundaries = asArray(node.boundaries)
     .map((item) => convertBoundary(item, state))
     .filter((item): item is Boundary => item !== null);
@@ -317,6 +315,11 @@ function convertSheet(
   const summaries = asArray(node.summaries)
     .map((item) => convertSummary(item, state, rootTopic.id))
     .filter((item): item is Summary => item !== null);
+
+  const relationships = asArray(node.relationships)
+    .map((item) => convertRelationship(item, state, ctx))
+    .filter((item): item is Relationship => item !== null);
+
 
   if (state.skippedImages > 0) ctx.warn('image-skipped', { count: state.skippedImages });
   if (state.unknownMarkers > 0) ctx.warn('marker-unknown', { count: state.unknownMarkers });

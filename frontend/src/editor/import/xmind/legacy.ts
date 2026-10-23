@@ -419,8 +419,11 @@ function convertSummaries(
     if (range.length === 0) continue;
     const own = childNamed(raw, 'topic');
     const topicId = state.ids.get(attr(raw, 'topic-id') ?? '') ?? fallbackTopicId;
+    const id = attr(raw, 'id') ?? `sum-${range[0]}`;
+    state.ids.set(id, id);
+    if (own && attr(own, 'id')) state.ids.set(attr(own, 'id')!, id);
     out.push({
-      id: attr(raw, 'id') ?? `sum-${range[0]}`,
+      id,
       topicId,
       range,
       // 概要的标题就是它自带那个 topic 的 `<title>`。

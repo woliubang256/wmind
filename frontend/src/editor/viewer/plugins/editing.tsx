@@ -22,9 +22,9 @@ export function EditingPlugin() {
 
     const onDoubleClick = (event: MouseEvent) => {
       const target = event.target as Element | null;
-      const node = target?.closest('[data-topic-id]');
+      const node = target?.closest('[data-topic-id], [data-summary-id]');
       if (!node) return;
-      const id = node.getAttribute('data-topic-id');
+      const id = node.getAttribute('data-topic-id') ?? node.getAttribute('data-summary-id');
       if (!id) return;
       event.preventDefault();
       latest.current.beginEdit(id);

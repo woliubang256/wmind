@@ -34,7 +34,7 @@ export function MarqueePlugin() {
       if (event.button !== 0) return;
       const target = event.target as Element | null;
       // 按在节点或折叠按钮上，交给选中 / 拖拽插件。
-      if (!target || target.closest('[data-topic-id]') || target.closest('[data-collapse-toggle]')) {
+      if (!target || target.closest('[data-topic-id], [data-summary-id], [data-relationship-id]') || target.closest('[data-collapse-toggle]')) {
         return;
       }
       // 空格拖拽是平移，不画选框。
@@ -62,13 +62,13 @@ export function MarqueePlugin() {
       start.current = null;
       setRect(null);
       if (!origin) return;
-      const { layout, toWorld, setSelection } = latest.current;
+      const { layout, annotations, toWorld, setSelection } = latest.current;
       const point = toWorld(event.clientX, event.clientY);
       const width = point.x - origin.x;
       const height = point.y - origin.y;
       // 位移太小 = 一次空白处点击，SelectionPlugin 已经清空选区，这里不动。
       if (Math.abs(width) < MIN_SIZE && Math.abs(height) < MIN_SIZE) return;
-      setSelection(boxesInRect(layout.boxes, { x: origin.x, y: origin.y, width, height }));
+      setSelection(boxesInRect(new Map([...layout.boxes, ...annotations.summaries.map((item) => [item.id, { id: item.id, ...item.rect }] as const)]), { x: origin.x, y: origin.y, width, height }));
     };
 
     svg.addEventListener('pointerdown', onPointerDown);
