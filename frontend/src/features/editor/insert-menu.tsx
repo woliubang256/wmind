@@ -1,13 +1,18 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Icon } from '@/components/ui/icon';
+import { Icon, type IconName } from '@/components/ui/icon';
 import { placeMenu, type MenuPlacement } from '@/components/ui/select';
 import { ToolbarButton } from './toolbar-button';
 import { insertAvailability, type InsertAction } from './insert-actions';
 
 const MAIN = ['note', 'label', 'todo', 'task', 'link', 'attachment', 'sticker', 'illustration', 'image', 'equation'] as const;
 const LINKS = ['web', 'topic', 'file', 'folder'] as const;
+const ACTION_ICONS: Record<InsertAction | 'link', IconName> = {
+  note: 'note', label: 'tag', todo: 'square-check', task: 'clipboard-list',
+  link: 'link', attachment: 'paperclip', sticker: 'sticker', illustration: 'shapes',
+  image: 'image', equation: 'sigma', web: 'globe', topic: 'waypoints', file: 'file', folder: 'folder',
+};
 
 export function InsertMenu({ topics, selection, onInsert }: { topics: number; selection: number; onInsert(action: InsertAction): void }) {
   const { t } = useTranslation();
@@ -25,10 +30,10 @@ export function InsertMenu({ topics, selection, onInsert }: { topics: number; se
   useLayoutEffect(() => { if (open && placement) menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus(); }, [open, links, !!placement]);
   const items = links ? LINKS : MAIN;
   return <>
-    <ToolbarButton ref={trigger} variant="ghost" size="sm" className="gap-1 px-2" aria-label={t('editor.insert')}
+    <ToolbarButton ref={trigger} variant="ghost" size="icon" className="gap-0.5" aria-label={t('editor.insert')}
       hint={t('editor.hint.insert')} aria-haspopup="menu" aria-expanded={open} onClick={() => open ? close() : setOpen(true)}
       onKeyDown={(event) => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); } }}>
-      <Icon name="plus" className="size-4" /><span>{t('editor.insert')}</span><Icon name="chevron-down" className="size-3" />
+      <Icon name="plus" className="size-4" /><Icon name="chevron-down" className="size-3" />
     </ToolbarButton>
     {open && placement ? createPortal(<div ref={menu} role="menu" aria-label={t(links ? 'editor.content.link' : 'editor.insert')}
       style={{ position: 'fixed', top: placement.top, left: placement.left, width: placement.width, maxHeight: 'min(640px, calc(100vh - 24px))' }}
@@ -50,7 +55,7 @@ export function InsertMenu({ topics, selection, onInsert }: { topics: number; se
           aria-disabled={reason ? true : undefined} title={reason ? t(`editor.content.reason.${reason}`) : t(`editor.content.hint.${action}`)}
           className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left outline-none hover:bg-accent focus:bg-accent aria-disabled:opacity-45"
           onClick={() => { if (reason) return; if (action === 'link') { setLinks(true); return; } close(false); onInsert(action); }}>
-          <span>{t(`editor.content.${action}`)}</span>{action === 'link' ? <Icon name="chevron-right" className="size-4" /> : null}
+          <span className="flex min-w-0 items-center gap-3"><Icon name={ACTION_ICONS[action]} className="size-4 shrink-0 text-muted-foreground" /><span>{t(`editor.content.${action}`)}</span></span>{action === 'link' ? <Icon name="chevron-right" className="size-4" /> : null}
         </button>;
       })}
       {insertAvailability('label', topics, selection) ? <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">{t(`editor.content.reason.${insertAvailability('label', topics, selection)}`)}</p> : null}

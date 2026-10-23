@@ -47,9 +47,39 @@ export type IconName =
   | 'summary'
   | 'boundary'
   | 'relationship'
-  | 'flag';
+  | 'flag'
+  | 'topic-child'
+  | 'mindmap'
+  | 'panel-right-close'
+  | 'panel-right-open'
+  | 'save'
+  | 'note'
+  | 'tag'
+  | 'square-check'
+  | 'clipboard-list'
+  | 'paperclip'
+  | 'sticker'
+  | 'shapes'
+  | 'sigma'
+  | 'file'
+  | 'folder';
 
 const paths: Record<IconName, ReactNode> = {
+  'topic-child': <><rect x="3" y="3" width="8" height="6" rx="1.5"/><path d="M7 9v8h6"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M17 15v4m-2-2h4"/></>,
+  mindmap: <><rect x="8" y="9" width="8" height="6" rx="1.5"/><path d="M12 9V4H5m7 0h7M12 15v5H5m7 0h7"/><circle cx="3" cy="4" r="2"/><circle cx="21" cy="4" r="2"/><circle cx="3" cy="20" r="2"/><circle cx="21" cy="20" r="2"/></>,
+  'panel-right-close': <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18m-7-6 3-3-3-3"/></>,
+  'panel-right-open': <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18m-4-6-3-3 3-3"/></>,
+  save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M7 3v6h10V3M7 21v-8h10v8m-3-6v3"/></>,
+  note: <><path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9Z"/><path d="M14 3v7h7M7 14h10M7 17h7"/></>,
+  tag: <><path d="M20.5 13.5 12 22l-10-10V2h10l8.5 8.5a2.1 2.1 0 0 1 0 3Z"/><circle cx="7" cy="7" r="1.5"/></>,
+  'square-check': <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m7 12 3 3 7-7"/></>,
+  'clipboard-list': <><rect x="5" y="4" width="14" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M10 11h5m-5 5h5M8 11h.01M8 16h.01"/></>,
+  paperclip: <><path d="m21 11-8.5 8.5a6 6 0 0 1-8.5-8.5L13 2a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 0 1-2.8-2.8L15 6"/></>,
+  sticker: <><path d="M21 13V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8Z"/><path d="M13 21v-6a2 2 0 0 1 2-2h6M7 8h.01M13 8h.01m-6 3a3 3 0 0 0 5 0"/></>,
+  shapes: <><path d="m7 3 5 8H2Z"/><circle cx="17" cy="7" r="4"/><rect x="4" y="15" width="7" height="7" rx="1"/><path d="m18 13 4 4-4 4-4-4Z"/></>,
+  sigma: <><path d="M19 4H5l7 8-7 8h14"/></>,
+  file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8m-8 4h6"/></>,
+  folder: <><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 8h18"/></>,
   flag: <><path d="M5 21V3"/><path d="M5 3h14l-3 5 3 5H5"/></>,
   'arrow-right': <><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>,
   clock: <><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>,
