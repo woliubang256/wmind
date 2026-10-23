@@ -402,7 +402,19 @@
     "export.untitledFile": "未命名",
     "export.formatPdf": "PDF",
     "export.descriptionPdf": "单页 PDF，按导图原始比例出页。文字是位图，不可选中——需要可编辑的文字请导出 SVG。",
-    "export.pageSize": "页面 {{width}} × {{height}} mm"
+    "export.pageSize": "页面 {{width}} × {{height}} mm",
+    "hint.noUndo": "没有可撤销的操作",
+    "hint.noRedo": "没有可重做的操作",
+    "hint.addChild": "在当前主题下创建子主题",
+    "hint.delete": "删除所选主题及其子主题",
+    "hint.collapse": "折叠或展开当前主题的子主题",
+    "hint.oneTopic": "请只选中一个主题",
+    "hint.summary": "为所选主题创建概要",
+    "hint.summarySelection": "请先选中需要概括的主题",
+    "hint.boundary": "用边界包围所选主题",
+    "hint.boundarySelection": "请先选中至少一个主题",
+    "hint.relationship": "在两个主题之间建立联系",
+    "hint.relationshipSelection": "请选中两个主题"
   },
   "import": {
     "title": "导入",

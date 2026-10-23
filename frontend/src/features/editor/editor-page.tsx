@@ -25,6 +25,7 @@ import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
+import { ToolbarButton } from './toolbar-button';
 import { Icon } from '@/components/ui/icon';
 import { Select } from '@/components/ui/select';
 import { countSheetNodes, findTopicInSheet, sheetById } from '@/editor/model/traverse';
@@ -759,6 +760,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         <Link
           to="/"
           aria-label={t('editor.back')}
+          title={t('editor.back')}
           className="inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         >
           <Icon name="chevron-left" className="size-4" />
@@ -778,102 +780,102 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         ) : null}
 
         <div className="flex items-center gap-0.5">
-          <Button
+          <ToolbarButton
             variant="ghost"
             size="icon"
-            aria-label={t('editor.undo')}
+            aria-label={t('editor.undo')} shortcut="⌘ / Ctrl + Z" disabledReason={t('editor.hint.noUndo')}
             disabled={pastCount === 0}
             onClick={() => store.getState().undo()}
           >
             <Icon name="undo" className="size-4" />
-          </Button>
-          <Button
+          </ToolbarButton>
+          <ToolbarButton
             variant="ghost"
             size="icon"
-            aria-label={t('editor.redo')}
+            aria-label={t('editor.redo')} shortcut="⌘ / Ctrl + Shift + Z" disabledReason={t('editor.hint.noRedo')}
             disabled={futureCount === 0}
             onClick={() => store.getState().redo()}
           >
             <Icon name="redo" className="size-4" />
-          </Button>
+          </ToolbarButton>
         </div>
 
         {!preview ? (
           <div className="flex items-center gap-0.5">
-            <Button
+            <ToolbarButton
               variant="ghost"
               size="icon"
-              aria-label={t('editor.addChild')}
+              aria-label={t('editor.addChild')} shortcut="Tab" hint={t('editor.hint.addChild')}
               onClick={() => store.getState().dispatch(addChildCommand(activeId))}
             >
               <Icon name="plus" className="size-4" />
-            </Button>
-            <Button
+            </ToolbarButton>
+            <ToolbarButton
               variant="ghost"
               size="icon"
-              aria-label={t('editor.delete')}
+              aria-label={t('editor.delete')} shortcut="Delete" hint={t('editor.hint.delete')} disabledReason={t('editor.emptySelection')}
               disabled={selection.length === 0}
               onClick={() => store.getState().dispatch(removeTopicsCommand(selection))}
             >
               <Icon name="trash" className="size-4" />
-            </Button>
-            <Button
+            </ToolbarButton>
+            <ToolbarButton
               variant="ghost"
               size="icon"
-              aria-label={t('editor.collapse')}
+              aria-label={t('editor.collapse')} shortcut="⌘ / Ctrl + ." hint={t('editor.hint.collapse')} disabledReason={t('editor.hint.oneTopic')}
               disabled={selection.length !== 1}
               onClick={() => store.getState().dispatch(toggleCollapseCommand(selection[0] ?? ''))}
             >
               <Icon name="chevron-right" className="size-4" />
-            </Button>
+            </ToolbarButton>
           </div>
         ) : null}
 
         {!preview ? (
           <div className="flex items-center gap-0.5">
-            <Button
+            <ToolbarButton
               variant="ghost"
               size="icon"
               aria-label={t('editor.annotation.summary')}
-              title={t('editor.annotation.summary')}
+              hint={t('editor.hint.summary')} disabledReason={t('editor.hint.summarySelection')}
               disabled={summaryTarget === null}
               onClick={addSummary}
             >
               <Icon name="summary" className="size-4" />
-            </Button>
-            <Button
+            </ToolbarButton>
+            <ToolbarButton
               variant="ghost"
               size="icon"
               aria-label={t('editor.annotation.boundary')}
-              title={t('editor.annotation.boundary')}
+              hint={t('editor.hint.boundary')} disabledReason={t('editor.hint.boundarySelection')}
               disabled={selection.length === 0}
               onClick={addBoundary}
             >
               <Icon name="boundary" className="size-4" />
-            </Button>
-            <Button
+            </ToolbarButton>
+            <ToolbarButton
               variant="ghost"
               size="icon"
               aria-label={t('editor.annotation.relationship')}
-              title={t('editor.annotation.relationship')}
+              hint={t('editor.hint.relationship')} disabledReason={t('editor.hint.relationshipSelection')}
               disabled={selection.length !== 2}
               onClick={addRelationship}
             >
               <Icon name="relationship" className="size-4" />
-            </Button>
+            </ToolbarButton>
           </div>
         ) : null}
 
         <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon" aria-label={t('editor.zoomOut')} onClick={() => zoomAtCenter(1 / 1.2)}>
+          <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomOut')} onClick={() => zoomAtCenter(1 / 1.2)}>
             <Icon name="zoom-out" className="size-4" />
-          </Button>
-          <Button variant="ghost" size="icon" aria-label={t('editor.zoomIn')} onClick={() => zoomAtCenter(1.2)}>
+          </ToolbarButton>
+          <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomIn')} onClick={() => zoomAtCenter(1.2)}>
             <Icon name="zoom-in" className="size-4" />
-          </Button>
-          <Button variant="ghost" size="icon" aria-label={t('editor.fit')} onClick={fit}>
+          </ToolbarButton>
+          <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.fit')} shortcut="⌘ / Ctrl + 1" onClick={fit}>
             <Icon name="maximize" className="size-4" />
-          </Button>
+          </ToolbarButton>
         </div>
 
         {/* 结构切换。四个选项，用紧凑型自绘下拉，和工具栏其它按钮同一套观感。 */}
@@ -894,7 +896,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         ) : null}
 
         {!preview ? (
-          <Button
+          <ToolbarButton
             variant="ghost"
             size="icon"
             aria-label={panelOpen ? t('editor.panel.hide') : t('editor.panel.show')}
@@ -902,7 +904,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
             onClick={() => setPanelOpen((value) => !value)}
           >
             <Icon name="settings" className="size-4" />
-          </Button>
+          </ToolbarButton>
         ) : null}
 
         {/*
@@ -910,9 +912,9 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           属于写操作；站点关掉用户模板后还留一个必然 403 的按钮没有意义。
         */}
         {!preview && config.userTemplateEnabled ? (
-          <Button variant="ghost" size="icon" aria-label={t('templates.saveAs')} onClick={() => setSaveTemplateOpen(true)}>
+          <ToolbarButton variant="ghost" size="icon" aria-label={t('templates.saveAs')} onClick={() => setSaveTemplateOpen(true)}>
             <Icon name="waypoints" className="size-4" />
-          </Button>
+          </ToolbarButton>
         ) : null}
 
         {/*
@@ -922,17 +924,17 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           工具栏上，等于让设置项看起来没生效。
         */}
         {config.shareEnabled ? (
-          <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
+          <ToolbarButton hint={t('share.action')} variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
             <Icon name="link" className="mr-1.5 size-4" />
             {t('share.action')}
-          </Button>
+          </ToolbarButton>
         ) : null}
 
         {config.exportEnabled ? (
-          <Button variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
+          <ToolbarButton hint={t('editor.exportEntry')} variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
             <Icon name="download" className="mr-1.5 size-4" />
             {t('editor.exportEntry')}
-          </Button>
+          </ToolbarButton>
         ) : null}
 
         {/*
@@ -941,7 +943,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         */}
         {!preview ? (
           <>
-            <Button
+            <ToolbarButton
               variant={view === 'outline' ? 'secondary' : 'ghost'}
               size="icon"
               aria-label={t('editor.outline.toggle')}
@@ -949,28 +951,29 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               onClick={() => setView((value) => (value === 'outline' ? 'canvas' : 'outline'))}
             >
               <Icon name="list" className="size-4" />
-            </Button>
+            </ToolbarButton>
             {view === 'canvas' ? (
-              <Button
+              <ToolbarButton
                 variant="ghost"
                 size="icon"
                 aria-label={t('editor.zen.enter')}
                 onClick={() => setZen(true)}
               >
                 <Icon name="maximize" className="size-4" />
-              </Button>
+              </ToolbarButton>
             ) : null}
           </>
         ) : null}
 
-        <Button
+        <ToolbarButton
+          hint={preview ? t('editor.exitPreview') : t('editor.preview')}
           variant={preview ? 'default' : 'outline'}
           size="sm"
           onClick={() => setPreview((value) => !value)}
         >
           <Icon name="eye" className="mr-1.5 size-4" />
           {preview ? t('editor.exitPreview') : t('editor.preview')}
-        </Button>
+        </ToolbarButton>
       </header>
       )}
 

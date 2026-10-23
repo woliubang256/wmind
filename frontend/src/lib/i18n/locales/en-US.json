@@ -402,7 +402,19 @@
     "export.untitledFile": "untitled",
     "export.formatPdf": "PDF",
     "export.descriptionPdf": "One-page PDF sized to the map. Text is rasterised and cannot be selected — export SVG if you need editable text.",
-    "export.pageSize": "Page {{width}} × {{height}} mm"
+    "export.pageSize": "Page {{width}} × {{height}} mm",
+    "hint.noUndo": "No actions to undo",
+    "hint.noRedo": "No actions to redo",
+    "hint.addChild": "Create a child of the current topic",
+    "hint.delete": "Delete selected topics and their children",
+    "hint.collapse": "Collapse or expand the current topic’s children",
+    "hint.oneTopic": "Select exactly one topic",
+    "hint.summary": "Create a summary of selected topics",
+    "hint.summarySelection": "Select topics to summarize first",
+    "hint.boundary": "Enclose selected topics in a boundary",
+    "hint.boundarySelection": "Select at least one topic first",
+    "hint.relationship": "Connect two topics with a relationship",
+    "hint.relationshipSelection": "Select exactly two topics"
   },
   "import": {
     "title": "Import",

@@ -1,0 +1,30 @@
+# Agent Note: 工具栏操作提示与主题插入菜单
+
+Status: implemented
+
+## Problem
+
+图标按钮缺少可见的操作说明，原有加号只创建子主题，同级主题只能通过键盘发现。
+
+## Decision
+
+工具栏按钮悬停或聚焦时在视口内显示提示，包含用途、已有快捷键，以及当前不可用的原因。不可用按钮保留键盘焦点并用 aria-disabled 阻止执行，提示通过 aria-describedby 关联。提示不参与页面布局，也不被编辑器 overflow 裁剪。
+
+快捷键提示以现有键位表为准：折叠为 ⌘ / Ctrl + .，适应为 ⌘ / Ctrl + 1。操作提示不添加新的键盘动作。
+
+## Related decisions
+
+- [键盘交互](../../implemented/architecture/2026-10-18-wmind-editor-keyboard.md)：复用命令并维护画布焦点。
+- [删除冗余副标题](../../implemented/simplification/2026-10-22-wmind-drop-explanatory-copy.md)：本次提示解释图标动作与不可见的选区规则，不恢复与标题重复的说明。
+
+## Alternatives considered
+
+- 原生 title 无需额外组件，但键盘与触屏不可控，禁用状态说明也无法稳定验收，采用可访问的浮层提示。
+
+## Consequences
+
+- 鼠标与键盘都能发现工具栏用途，禁用操作说明原因且不能执行。
+- 浮层在视口内定位，并通过 Portal 避免被编辑器裁剪。
+- 浏览器回归验证鼠标、聚焦、Esc 与描述关联，生产构建通过。
+- 禁用动作保留焦点，增加了键盘导航停靠点，以便用户发现原因。
+
