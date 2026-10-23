@@ -139,3 +139,5 @@ such file or directory`）。所以先算出绝对 `SCRIPT_PATH` 再 `cd`。
   `dialectcheck` 的边界。
 - **`--help` 用写死的行号范围**：初版就是这么写的，改一次注释就漏行。改成读到
   第一个非注释行为止。
+
+后台自动备份使用独立的 [ZIP 归档协议](2026-10-24-wmind-backup-archive.md)，不替代本文 CLI 与部署脚本的物理快照和分离恢复语义。
