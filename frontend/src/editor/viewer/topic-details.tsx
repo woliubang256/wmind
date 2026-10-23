@@ -1,3 +1,4 @@
+import { fontStack } from '../theme/fonts';
 import type { TopicDetails } from '../layout/topic-details';
 import type { NodeBox } from '../layout/types';
 
@@ -6,7 +7,7 @@ export function TopicDetailsView({ details, box, y, color }: { details: TopicDet
   return <g className="topic-details" fill={color}>
     {details.lines.map((line, index) => {
       const text = <text data-topic-content-kind={line.kind} data-content-id={line.id} x={box.x + box.width / 2} y={y + 22 + index * 20}
-        textAnchor="middle" fontSize={12} fontFamily="sans-serif" className="cursor-pointer" textDecoration={line.kind === 'link' ? 'underline' : undefined}>
+        textAnchor="middle" fontSize={12} fontFamily={fontStack('sans')} className="cursor-pointer" textDecoration={line.kind === 'link' ? 'underline' : undefined}>
         <title>{line.title}</title>{line.text}
       </text>;
       return line.href ? <a key={index} href={line.href} download={line.download} target={line.download ? undefined : '_blank'} rel="noopener noreferrer">{text}</a> : <g key={index}>{text}</g>;

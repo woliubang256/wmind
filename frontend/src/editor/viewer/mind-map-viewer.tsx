@@ -46,9 +46,8 @@ export interface MindMapViewerProps {
   /**
    * 当前选中的附属结构 id（概要 / 边界 / 关系线）。
    *
-   * 与 `selection`（主题）分开：主题的选中会驱动树形导航与键盘焦点，
-   * 附属结构只是「面板里正在编辑哪一条」，混进同一个数组会让方向键在
-   * 主题之间移动时撞上一个不存在的节点。
+   * 表达结构面板中活动的条目；概要也可独立进入 selection 并参与连线。
+   * 树操作仍然只接受真实 Topic id。
    */
   selectedAnnotationId?: string | null;
   onSelectionChange?(ids: string[]): void;
@@ -407,7 +406,7 @@ export function MindMapViewer({
             }} />
         ) : null}
 
-        {!readOnly && editingSummary && onCommitTitle ? <RelationshipEditor key={editingSummary.id} title={editingSummary.title}
+        {!readOnly && editingSummary && onCommitTitle ? <RelationshipEditor key={editingSummary.id} title={editingSummary.title} accessibleLabel={t('editor.annotation.summaryTitle')}
           label={{ x: editingSummary.rect.x + editingSummary.rect.width / 2, y: editingSummary.rect.y + editingSummary.rect.height / 2 }} viewport={viewport}
           onFinish={(value, restoreFocus) => { if (value !== null) onCommitTitle(editingSummary.id, value, { restoreFocus }); else cancelEdit(); }} /> : null}
 

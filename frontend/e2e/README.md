@@ -35,7 +35,7 @@ cd frontend
 node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5199
 ```
 
-dev 就够——十三套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
+dev 就够——十五套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
 必须换生产构建，见下面「几处不显然的地方」。
 
 ### `playwright-core` 没写进 `package.json`
@@ -62,15 +62,15 @@ ln -s /path/to/playwright-core frontend/node_modules/playwright-core
 ```bash
 cd frontend
 
-node e2e/run-all.mjs             # 十三套全跑
+node e2e/run-all.mjs             # 十五套全跑
 node e2e/run-all.mjs a11y share  # 只跑指定的
 node e2e/a11y.mjs                # 单跑一套（输出最完整）
 ```
 
 `run-all.mjs` 会先探一次后端和前端的健康，连不上就直接报「先把服务起起来」，
-不让十三套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余十二套。
+不让十五套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余十四套。
 
-## 十三套分别验什么
+## 十五套分别验什么
 
 | 脚本 | 条数 | 判据 |
 | --- | --- | --- |
@@ -79,8 +79,10 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `canvas.mjs` | 25 | 多画布新建/切换/持久化、大纲与画布双向同步、`Ctrl+]` 降级、折叠隐藏后代、ZEN 模式进出 |
 | `a11y.mjs` | 23 | 画布是不是一棵可读的树（`role=tree` / `treeitem` / `aria-level` / `aria-expanded`）、方向键后 `aria-activedescendant` 换人、播报文案、只读预览降级成一个 `img`、两个键盘陷阱 |
 | `annotations.mjs` | 30 | 概要跨父级完整选区、左右方向、避让和重复创建；联系双击线条/文字、F2、输入法、提交取消、颜色线宽线型、四种箭头、撤销重做、刷新持久化和只读预览；边界新增改名删除 |
-| `toolbar.mjs` | 7 | 悬停/聚焦提示、禁用原因、Esc、插入菜单同级/子级层级和编辑焦点、撤销 |
+| `toolbar.mjs` | 7 | 悬停/聚焦提示、禁用原因、Esc、独立同级/子级按钮层级和编辑焦点、撤销 |
 | `relationship-routing.mjs` | 9 | 控制柄拖动、Esc 取消、一次撤销重做、键盘微调、保存重开、恢复自动、折线路由、预览 |
+| `insert-content.mjs` | 21 | 无选区/单选/多选、备注标签待办任务、网页及主题链接、附件原字节下载、文件和文件夹 ZIP、图片上传、贴纸插画、公式、移除撤销、刷新与 SVG/PNG 导出 |
+| `summary-endpoints.mjs` | 9 | 概要直接选中、概要到主题/概要连线、控制柄、概要和范围主题删除清理、一次撤销、双击改名、刷新 |
 | `markers.mjs` | 9 | 已有标记渲染、42 图标分组替换、多选统一应用/取消、窄主题排版和编辑框、持久化、清空撤销重做、预览 |
 | `export.mjs` | 31 | 七种格式都在、PDF 能下且结构合法（`%PDF` / `DCTDecode` / `MediaBox` 与页脚毫米对得上 / `startxref` 指对）、SVG 分支没被带坏、**品牌落款预填站点设置且改过的值真的进了文件**、**XMind 下下来是 zip 且 `content.json` 里真有节点标题**、切英文后导航与导出对话框整块无中文、刷新后语言保持、**站点关掉导出后编辑器不再有「导出」按钮** |
 | `register.mjs` | 11 | 关闭注册后登录页没有入口、`/register` 拿不到表单、接口返回 403 `REGISTRATION_CLOSED` 而不是 429、关站期间连打 5 次不退化、重开后不再返回 `REGISTRATION_CLOSED` |
@@ -88,7 +90,7 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `culling.mjs` | 6 | 2001 个节点时只渲染视口附近、放大后是子集、缩回来不丢、选中节点离开视口仍渲染 |
 | `errors.mjs` | 3 | 断网提示条出现与消失、首帧就离线时也带提示条 |
 
-合计 229 条。
+合计 259 条。
 
 ## 几处不显然的地方
 
@@ -105,7 +107,7 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 **性能数字必须来自生产构建。** dev 模式是双渲染 + 不压缩，同一段操作 dev 量到
 53ms、生产构建只有 22.6ms——拿 dev 的数字做优化决策会优化错地方。注意
 `vite preview` **不套用** `server.proxy`，所以量性能时要自己起一个带 `/api`
-反代的静态服务器，否则接口全 404。本仓库的十三套脚本不涉及计时，可以跑 dev。
+反代的静态服务器，否则接口全 404。本仓库的十五套脚本不涉及计时，可以跑 dev。
 
 **`register.mjs`、`locale.mjs` 与 `export.mjs` 会改站点设置，跑完自己恢复。**
 前者用管理员账号把 `auth.registration_enabled` 关掉、验完再打开；`locale.mjs`
@@ -119,12 +121,12 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 context，Cookie 还在，但 React Query 缓存是新的）。
 
 **登录会被限流，`login()` 自己会等。** 登录限流按「IP + 账号」分桶，5 次/分钟
-（`NewRateLimiter(5, time.Minute, 5)`）。十三套脚本一轮下来管理员账号要登七八次，
+（`NewRateLimiter(5, time.Minute, 5)`）。十五套脚本一轮下来管理员账号要登七八次，
 正好压在边界上——所以 `lib/harness.mjs` 的 `login()` 撞到 429 时会按服务端给的
 `retryAfter` 等一等再试（最多两次）。**限流不是被测对象**，不该让脚本因为跑得勤
 而红；不加这一步的话，连跑两轮必然有一套挂在 429 上，报错还长得像「登录坏了」。
 
-**注册是 3 次/小时，所以管理员建号是必经之路，不是兜底。** 十三套脚本各建一个
+**注册是 3 次/小时，所以管理员建号是必经之路，不是兜底。** 十五套脚本各建一个
 独立账号，第四套开始必然撞 429，全部改走 `POST /admin/users`。这条路的凭据由
 `lib/harness.mjs` 从 `backend/.env` 读（`WMIND_ADMIN_EMAIL` / `WMIND_ADMIN_PASSWORD`），
 也可以用 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 环境变量覆盖。写死的默认值只是最后的

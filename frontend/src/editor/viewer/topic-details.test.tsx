@@ -6,6 +6,14 @@ import { topicContentGeometry } from '../layout/topic-content';
 import { TopicsLayer } from './layers';
 
 describe('主题插入内容几何', () => {
+  it('主题链接显示目标标题，不向用户展示内部协议与 id', () => {
+    const doc = docWithTree(); const sheet = doc.sheets[0]!;
+    sheet.rootTopic.href = 'xmind:#a';
+    const layout = layoutMindmap({ sheet, theme: doc.theme });
+    const details = layout.sizes.get(sheet.rootTopic.id)!.details!;
+    expect(details.lines[0]!.text).toBe('↗ A');
+    expect(details.lines[0]!.text).not.toContain('xmind:');
+  });
   it('新增内容推动节点布局，内容与原标题图片不重叠，导出共用渲染', () => {
     const doc = docWithTree(); const sheet = doc.sheets[0]!; const topic = sheet.rootTopic;
     const before = layoutMindmap({ sheet, theme: doc.theme }).sizes.get(topic.id)!;

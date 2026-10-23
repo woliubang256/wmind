@@ -12,7 +12,7 @@ export async function embedFiles(files: readonly File[], folder = false): Promis
   if (!files.length) return [];
   if (files.length > 100 || files.reduce((sum, file) => sum + file.size, 0) > MAX_EMBEDDED_BYTES) throw new Error('file-too-large');
   if (folder) {
-    const entries: Record<string, Uint8Array> = {};
+    const entries: Record<string, Uint8Array> = Object.create(null);
     for (const file of files) {
       const path = file.webkitRelativePath || file.name;
       if (path.split('/').some((part) => part === '..' || part === '.' || !part) || path.includes('\\') || path.startsWith('/')) throw new Error('invalid-file');

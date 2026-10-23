@@ -72,6 +72,8 @@ export function StructureTab({
   walkSheet(sheet, (topic) => {
     titles.set(topic.id, topic.title);
   });
+  const topicIds = new Set(titles.keys());
+  for (const summary of collectSummaries(sheet)) titles.set(summary.id, summary.title);
   const nameOf = (id: string) => titles.get(id) ?? t('editor.annotation.untitledTopic');
 
   const summaries: AnnotationRow[] = collectSummaries(sheet).map((item) => ({
@@ -92,8 +94,8 @@ export function StructureTab({
     detail: `${nameOf(item.end1Id)} → ${nameOf(item.end2Id)}`,
   }));
 
-  const hasSelection = selection.length > 0;
-  const pairSelection = selection.length === 2;
+  const hasSelection = selection.length > 0 && selection.every((id) => topicIds.has(id));
+  const pairSelection = selection.length === 2 && selection.every((id) => titles.has(id));
 
   return (
     <div className="flex flex-col gap-4">

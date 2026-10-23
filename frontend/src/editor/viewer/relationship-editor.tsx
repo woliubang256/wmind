@@ -4,8 +4,9 @@ import type { Point } from '../layout/types';
 import type { Viewport } from './viewer-types';
 
 /** 与主题编辑相同的 HTML 覆盖层，避免 foreignObject 的输入法差异。 */
-export function RelationshipEditor({ title, label, viewport, onFinish }: {
+export function RelationshipEditor({ title, label, viewport, onFinish, accessibleLabel }: {
   title: string;
+  accessibleLabel?: string;
   label: Point;
   viewport: Viewport;
   onFinish(value: string | null, restoreFocus: boolean): void;
@@ -25,7 +26,7 @@ export function RelationshipEditor({ title, label, viewport, onFinish }: {
   };
   return (
     <input
-      ref={ref} value={value} aria-label={t('editor.annotation.relationshipTitle')}
+      ref={ref} value={value} aria-label={accessibleLabel ?? t('editor.annotation.relationshipTitle')}
       onChange={(event) => setValue(event.target.value)}
       onBlur={() => finish(true)}
       onKeyDown={(event) => {

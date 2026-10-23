@@ -11,8 +11,7 @@
  * - 边界标题、关系线标题：这两处没有单独的 `font-family`，继承 SVG 根上的
  *   `sans`（见 `export-canvas.tsx`）。
  * - **备注不算**：备注不画在画布上，为它报缺字是误报。
- * - **标签不算**：目前画布不渲染标签（`viewer/` 里没有任何地方读 `topic.labels`），
- *   等标签上画布了要同步加进来。
+ * - 标签、任务、附件与内容入口：取布局中的实际显示行，采用 sans。
  *
  * 纯函数：`ExportContext` 里已经有每张画布的布局与解析后的样式，不需要 DOM。
  */
@@ -54,6 +53,7 @@ export function paintedRuns(ctx: ExportContext): PaintedRun[] {
       const style = sheet.layout.styles.get(box.id);
       const lines = size?.lines ?? [];
       if (lines.length === 0) continue;
+      for (const detail of size?.details?.lines ?? []) runs.push({ text: detail.text, family: DECORATION_FAMILY, weight: 400, style: 'normal' });
       runs.push({
         text: lines.join(''),
         family: style?.fontFamily ?? DECORATION_FAMILY,

@@ -64,6 +64,10 @@ export function scanDocument(doc: WmindDocument): DocumentFonts {
     walkSheet(sheet, (topic) => {
       if (topic.style?.fontFamily) families.add(topic.style.fontFamily);
       if (topic.title !== '') titles.push(topic.title);
+      titles.push(...topic.labels);
+      if (topic.content?.task?.assignee) titles.push(topic.content.task.assignee);
+      for (const file of topic.content?.attachments ?? []) titles.push(file.name);
+      if (topic.content?.localLink) titles.push(topic.content.localLink.name);
     });
   }
 

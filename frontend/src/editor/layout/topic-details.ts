@@ -11,7 +11,7 @@ export interface TopicDetails {
   width: number;
 }
 
-export function measureDetails(topic: Topic, available: number, impl: MeasureBackend): TopicDetails | undefined {
+export function measureDetails(topic: Topic, available: number, impl: MeasureBackend, linkedTopicTitle?: string): TopicDetails | undefined {
   const lines: DetailLine[] = [];
   const font: FontSpec = { family: 'sans', size: 12, weight: 400, italic: false };
   let width = 0;
@@ -31,7 +31,11 @@ export function measureDetails(topic: Topic, available: number, impl: MeasureBac
   if (content?.localLink) {
     const file = content.localLink;
     add('link', `↗ ${file.name}`, file.name, { href: `data:application/octet-stream;base64,${file.data}`, download: file.name });
-  } else if (topic.href && safeTopicHref(topic.href)) add('link', `↗ ${topic.href.replace(/^https?:\/\//, '')}`, topic.href, { href: topic.href.startsWith('xmind:#') ? undefined : topic.href });
+  } else if (topic.href && safeTopicHref(topic.href)) {
+    const internal = topic.href.startsWith('xmind:#');
+    const title = internal ? linkedTopicTitle || '' : topic.href.replace(/^https?:\/\//, '');
+    add('link', `↗ ${title}`.trim(), title, { href: internal ? undefined : topic.href });
+  }
   for (const file of content?.attachments ?? []) add('attachment', `⌕ ${file.name}`, file.name, { id: file.id, href: `data:application/octet-stream;base64,${file.data}`, download: file.name });
   const media: TopicDetails['media'] = [];
   for (const kind of ['sticker', 'illustration'] as const) {

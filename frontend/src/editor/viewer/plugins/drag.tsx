@@ -126,7 +126,7 @@ export function DragPlugin() {
 
       // 拖动已选中的节点时带上整个选区：多选拖拽是基本操作，
       // 否则用户得一个一个拖。
-      const ids = selection.has(id) ? [...selection].filter((item) => latest.current.layout.boxes.has(item)) : [id];
+      const ids = selection.has(id) ? [...selection] : [id];
       session.current = {
         ids,
         anchorId: id,
@@ -140,6 +140,8 @@ export function DragPlugin() {
     const onPointerMove = (event: PointerEvent) => {
       const current = session.current;
       if (!current) return;
+      // 概要没有树移动语义。混合选区整批不拖动，不能悄悄只移动其中的主题。
+      if (current.ids.some((id) => !latest.current.layout.boxes.has(id))) return;
 
       if (!current.active) {
         const dx = event.clientX - current.startClient.x;

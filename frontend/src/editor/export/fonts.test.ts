@@ -32,6 +32,14 @@ function topicAt(sheet: Sheet, index: number): Topic {
 }
 
 describe('detectFallback', () => {
+  it('标签、任务负责人和附件名称的可见文字也检查', () => {
+    const sheet = sheetWith(['正常']);
+    topicAt(sheet, 0).labels = ['😀'];
+    topicAt(sheet, 0).content = { task: { progress: 0, priority: 0, assignee: '𠮷', start: '', due: '' } };
+    const report = detectFallback(ctxOf(sheet));
+    expect(report.chars).toContain('😀');
+    expect(report.chars).toContain('𠮷');
+  });
   it('常用字不报缺字', () => {
     expect(detectFallback(ctxOf(sheetWith(['产品规划', 'v2.0 草稿'])))).toEqual({ chars: [], count: 0 });
   });

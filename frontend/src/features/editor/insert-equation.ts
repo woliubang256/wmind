@@ -23,7 +23,9 @@ export function renderEquation(latex: string): NonNullable<TopicContent['equatio
     if (!svg || adaptor.kind(svg) !== 'svg') throw new Error('equation');
     const viewBox: number[] = String(adaptor.getAttribute(svg, 'viewBox') || '').split(/\s+/).map(Number);
     if (viewBox.length !== 4 || viewBox.some((n) => !Number.isFinite(n)) || viewBox[2] <= 0 || viewBox[3] <= 0) throw new Error('equation');
-    const width = Math.max(12, Math.ceil(viewBox[2] * .022)), height = Math.max(20, Math.ceil(viewBox[3] * .022));
+    const naturalWidth = Math.max(12, Math.ceil(viewBox[2] * .022)), naturalHeight = Math.max(20, Math.ceil(viewBox[3] * .022));
+    const scale = Math.min(1, 1000 / naturalWidth, 1000 / naturalHeight);
+    const width = naturalWidth * scale, height = naturalHeight * scale;
     adaptor.setAttribute(svg, 'width', String(width)); adaptor.setAttribute(svg, 'height', String(height));
     adaptor.setAttribute(svg, 'color', '#1F2937');
     const raw = adaptor.outerHTML(svg).replace(/(<svg[^>]*>)/, `$1<rect x="${viewBox[0]}" y="${viewBox[1]}" width="${viewBox[2]}" height="${viewBox[3]}" fill="white"/>`);

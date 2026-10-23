@@ -342,6 +342,7 @@ export function measureTopic(
   topic: Topic,
   style: ComputedStyle,
   impl: MeasureBackend = defaultBackend(),
+  linkedTopicTitle?: string,
 ): TopicSize {
   const { paddingX, paddingY, minContentWidth, maxContentWidth, imageGap } = NODE_METRICS;
   const font = fontOf(style);
@@ -372,7 +373,7 @@ export function measureTopic(
     : style.width;
   if (image !== null) width = Math.max(width, image.width + paddingX * 2);
 
-  const details = measureDetails(topic, available, impl);
+  const details = measureDetails(topic, available, impl, linkedTopicTitle);
   if (details) width = Math.max(width, details.width + paddingX * 2);
   const height = image === null
     ? headerHeight + paddingY * 2

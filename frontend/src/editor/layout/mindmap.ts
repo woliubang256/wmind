@@ -1,3 +1,4 @@
+import { walkSheet } from '../model/traverse';
 /**
  * 结构布局：文档 + 主题 → 几何。
  *
@@ -21,7 +22,7 @@
 import { resolveStyle, type StyleContext } from '../theme/resolve';
 import { countDescendants } from '../model/traverse';
 import type { ComputedStyle, Sheet, StructureClass, Theme, Topic } from '../model/types';
-import { measureTopic } from './measure';
+import { defaultBackend, measureTopic } from './measure';
 import { spacingFor, type LayoutSpacing } from './constants';
 import type { EdgePath, EdgeShape, LayoutResult, NodeBox, Side, TopicSize } from './types';
 
@@ -121,7 +122,9 @@ function buildColumns(root: MeasuredNode, spacing: LayoutSpacing): Columns {
 
 export function layoutMindmap(input: LayoutInput): LayoutResult {
   const theme = input.sheet.themeOverride ?? input.theme;
-  const measure = input.measure ?? ((topic, style) => measureTopic(topic, style));
+  const titles = new Map<string, string>();
+  if (!input.measure) walkSheet(input.sheet, (topic) => { titles.set(topic.id, topic.title); });
+  const measure = input.measure ?? ((topic, style) => measureTopic(topic, style, defaultBackend(), titles.get(topic.href.slice(7))));
   const structure = input.sheet.structure;
   const spacing = spacingFor(input.options?.compact ?? theme.layout.compact);
   const autoBalance = input.options?.autoBalance ?? theme.layout.autoBalance;

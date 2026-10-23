@@ -26,10 +26,15 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { ToolbarButton } from './toolbar-button';
-import { InsertTopicMenu } from './insert-topic-menu';
+import { InsertMenu } from './insert-menu';
+import { InsertDialog } from './insert-dialog';
+import { insertAvailability, type InsertAction } from './insert-actions';
+import { updateContentCommand, type ContentPatch } from '@/editor/commands/content';
+import { safeTopicHref } from '@/editor/model/topic-content';
+import { downloadEmbedded } from './insert-files';
 import { Icon } from '@/components/ui/icon';
 import { Select } from '@/components/ui/select';
-import { collectSummaries, countSheetNodes, findTopicInSheet, sheetById } from '@/editor/model/traverse';
+import { collectSummaries, countSheetNodes, findTopic, findTopicInSheet, sheetById } from '@/editor/model/traverse';
 import { newSheetId } from '@/editor/model/ids';
 import { parseDocument } from '@/editor/model/validate';
 import { createEditorStore } from '@/editor/store/editor-store';
@@ -305,6 +310,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
    * 一行」变成一次可能被写进历史的状态变更。
    */
   const [activeAnnotation, setActiveAnnotation] = useState<{ kind: AnnotationKind; id: string } | null>(null);
+  const [insertState, setInsertState] = useState<{ action: InsertAction; ids: string[]; sheetId: string } | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
@@ -698,7 +704,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
 
   // 编辑态整张键位表都关掉：输入框自己处理 Esc / Enter / Shift+Enter / Tab，
   // 导图再插手就会把用户的换行吞成「新建主题」。
-  useHotkeys(rootRef, actions, { enabled: !preview && editingId === null });
+  useHotkeys(rootRef, actions, { enabled: !preview && editingId === null && insertState === null });
 
   /**
    * 挂载后把焦点放到画布上。
@@ -734,7 +740,43 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [zen]);
 
+  const selectedTopics = selection.flatMap((id) => { const found = findTopicInSheet(sheet, id); return found ? [found.topic] : []; });
   const activeId = selection[0] ?? sheet.rootTopic.id;
+  const openInsert = (action: InsertAction, ids = selection) => {
+    const current = store.getState(); const currentSheet = sheetById(current.doc, current.sheetId);
+    const count = ids.filter((id) => findTopicInSheet(currentSheet, id)).length;
+    if (insertAvailability(action, count, ids.length)) return;
+    current.setEditing(null);
+    setInsertState({ action, ids: [...ids], sheetId: currentSheet.id });
+  };
+  const saveInsert = (patch: ContentPatch) => {
+    const current = store.getState();
+    if (!insertState || current.sheetId !== insertState.sheetId) throw new Error('sheet-changed');
+    current.dispatch(updateContentCommand(insertState.ids, patch));
+    setInsertState(null);
+    requestAnimationFrame(() => { canvasRef.current?.focus({ preventScroll: true }); fitRef.current(); });
+  };
+  const contentClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (preview) return;
+    const target = (event.target as Element).closest('[data-topic-content-kind]');
+    const topicId = target?.closest('[data-topic-id]')?.getAttribute('data-topic-id');
+    if (!target || !topicId) return;
+    const topic = findTopicInSheet(sheet, topicId)?.topic; if (!topic) return;
+    event.preventDefault(); event.stopPropagation();
+    const kind = target.getAttribute('data-topic-content-kind');
+    if (kind === 'todo') store.getState().dispatch(updateContentCommand([topicId], { content: { todo: !topic.content?.todo } }));
+    else if (kind === 'link') {
+      if (topic.content?.localLink) downloadEmbedded(topic.content.localLink);
+      else if (topic.href.startsWith('xmind:#')) {
+        const found = findTopic(doc, topic.href.slice(7));
+        if (found) { store.getState().setSheet(found.sheet.id); store.getState().select([found.topic.id]); requestAnimationFrame(() => fitRef.current()); }
+      } else if (safeTopicHref(topic.href)) window.open(topic.href, '_blank', 'noopener,noreferrer');
+    } else if (kind === 'attachment') {
+      const file = topic.content?.attachments?.find((item) => item.id === target.getAttribute('data-content-id'));
+      if (file) downloadEmbedded(file);
+    } else if (kind) openInsert(kind as InsertAction, [topicId]);
+  };
+
 
   const restoreDraft = () => {
     if (!draft) return;
@@ -779,7 +821,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           value={doc.title}
           aria-label={t('editor.titlePlaceholder')}
           onChange={(event) => store.getState().dispatch(changeTitleCommand(event.target.value))}
-          className="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-sm font-semibold outline-none hover:bg-muted focus:bg-muted"
+          className="min-w-32 basis-40 flex-1 rounded-md bg-transparent px-2 py-1 text-sm font-semibold outline-none hover:bg-muted focus:bg-muted"
         />
 
         {preview ? (
@@ -811,10 +853,14 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
 
         {!preview ? (
           <div className="flex items-center gap-0.5">
-            <InsertTopicMenu
-              rootSelected={activeId === sheet.rootTopic.id}
-              onInsert={(kind) => store.getState().dispatch(kind === 'sibling' ? addSiblingCommand(activeId) : addChildCommand(activeId))}
-            />
+            <ToolbarButton variant="ghost" size="sm" className="gap-1.5 px-2" aria-label={t('editor.addSibling')} shortcut="Enter"
+              hint={t('editor.addSibling')} disabled={selection.length !== 1 || selectedTopics.length !== 1 || activeId === sheet.rootTopic.id}
+              disabledReason={activeId === sheet.rootTopic.id && selection.length === 1 ? t('editor.hint.rootSibling') : t('editor.hint.oneTopic')}
+              onClick={() => store.getState().dispatch(addSiblingCommand(activeId))}><Icon name="list" className="size-4" />{t('editor.addSibling')}</ToolbarButton>
+            <ToolbarButton variant="ghost" size="sm" className="gap-1.5 px-2" aria-label={t('editor.addChild')} shortcut="Tab"
+              hint={t('editor.addChild')} disabled={selection.length !== 1 || selectedTopics.length !== 1} disabledReason={t('editor.hint.oneTopic')}
+              onClick={() => store.getState().dispatch(addChildCommand(activeId))}><Icon name="waypoints" className="size-4" />{t('editor.addChild')}</ToolbarButton>
+            <InsertMenu topics={selectedTopics.length} selection={selection.length} onInsert={openInsert} />
             <ToolbarButton
               variant="ghost"
               size="icon"
@@ -1054,6 +1100,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               }}
               className="relative min-h-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
+              <div className="h-full w-full" onClickCapture={contentClick}>
               <MindMapViewer
                 sheet={sheet}
                 theme={doc.theme}
@@ -1104,6 +1151,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                   store.getState().dispatch(detachTopicsCommand(ids));
                 }}
               />
+              </div>
             </div>
 
             {/*
@@ -1250,6 +1298,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         onClose={() => setSaveTemplateOpen(false)}
       />
 
+      {insertState && insertState.sheetId === sheet.id && insertState.ids.every((id) => findTopicInSheet(sheet, id)) ? <InsertDialog
+        key={`${insertState.sheetId}:${insertState.action}:${insertState.ids.join(',')}`} action={insertState.action}
+        topics={insertState.ids.map((id) => findTopicInSheet(sheet, id)!.topic)} doc={doc} onSave={saveInsert}
+        onClose={() => { setInsertState(null); canvasRef.current?.focus({ preventScroll: true }); }} /> : null}
       {exportOpen ? (
         <Suspense fallback={null}>
           <ExportDialog
