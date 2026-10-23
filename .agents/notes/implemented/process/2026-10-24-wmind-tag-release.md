@@ -14,6 +14,8 @@ Go 和 Node 构建阶段固定为 BUILDPLATFORM，Go 通过 TARGETOS/TARGETARCH 
 
 API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `/data` 属主。SQLite 挂载整个 `/data`，PostgreSQL 仅挂载 `/data/uploads`；两种全新命名卷均必须从镜像中的非 root 属主初始化，否则 PostgreSQL 的上传卷会被 Docker 以 root 目录创建，运行进程无法写入。
 
+固定镜像发布后、`latest` 晋升前有两道真实 Docker 冒烟：API 默认用户将全新命名卷挂到 PostgreSQL 使用的 `/data/uploads` 并写入/删除探针；API/Web 都完成后用临时 SQLite Compose 验证启动、Nginx API 代理、运行版本及上传文件的 200/缺失 404。命名卷和项目名包含 CI run ID/attempt，HTTP 端口随机分配，显式使用 `/dev/null` 环境文件和 CI 假密钥，EXIT trap 只清理本轮资源，不读取真实部署配置。
+
 根目录作为构建上下文，因此 `.dockerignore` 位于根目录；放在 `deploy/` 不生效。构建上下文排除本地配置、依赖、运行数据和刚生成的 `release/` 压缩包，避免把私有配置发给构建器或重复传输部署包。
 
 ## Related notes
@@ -38,6 +40,7 @@ API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `
 - 本机 `actionlint` 通过；Ruby YAML 静态解析确认 tag 触发、完整历史、发布顺序及两套 Compose 镜像/版本参数。Docker 构建、Compose 运行语义和 registry 发布由 CI 验证。
 - `scripts/release-workflow.test.mjs` 先复现构建阶段提前更新 `latest` 的缺陷，再验证两个固定镜像、统一晋升和正式 Release 的先后顺序；修复后通过。
 - 上传卷镜像契约先复现缺少 `/data/uploads` 挂载点的问题，再验证预建、递归属主和默认 UID/GID 的顺序；修复后通过。
+- Workflow 契约覆盖卷/整栈冒烟在固定镜像之后、晋升之前的顺序及隔离清理；本机只运行契约与 actionlint，真实挂卷权限、Nginx 代理和运行版本由发布 CI 的 Docker 冒烟验证。
 
 ## Consequences
 

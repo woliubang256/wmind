@@ -160,6 +160,22 @@ jobs:
           cache-from: type=gha,scope=wmind-api
           cache-to: type=gha,mode=max,scope=wmind-api
 
+      - name: Verify fresh uploads volume permissions
+        run: |
+          volume_name="wmind-uploads-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker volume rm "$volume_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker volume create "$volume_name" >/dev/null
+          docker run --rm --pull=always --platform linux/amd64 \
+            --mount "type=volume,source=$volume_name,target=/data/uploads" \
+            --entrypoint /bin/sh "ghcr.io/woliubang256/wmind-api:$GITHUB_REF_NAME" -ec '
+              test "$(id -u)" -eq 10001
+              touch /data/uploads/.wmind-permission-probe
+              rm /data/uploads/.wmind-permission-probe
+            '
+
       - name: Build and publish Web image
         uses: docker/build-push-action@v6
         with:
@@ -175,6 +191,40 @@ jobs:
             org.opencontainers.image.version=${{ github.ref_name }}
           cache-from: type=gha,scope=wmind-web
           cache-to: type=gha,mode=max,scope=wmind-web
+
+      - name: Smoke-test SQLite deployment
+        env:
+          HTTP_PORT: '0'
+          WMIND_JWT_SECRET: ci-only-release-smoke-secret-not-for-production
+          WMIND_ADMIN_EMAIL: ''
+          WMIND_ADMIN_PASSWORD: ''
+        run: |
+          project="wmind-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          compose() {
+            docker compose --project-name "$project" --env-file /dev/null -f deploy/docker-compose.yml "$@"
+          }
+          cleanup() {
+            compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          compose pull
+          compose up -d --no-build --wait --wait-timeout 90
+          address=$(compose port web 80 | head -n 1)
+          base="http://127.0.0.1:${address##*:}"
+          site_config="$RUNNER_TEMP/wmind-smoke-site-config.json"
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 \
+            --max-time 10 "$base/api/v1/site/config" > "$site_config"
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const { data } = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (data.version !== process.env.GITHUB_REF_NAME) throw new Error("Runtime version mismatch");
+          ' "$site_config"
+          compose exec -T api sh -ec 'printf "%s" "wmind-upload-probe" > /data/uploads/wmind-release-upload-smoke.txt'
+          uploaded=$(curl --fail --silent --show-error "$base/uploads/wmind-release-upload-smoke.txt")
+          test "$uploaded" = 'wmind-upload-probe'
+          missing_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "$base/uploads/wmind-release-missing-smoke.txt")
+          test "$missing_status" = '404'
 
       - name: Promote both images to latest
         run: |

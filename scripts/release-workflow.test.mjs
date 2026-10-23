@@ -38,3 +38,30 @@ test('API 镜像预建上传卷挂载点并交给默认非 root 用户', () => {
   assert.match(runtime, /\nUSER 10001:10001\n/);
   assert.ok(runtime.indexOf('mkdir -p /data/uploads') < runtime.indexOf('chown -R 10001:10001 /data'));
 });
+
+test('全新上传卷和 SQLite 整栈冒烟均在 latest 晋升之前运行并隔离清理', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const steps = workflow.split('\n      - name: ').slice(1);
+  const apiBuild = steps.findIndex(step => step.startsWith('Build and publish API image\n'));
+  const webBuild = steps.findIndex(step => step.startsWith('Build and publish Web image\n'));
+  const promotion = steps.findIndex(step => step.startsWith('Promote both images to latest\n'));
+  const volume = steps.findIndex(step => step.startsWith('Verify fresh uploads volume permissions\n'));
+  const sqlite = steps.findIndex(step => step.startsWith('Smoke-test SQLite deployment\n'));
+  assert.ok(apiBuild < volume && volume < promotion, '上传卷必须通过已发布 API 镜像验证');
+  assert.ok(webBuild < sqlite && sqlite < promotion, '整栈必须在 API/Web 都完成后且 latest 之前验证');
+  assert.match(steps[volume], /GITHUB_RUN_ID.*GITHUB_RUN_ATTEMPT/);
+  assert.match(steps[volume], /trap cleanup EXIT/);
+  assert.match(steps[volume], /docker volume rm/);
+  assert.match(steps[volume], /target=\/data\/uploads/);
+  assert.match(steps[volume], /test "\$\(id -u\)" -eq 10001/);
+  assert.doesNotMatch(steps[volume], /--user\b/, '冒烟必须使用镜像默认用户');
+  assert.match(steps[sqlite], /HTTP_PORT: '0'/);
+  assert.match(steps[sqlite], /--project-name "\$project" --env-file \/dev\/null/);
+  assert.match(steps[sqlite], /trap cleanup EXIT/);
+  assert.match(steps[sqlite], /down --volumes --remove-orphans/);
+  assert.match(steps[sqlite], /up -d --no-build --wait/);
+  assert.match(steps[sqlite], /\/api\/v1\/site\/config/);
+  assert.match(steps[sqlite], /process\.env\.GITHUB_REF_NAME/);
+  assert.match(steps[sqlite], /\/uploads\/wmind-release-upload-smoke\.txt/);
+  assert.match(steps[sqlite], /test "\$missing_status" = '404'/);
+});
