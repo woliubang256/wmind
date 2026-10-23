@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
+import { LocaleSwitcher } from '@/components/locale-switcher';
 import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useThemeStore } from './theme-store';
@@ -236,6 +237,7 @@ export function AppLayout() {
             >
               <Icon name="menu" className="size-5" />
             </Button>
+            <LocaleSwitcher />
             <ThemeToggle />
             <Button variant="ghost" size="icon" aria-label={t('common.logout')} onClick={() => void signOut()}>
               <Icon name="logout" className="size-4" />

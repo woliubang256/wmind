@@ -16,7 +16,7 @@
  * 这套脚本**会改站点设置**（关一次注册），`finally` 里无条件恢复。
  */
 
-import { ADMIN, BASE, api, check, launchBrowser, login, newPage, run } from './lib/harness.mjs';
+import { ADMIN, BASE, api, check, launchBrowser, login, newPage, run, stamp, waitForCanvas } from './lib/harness.mjs';
 
 async function setRegistration(token, enabled) {
   return api('/admin/settings', {
@@ -197,6 +197,49 @@ async function main() {
         (await page.getByRole('button', { name: '登录' }).count()) === 1,
     );
 
+    // 登录后的全站顶栏与账号设置、登录入口共用同一个偏好。
+    await page.getByLabel('用户名或邮箱').fill(ADMIN.email);
+    await page.getByLabel('密码', { exact: true }).fill(ADMIN.password);
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await page.waitForURL(`${BASE}/`);
+    const headerSwitcher = page.locator('header').getByRole('combobox', { name: '界面语言', exact: true });
+    await headerSwitcher.waitFor();
+    const headerBox = await headerSwitcher.boundingBox();
+    check('IE-LANG-01 登录后顶栏右上角有语言切换', headerBox && headerBox.x > 1000 && headerBox.y < 56);
+    await pickLocale(page, '界面语言', 'English');
+    await page.getByRole('link', { name: 'Recent', exact: true }).waitFor();
+    check('IE-LANG-02 顶栏切英文立即生效', await page.evaluate(() => document.documentElement.lang === 'en-US'));
+    await page.reload();
+    await page.locator('header').getByRole('combobox', { name: 'Language', exact: true }).waitFor();
+    check('IE-LANG-03 刷新后语言偏好保留', await page.locator('header [role="combobox"]').getAttribute('data-value') === 'en-US');
+
+    const mapTitle = `语言切换内容保持 ${stamp}`;
+    const created = await api('/maps', { method: 'POST', token: adminToken, body: {
+      title: mapTitle,
+      document: { format: 'wmind', formatVersion: '1.0', id: `doc-${stamp}`, title: mapTitle,
+        sheets: [{ id: 'sh-1', title: '画布 1', structure: 'mindmap', rootTopic: { id: 'root', title: mapTitle } }] },
+    } });
+    await page.goto(`${BASE}/maps/${created.data.uid}`);
+    await waitForCanvas(page);
+    const titlesBefore = await page.locator('[data-topic-id]').allTextContents();
+    check('IE-LANG-04 编辑器仍有英文语言入口', await page.locator('header').getByRole('combobox', { name: 'Language', exact: true }).count() === 1);
+    // 英文导航通常更长；逐个检查窄屏和桌面临界尺寸，防止新增控件挤出视口。
+    for (const width of [1280, 768, 375, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      const overflow = await page.evaluate(() => [...document.querySelectorAll('header a, header button, header [role="combobox"]')]
+        .filter((el) => el.getClientRects().length > 0)
+        .some((el) => { const rect = el.getBoundingClientRect(); return rect.left < 0 || rect.right > innerWidth + 1; }));
+      check(`IE-LANG-05 ${width}px 顶栏控件均在视口内`, !overflow);
+    }
+    await pickLocale(page, 'Language', '中文');
+    await page.getByRole('button', { name: '撤销', exact: true }).waitFor();
+    check('IE-LANG-06 编辑器切中文且导图内容不变', JSON.stringify(await page.locator('[data-topic-id]').allTextContents()) === JSON.stringify(titlesBefore));
+    await pickLocale(page, '界面语言', '跟随浏览器');
+    check('IE-LANG-07 可恢复跟随浏览器', await page.evaluate(() => localStorage.getItem('wmind:locale') === 'system' && document.documentElement.lang === 'zh-CN'));
+    if (process.env.SCREENSHOT_PATH) {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.screenshot({ path: process.env.SCREENSHOT_PATH });
+    }
     check('IE-M8-15 全程没有未捕获异常', errors.length === 0, errors.slice(0, 2).join(' | '));
   } finally {
     // 上面中途失败也要把注册开回去，否则后面几套全挂在 403 上。

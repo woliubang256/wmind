@@ -6,7 +6,7 @@ import { LOCALE_LABEL, LOCALE_ORDER, type LocalePreference } from '@/lib/i18n/pr
 import { cn } from '@/lib/utils';
 
 /**
- * 角落里的语言切换（登录页、注册页的右上角）。
+ * 角落里的语言切换（登录/注册页右上角、登录后的全站顶栏）。
  *
  * 为什么这两个页面需要它：**语言偏好存在浏览器里，而这两个页面是唯一还没有
  * 登录态的入口**。用户在设置页改过语言当然已经生效；但第一次来的人——浏览器
