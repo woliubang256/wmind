@@ -9,6 +9,7 @@ export const siteKeys = {
 /** 站点默认值：接口还没回来时用它渲染，避免登录页闪一下空标题。 */
 const FALLBACK: SiteConfig = {
   siteName: 'wmind',
+  brand: 'wmind',
   logoUrl: '',
   description: '',
   icp: '',

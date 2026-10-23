@@ -309,6 +309,23 @@ function parseTopic(
     parseTopic(child, `${path}.children.detached[${i}]`, warnings, seen, ''),
   );
 
+  // 概要与外框在 XMind 里挂在**主题**上（`topic.summaries` / `topic.boundaries`），
+  // 画布级那一份是某些工具额外写的副本。
+  //
+  // 这里曾经固定写 `[]`，后果是「导入一份 XMind，概要与外框全没了」——适配器
+  // 明明解析出来了，却在这一步被抹掉。而渲染与导出走的是 `collectSummaries` /
+  // `collectBoundaries`，它们是**两级合并**的，所以保留主题级不会有重复问题
+  //（同一个 id 只取一次）。
+  //
+  // 主题级的概要可以不写 `topicId`：XMind 认为「挂在哪就属于哪」，缺省就是当前
+  // 主题自己。画布级那份必须显式写，否则没有挂载点。
+  topic.summaries = asArray(input.summaries)
+    .map((summary, i) => parseSummary(summary, i, warnings, id))
+    .filter((summary): summary is Summary => summary !== null);
+  topic.boundaries = asArray(input.boundaries)
+    .map((boundary, i) => parseBoundary(boundary, i, warnings))
+    .filter((boundary): boundary is Boundary => boundary !== null);
+
   return topic;
 }
 
@@ -348,9 +365,15 @@ function parseBoundary(input: unknown, index: number, warnings: string[]): Bound
   };
 }
 
-function parseSummary(input: unknown, index: number, warnings: string[]): Summary | null {
+function parseSummary(
+  input: unknown,
+  index: number,
+  warnings: string[],
+  /** 主题级概要的默认挂载点：XMind 不写 `topicId` 时就是所在的那个主题。 */
+  fallbackTopicId = '',
+): Summary | null {
   if (!isRecord(input)) return null;
-  const topicId = asString(input.topicId);
+  const topicId = asString(input.topicId) || fallbackTopicId;
   const range = asArray(input.range).filter((id): id is string => typeof id === 'string');
   if (topicId === '' || range.length === 0) {
     warnings.push(`summaries[${index}] 缺少挂载点或范围为空，已丢弃`);

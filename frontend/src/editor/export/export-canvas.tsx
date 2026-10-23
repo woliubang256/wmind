@@ -96,7 +96,7 @@ export function ExportCanvas({ ctx }: { ctx: ExportContext }) {
           textAnchor="end"
           style={{ fontSize: FOOTER_SIZE, fill: FOOTER_COLOR }}
         >
-          wmind
+          {ctx.brandText}
         </text>
       ) : null}
     </svg>

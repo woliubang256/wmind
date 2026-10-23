@@ -10,6 +10,7 @@
  */
 
 import fs from 'node:fs/promises';
+import { strFromU8, unzipSync } from 'fflate';
 import { ADMIN, BASE, api, check, ensureUser, launchBrowser, login, makeUser, newPage, run, stamp, uiLogin, waitForCanvas } from './lib/harness.mjs';
 
 const USER = makeUser('export');
@@ -116,12 +117,12 @@ async function main() {
     let dialog = await openExportDialog(page, uid);
     // 单选是自绘的 `role="radio"` 按钮，不是 `<input type="radio">`——按角色数，
     // 不能按 `input[name=...]` 找。先定位到「格式」那一组，否则会把「内容」那组
-    // 也算进来（6 + 2 = 8）。
+    // 也算进来（7 + 2 = 9）。
     const formats = await dialog
       .getByRole('radiogroup', { name: '格式' })
       .getByRole('radio')
       .count();
-    check('IE-M7-01 导出对话框列出六个格式', formats === 6, `实际 ${formats}`);
+    check('IE-M7-01 导出对话框列出七个格式', formats === 7, `实际 ${formats}`);
     check(
       'IE-M7-02 格式列表含 PDF',
       (await dialog.getByRole('radio', { name: 'PDF' }).count()) === 1,
@@ -190,6 +191,72 @@ async function main() {
     ]);
     const svgText = (await readDownload(svgDownload)).toString('utf8');
     check('IE-M7-13 SVG 导出仍是矢量文本', svgText.includes('<svg') && svgText.includes('分支 A'));
+    await waitClosed(page);
+
+    // ── 4a. 品牌标识：预填站点设置，且能当场改 ──────────────
+    //
+    // 两件事分开验：预填证明「设置生效」，改过之后落款换了证明「用户的话说了算」。
+    // 只验前者会漏掉「输入框其实没接进导出」这种看起来对的实现。
+    dialog = await openExportDialog(page, uid);
+    await dialog.getByRole('radio', { name: /^SVG/ }).click();
+    await page.waitForTimeout(300);
+
+    // 用 `label:has-text()` 而不是 `getByLabel()`：`<label>` 包着 input 时
+    // 可访问名会带上 input 自身的值，exact 匹配永远不中（M4 验收踩过）。
+    const brandInput = dialog.locator('label:has-text("品牌文字") input');
+    const presetBrand = await brandInput.inputValue();
+    check('IE-M7-28 品牌文字预填了站点设置', presetBrand.length > 0, `预填值「${presetBrand}」`);
+
+    const customBrand = `落款-${stamp}`;
+    await brandInput.fill(customBrand);
+    await page.waitForTimeout(300);
+    const [brandDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60000 }),
+      dialog.getByRole('button', { name: /下载 SVG/ }).click(),
+    ]);
+    const brandSvg = (await readDownload(brandDownload)).toString('utf8');
+    // 断言写成 `>落款<` 而不是 `includes('落款')`：SVG 里还有内嵌字体的 base64，
+    // 任意子串都能撞上。带尖括号的是**页脚文本节点本身**，只有一处能产生。
+    check(
+      'IE-M7-29 改过的落款进了导出文件',
+      brandSvg.includes(`>${customBrand}<`) && !brandSvg.includes(`>${presetBrand}<`),
+      `含自定义=${brandSvg.includes(`>${customBrand}<`)} 含预填=${brandSvg.includes(`>${presetBrand}<`)}`,
+    );
+    await waitClosed(page);
+
+    // ── 4b. XMind：可再编辑的包 ─────────────────────────────
+    dialog = await openExportDialog(page, uid);
+    await dialog.getByRole('radio', { name: /^XMind/ }).click();
+    await page.waitForTimeout(300);
+
+    // `.xmind` 没有「画出来」的样子，预览换成大纲文本——画一张图反而是骗人。
+    check(
+      'IE-M7-23 XMind 的预览是大纲而不是图片',
+      (await dialog.locator('img').count()) === 0 &&
+        (await dialog.locator('[data-testid="export-text-preview"]').count()) === 1,
+    );
+
+    const [xmindDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60000 }),
+      dialog.getByRole('button', { name: /下载 XMind/ }).click(),
+    ]);
+    const xmindBytes = new Uint8Array(await readDownload(xmindDownload));
+
+    check(
+      'IE-M7-24 文件名是 .xmind',
+      xmindDownload.suggestedFilename().endsWith('.xmind'),
+      xmindDownload.suggestedFilename(),
+    );
+    check('IE-M7-25 是 zip 包（PK 开头）', xmindBytes[0] === 0x50 && xmindBytes[1] === 0x4b);
+
+    // 解压看内容：只验「是个 zip」证明不了 XMind 能打开它。
+    const files = unzipSync(xmindBytes);
+    const content = files['content.json'] === undefined ? null : strFromU8(files['content.json']);
+    check('IE-M7-26 包里有 content.json', content !== null);
+    check(
+      'IE-M7-27 content.json 带上了节点标题',
+      content !== null && content.includes('导出验收') && content.includes('分支 A'),
+    );
     await waitClosed(page);
 
     // ── 5. 界面语言：切到英文 ───────────────────────────────
@@ -274,7 +341,7 @@ async function main() {
     await closed.goto(`${BASE}/maps/${uid}`);
     await waitForCanvas(closed);
     check(
-      'IE-M7-23 关闭导出后编辑器没有「导出」按钮',
+      'IE-M7-30 关闭导出后编辑器没有「导出」按钮',
       (await closed.getByRole('button', { name: '导出' }).count()) === 0,
     );
     await closed.close();
@@ -284,7 +351,7 @@ async function main() {
     await reopened.goto(`${BASE}/maps/${uid}`);
     await waitForCanvas(reopened);
     check(
-      'IE-M7-24 重新打开后「导出」按钮回来',
+      'IE-M7-31 重新打开后「导出」按钮回来',
       (await reopened.getByRole('button', { name: '导出' }).count()) === 1,
     );
     await reopened.close();

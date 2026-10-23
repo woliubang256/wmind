@@ -16,7 +16,7 @@
  *    在底部明说「N 张图片未能内嵌」，而不是让用户以为导出是完整的。
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import {
   SCALE_MIN,
   buildExportContext,
   clampScale,
+  isDocumentFormat,
   isTextFormat,
   presetHasFill,
   type AspectRatioId,
@@ -50,6 +51,8 @@ import { exportBranches, planBranches, svgEncoder } from '@/editor/export/split'
 import { buildImagePdf, jpegSize, pageSizePoints } from '@/editor/export/pdf';
 import { buildExportSvg, exportFileName, svgDataUrl } from '@/editor/export/svg';
 import { exportMarkdown, exportOpml } from '@/editor/export/text';
+import { buildXmind, xmindOutline } from '@/editor/export/xmind';
+import { useSiteConfig } from '@/features/site/use-site-config';
 import type { WmindDocument } from '@/editor/model/types';
 
 export interface ExportDialogProps {
@@ -93,7 +96,8 @@ const ASPECT_LABELS: Record<AspectRatioId, string> = {
 };
 
 /**
- * 格式选项。顺序即 UI 顺序：矢量在前，因为它是唯一无损的那个；文本格式垫底，
+ * 格式选项。顺序即 UI 顺序：矢量在前，因为它是唯一无损的那个；`xmind` 排在
+ * 位图之后、文本之前——它是**可再编辑**的，比 md/opml 保真得多；文本格式垫底，
  * 因为它们丢样式——不该出现在第一眼看到的位置。
  *
  * `descriptionKey` 单独给而不是共用一句：SVG 说「可无损缩放」，PNG 说「按倍率
@@ -112,6 +116,13 @@ const FORMATS: {
   { id: 'png', labelKey: 'editor.export.formatPng', descriptionKey: 'editor.export.descriptionPng', ext: 'png' },
   { id: 'jpeg', labelKey: 'editor.export.formatJpeg', descriptionKey: 'editor.export.descriptionJpeg', ext: 'jpg' },
   { id: 'pdf', labelKey: 'editor.export.formatPdf', descriptionKey: 'editor.export.descriptionPdf', ext: 'pdf' },
+  {
+    id: 'xmind',
+    labelKey: 'editor.export.formatXmind',
+    descriptionKey: 'editor.export.descriptionXmind',
+    ext: 'xmind',
+    mime: 'application/zip',
+  },
   {
     id: 'md',
     labelKey: 'editor.export.formatMd',
@@ -162,9 +173,36 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
 
   const patch = (next: Partial<ExportOptions>) => setOptions((current) => ({ ...current, ...next }));
 
+  // 品牌标识的默认文字来自站点设置（`site.brand`，留空时后端已回退成站点名）。
+  //
+  // 「打开时套用、但用户改过就不再套」：配置是异步来的，登录后第一次打开对话框
+  // 时它可能还没落地；无脑同步会把用户刚敲的字覆盖掉，而只在挂载时同步又会让
+  // 第一次打开拿到空串。用一个「碰过没有」的标记把两种时序都盖住。
+  const { config } = useSiteConfig();
+  const siteBrand = config.brand.trim() === '' ? config.siteName : config.brand;
+  const brandTouched = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      // 关掉即复位：下一次打开又该重新套用站点设置。
+      brandTouched.current = false;
+      return;
+    }
+    if (brandTouched.current) return;
+    setOptions((current) => (current.brandText === siteBrand ? current : { ...current, brandText: siteBrand }));
+  }, [open, siteBrand]);
+
   const baseCtx = useMemo(() => buildExportContext(doc, sheetId, options), [doc, sheetId, options]);
 
-  const text = isTextFormat(options.format);
+  // 三个开关而不是一个，因为这三件事互不重叠：
+  // - `plainText`：产出是字符串（md / opml），预览换成等宽文本；
+  // - `structural`：产出是「结构」而不是一张图（含 xmind），倍率/留白/边框全不适用；
+  // - `visual`：产出是一张图，只有它需要内嵌字体、构建 SVG、检查位图尺寸。
+  // 用 `structural` 代替 `plainText` 会顺手把 xmind 的图片内嵌也跳过——而
+  // `.xmind` 里的图片必须内嵌，否则文件到了别人手里就是一堆死链。
+  const plainText = isTextFormat(options.format);
+  const structural = isDocumentFormat(options.format);
+  const visual = !structural;
 
   // 文本格式直接从文档模型序列化。布局上下文仍然会算（下面要用它的标题，
   // 而且它本来就在每次改选项时重算），但**跳过了 SVG 构建与 base64 编码**——
@@ -175,12 +213,19 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
     return null;
   }, [doc, sheetId, options.format]);
 
+  // `.xmind` 的预览：一份文本大纲。画成 Markdown 会让人以为导出的就是 Markdown，
+  // 而这块 `<pre>` 该说明的只是「文件里有哪些节点」。
+  const xmindPreview = useMemo(
+    () => (options.format === 'xmind' ? xmindOutline(baseCtx) : null),
+    [baseCtx, options.format],
+  );
+
   // 图片地址（去重后）与它们的 `data:` URL 映射。
   //
   // 依赖用 `join` 后的字符串而不是数组本身：`collectImageSources` 每次返回
   // 新数组，拿数组当依赖会让 effect 在每次改选项时都重跑一遍。字符串相等时
   // 图片集合没变，也就没必要再抓。
-  const sourceList = useMemo(() => (text ? [] : collectImageSources(baseCtx)), [baseCtx, text]);
+  const sourceList = useMemo(() => (plainText ? [] : collectImageSources(baseCtx)), [baseCtx, plainText]);
   const sourceKey = sourceList.join('\n');
   const [dataUrls, setDataUrls] = useState<ReadonlyMap<string, string>>(() => new Map());
 
@@ -204,7 +249,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   // `@font-face`，不嵌就只能用系统字体画（实测字宽差 16%，文字会溢出节点框）。
   // 依赖用「族 + 字重 + 码位」拼出的签名：改倍率、留白、边框都不该重算字体，
   // 而加一个字就该重算。
-  const fontPlan = useMemo(() => (text ? [] : planFamilies(baseCtx)), [baseCtx, text]);
+  const fontPlan = useMemo(() => (visual ? planFamilies(baseCtx) : []), [baseCtx, visual]);
   const fontKey = fontPlan
     .map((need) => `${need.family}/${[...need.weights].sort().join(',')}/${[...need.codePoints].sort((a, b) => a - b).join(',')}`)
     .join('|');
@@ -230,7 +275,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
     () => applyFontCss(applyImageSources(baseCtx, dataUrls), fontCss),
     [baseCtx, dataUrls, fontCss],
   );
-  const markup = useMemo(() => (text ? '' : buildExportSvg(ctx)), [ctx, text]);
+  const markup = useMemo(() => (visual ? buildExportSvg(ctx) : ''), [ctx, visual]);
   const dataUrl = useMemo(() => (markup === '' ? '' : svgDataUrl(markup)), [markup]);
 
   // 抓不回来的图（跨域被拒、外链失效、超时）在成品里仍是原地址。默默留着
@@ -243,13 +288,16 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   // 某个字长得不一样，而且完全不知道为什么。取前 5 个字符做样本——只说个数
   // 用户没法判断要不要处理。
   const fallback = useMemo(
-    () => (text ? { chars: [] as string[], count: 0 } : detectFallback(ctx)),
-    [ctx, text],
+    () => (visual ? detectFallback(ctx) : { chars: [] as string[], count: 0 }),
+    [ctx, visual],
   );
   const fallbackSample = fallback.chars.slice(0, 5).join(' ') + (fallback.chars.length > 5 ? ' …' : '');
 
   const multiSheet = doc.sheets.length > 1;
   const format = FORMATS.find((item) => item.id === options.format) ?? FORMATS[0]!;
+
+  // 预览内容：md / opml 是字符串，xmind 是大纲，其余是一张图。三者互斥。
+  const previewText = textContent ?? xmindPreview?.text ?? null;
 
   // 位图的输出像素尺寸。SVG 没有这个上限——它是矢量的，再大也只是字符串长一点。
   const outputWidth = Math.round(ctx.width * ctx.scale);
@@ -271,7 +319,33 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
 
   // 「按主分支拆分」也只是界面状态：它不改变导出上下文，只改变**产出几个文件**。
   const [split, setSplit] = useState(false);
-  const branches = useMemo(() => (text ? [] : planBranches(doc, sheetId)), [doc, sheetId, text]);
+  const branches = useMemo(() => (visual ? planBranches(doc, sheetId) : []), [doc, sheetId, visual]);
+
+  // 画布范围对「图」与 `.xmind` 都有效（`.xmind` 一个文件能装多张画布），
+  // 只有 md / opml 不适用——那两个序列化器一次只吃一张。所以它单独拎出来，
+  // 在两个分支里各放一次，而不是复制一份 JSX。
+  const scopeField = (
+    <fieldset className="flex flex-col gap-1.5">
+      <legend className="mb-1 text-xs font-semibold text-foreground">
+        {t('editor.export.scope')}
+      </legend>
+      <RadioGroup
+        label={t('editor.export.scope')}
+        value={options.scope}
+        options={[
+          { value: 'current', label: t('editor.export.scopeCurrent') },
+          // 只有一张画布时「全部」与「当前」等价，禁用比让人选一个没差别的
+          // 选项更诚实。
+          {
+            value: 'all',
+            label: t('editor.export.scopeAll', { count: doc.sheets.length }),
+            disabled: !multiSheet,
+          },
+        ]}
+        onChange={(scope) => patch({ scope })}
+      />
+    </fieldset>
+  );
 
   const download = async () => {
     if (textContent !== null) {
@@ -280,6 +354,26 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       const blob = new Blob([textContent], { type: format.mime ?? 'text/plain;charset=utf-8' });
       downloadBlob(blob, exportFileName(ctx.title, format.ext));
       onClose();
+      return;
+    }
+
+    if (options.format === 'xmind') {
+      // 打包是同步的纯计算（fflate 的 `zipSync`），但仍然放在 `busy` 里：
+      // 一张几百节点的图加上内嵌图片要几百毫秒，期间按钮必须变成「正在生成」，
+      // 否则用户会连点。
+      setBusy(true);
+      try {
+        const result = buildXmind(doc, baseCtx, dataUrls);
+        downloadBlob(
+          new Blob([result.bytes as BlobPart], { type: 'application/zip' }),
+          exportFileName(ctx.title, format.ext),
+        );
+        onClose();
+      } catch {
+        toast.error(t('editor.export.failedXmind'));
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
@@ -371,16 +465,20 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             <span>
               {textContent !== null
                 ? t('editor.export.textSize', { count: textContent.length })
-                : split && branches.length > 1
-                  // 拆分时逐张尺寸不同，报一个数只会误导；报文件数才有用。
-                  ? t('editor.export.splitFiles', { count: branches.length })
-                  : options.format === 'pdf'
-                    ? // PDF 的「尺寸」用户是按纸看的：报像素没有意义。
-                      t('editor.export.pageSize', {
-                        width: mmOf(ctx.width),
-                        height: mmOf(ctx.height),
-                      })
-                    : t('editor.export.size', { width: outputWidth, height: outputHeight })}
+                : xmindPreview !== null
+                  // `.xmind` 没有「尺寸」可言：报节点数才是用户关心的
+                  //（「我这张图有多少个主题」）。
+                  ? t('editor.export.xmindSize', { count: xmindPreview.topics })
+                  : split && branches.length > 1
+                    // 拆分时逐张尺寸不同，报一个数只会误导；报文件数才有用。
+                    ? t('editor.export.splitFiles', { count: branches.length })
+                    : options.format === 'pdf'
+                      ? // PDF 的「尺寸」用户是按纸看的：报像素没有意义。
+                        t('editor.export.pageSize', {
+                          width: mmOf(ctx.width),
+                          height: mmOf(ctx.height),
+                        })
+                      : t('editor.export.size', { width: outputWidth, height: outputHeight })}
             </span>
             {rasterVerdict.kind === 'too-large' ? (
               <span className="ml-2 text-destructive">
@@ -438,13 +536,14 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
     >
       <div className="flex flex-col gap-4 sm:flex-row">
         {/* 预览：棋盘格底，透明背景时能直接看出来。
-            文本格式换成等宽文本——那种格式没有「画出来」的样子，画一张图反而是骗人。 */}
+            文本格式与 xmind 换成等宽文本——那两种格式没有「画出来」的样子，
+            画一张图反而是骗人。 */}
         <div
           className={`flex max-h-[52vh] min-h-40 flex-1 overflow-auto rounded-xl border border-border p-3 ${
-            textContent === null ? 'items-center justify-center' : 'items-start justify-start'
+            previewText === null ? 'items-center justify-center' : 'items-start justify-start'
           }`}
           style={
-            textContent !== null
+            previewText !== null
               ? undefined
               : {
                   backgroundColor: ctx.background ?? 'transparent',
@@ -457,7 +556,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 }
           }
         >
-          {textContent === null ? (
+          {previewText === null ? (
             <img
               src={dataUrl}
               alt={t('editor.export.previewAlt')}
@@ -468,7 +567,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
               data-testid="export-text-preview"
               className="w-full whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-foreground"
             >
-              {textContent}
+              {previewText}
             </pre>
           )}
         </div>
@@ -486,28 +585,9 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             />
           </fieldset>
 
-          {textContent === null ? (
+          {visual ? (
             <>
-              <fieldset className="flex flex-col gap-1.5">
-                <legend className="mb-1 text-xs font-semibold text-foreground">
-                  {t('editor.export.scope')}
-                </legend>
-                <RadioGroup
-                  label={t('editor.export.scope')}
-                  value={options.scope}
-                  options={[
-                    { value: 'current', label: t('editor.export.scopeCurrent') },
-                    // 只有一张画布时「全部」与「当前」等价，禁用比让人选一个没差别的
-                    // 选项更诚实。
-                    {
-                      value: 'all',
-                      label: t('editor.export.scopeAll', { count: doc.sheets.length }),
-                      disabled: !multiSheet,
-                    },
-                  ]}
-                  onChange={(scope) => patch({ scope })}
-                />
-              </fieldset>
+              {scopeField}
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 {t('editor.export.scale')}
@@ -612,6 +692,27 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                     onCheckedChange={(checked) => patch({ [key]: checked })}
                   />
                 ))}
+                {/* 品牌文字：默认套用站点设置，但允许当场改——同一份图可能要发给
+                    两个客户，各自落款不同。只勾了「品牌标识」才出现，否则屏幕上
+                    会多一个永远用不到的输入框。 */}
+                {options.brand ? (
+                  <label className="flex flex-col gap-1 pl-6 text-[11px] font-normal text-muted-foreground">
+                    {t('editor.export.brandText')}
+                    <input
+                      type="text"
+                      value={options.brandText}
+                      // 与后端 `site.brand` 的 64 字符上限对齐：前端不拦，用户会
+                      // 敲出一行把页脚撑满的字，导出后才发现右下角糊成一片。
+                      maxLength={64}
+                      onChange={(event) => {
+                        brandTouched.current = true;
+                        patch({ brandText: event.target.value });
+                      }}
+                      placeholder={siteBrand}
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                    />
+                  </label>
+                ) : null}
                 {options.format === 'jpeg' && options.transparent ? (
                   // 勾着「透明背景」却导 JPEG，预览里是白底——不解释一句，用户会以为
                   // 透明选项失效了。
@@ -629,7 +730,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 ) : null}
               </div>
             </>
-          ) : (
+          ) : plainText ? (
             // 文本格式没有任何「样式」可言：倍率、留白、透明背景、边框、日期、品牌
             // 全部不适用。与其把六个控件灰一屏，不如收起来，用一句话说清丢的是什么。
             <div className="flex flex-col gap-1.5">
@@ -643,6 +744,15 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                   {t('editor.export.textSingleSheet')}
                 </p>
               ) : null}
+            </div>
+          ) : (
+            // xmind 是「结构」格式，倍率/留白/边框同样不适用；但画布范围适用
+            // （一个 .xmind 能装多张画布），所以这里保留范围选择器。
+            <div className="flex flex-col gap-3">
+              {scopeField}
+              <p className="rounded-lg border border-border bg-muted/40 px-2.5 py-2 text-[11px] leading-snug text-muted-foreground">
+                {t('editor.export.xmindNote')}
+              </p>
             </div>
           )}
         </div>

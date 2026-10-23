@@ -17,13 +17,24 @@ import type { LayoutResult, Rect } from '../layout/types';
 import type { Sheet, Theme, WmindDocument } from '../model/types';
 
 /** 会产出文件的导出格式。 */
-export type ExportFormat = 'svg' | 'png' | 'jpeg' | 'pdf' | 'md' | 'opml';
+export type ExportFormat = 'svg' | 'png' | 'jpeg' | 'pdf' | 'md' | 'opml' | 'xmind';
 /** 纯文本格式：从文档模型直接序列化，不经过布局与渲染，因此没有尺寸、留白、背景。 */
 export type TextExportFormat = 'md' | 'opml';
 
-/** 是否是文本格式。对话框靠它决定隐藏哪些选项、预览换成文本。 */
+/** 是否是文本格式。对话框靠它决定预览换成文本、以及跳过栅格化。 */
 export function isTextFormat(format: ExportFormat): format is TextExportFormat {
   return format === 'md' || format === 'opml';
+}
+
+/**
+ * 是否是「文档格式」（交出的是结构，不是一张图）。
+ *
+ * `xmind` 与两种文本格式在**界面上**是一类：没有倍率、留白、边框、背景可言，
+ * 预览也不该是一张渲染图。区别在于 `.xmind` 是二进制 zip、且带图片与样式，
+ * 所以它不算 `TextExportFormat`——那个类型承诺了「纯字符串」。
+ */
+export function isDocumentFormat(format: ExportFormat): boolean {
+  return isTextFormat(format) || format === 'xmind';
 }
 
 /** 边框预设。`none` 表示不画。 */
@@ -168,8 +179,16 @@ export interface ExportOptions {
   border: BorderStyleId;
   /** 左下角打印导出日期。 */
   date: boolean;
-  /** 右下角打印「由 wmind 生成」。 */
+  /** 右下角打印品牌标识。 */
   brand: boolean;
+  /**
+   * 品牌标识的文字。
+   *
+   * 默认值来自站点设置 `site.brand`（导出对话框打开时套用），但**允许当场改**：
+   * 同一份导图可能要发给两个客户，各自落款不同。空串等于「不打印」——
+   * 勾着开关却写空，页脚那一行就不该占位，见 `buildExportContext`。
+   */
+  brandText: string;
 }
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
@@ -182,6 +201,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   border: 'none',
   date: false,
   brand: true,
+  brandText: 'wmind',
 };
 
 /** 多画布纵向排列时的间距。 */
@@ -219,7 +239,10 @@ export interface ExportContext {
   border: BorderPreset;
   /** `YYYY-MM-DD`；`null` 表示不打印。 */
   date: string | null;
+  /** 是否打印品牌标识。文字为空时这里是 `false`——空串不该占一行页脚。 */
   brand: boolean;
+  /** 品牌标识的文字（已 trim）。`brand` 为 false 时无意义。 */
+  brandText: string;
   scale: number;
   /**
    * 内嵌字体的 `@font-face` 规则，写进 SVG 的 `<defs><style>`。
@@ -334,7 +357,11 @@ export function buildExportContext(
     + Math.max(0, laid.length - 1) * SHEET_GAP;
 
   const padding = Math.max(0, options.padding);
-  const footer = options.date || options.brand ? FOOTER_HEIGHT : 0;
+  // 勾了「品牌标识」但文字是空的，等于没有落款：这时不该再留一行页脚高度，
+  // 否则用户看到的是一块莫名其妙的空白。
+  const brandText = options.brandText.trim();
+  const brand = options.brand && brandText !== '';
+  const footer = options.date || brand ? FOOTER_HEIGHT : 0;
 
   const baseWidth = Math.max(MIN_CONTENT_SIZE, innerWidth + padding * 2);
   const baseHeight = Math.max(MIN_CONTENT_SIZE, innerHeight + padding * 2 + footer);
@@ -368,7 +395,8 @@ export function buildExportContext(
     background: backgroundColor(laid[0]?.theme ?? document.theme, options),
     border: BORDER_PRESETS[options.border],
     date: options.date ? today(now) : null,
-    brand: options.brand,
+    brand,
+    brandText,
     scale: options.scale,
     fontCss: '',
   };

@@ -2,6 +2,7 @@ package settings
 
 import (
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -40,6 +41,18 @@ func (s *Snapshot) Int(key string) int {
 
 // SiteName 返回站点名称。
 func (s *Snapshot) SiteName() string { return s.String("site.name") }
+
+// BrandName 返回导出图片上印的品牌文字。
+//
+// 空值回退到站点名称，而不是回退到写死的 "wmind"：自建站把站点名改成
+// 「Acme 思维」之后，导出图右下角还印着 wmind 是明显的错。留空即「跟站点名一致」
+// 也是后台表单上那句话的字面意思。
+func (s *Snapshot) BrandName() string {
+	if brand := strings.TrimSpace(s.String("site.brand")); brand != "" {
+		return brand
+	}
+	return s.SiteName()
+}
 
 // RegistrationEnabled 报告是否开放注册。
 func (s *Snapshot) RegistrationEnabled() bool { return s.Bool("auth.registration_enabled") }

@@ -24,7 +24,10 @@ func NewSiteHandler(svc *settings.Service, version string) *SiteHandler {
 // 字段逐个列出而不是直接把快照的 map 吐出去：这个接口未登录可访问，
 // 白名单式地写清楚「哪些键会出去」，比「从 map 里过滤掉敏感的」更难出错。
 type siteConfig struct {
-	SiteName            string `json:"siteName"`
+	SiteName string `json:"siteName"`
+	// Brand 是导出图片右下角的落款。已经解析过「留空 = 站点名称」，
+	// 前端直接拿去用，不必再判断一次空串。
+	Brand               string `json:"brand"`
 	LogoURL             string `json:"logoUrl"`
 	Description         string `json:"description"`
 	ICP                 string `json:"icp"`
@@ -48,6 +51,7 @@ func (h *SiteHandler) Config(c *gin.Context) {
 	snapshot := h.settings.Snapshot()
 	response.OK(c, siteConfig{
 		SiteName:            snapshot.SiteName(),
+		Brand:               snapshot.BrandName(),
 		LogoURL:             snapshot.String("site.logo"),
 		Description:         snapshot.String("site.description"),
 		ICP:                 snapshot.String("site.icp"),

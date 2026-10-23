@@ -48,6 +48,9 @@ type Spec struct {
 // 与 docs/03 §4.1 一一对应；改这里必须同步文档与前端表单。
 var specs = []Spec{
 	{Key: "site.name", Kind: KindString, Default: `"wmind"`, Public: true, MinRunes: 1, MaxRunes: 64},
+	// 导出图片右下角的落款。默认空串 = 「跟站点名称走」，由 Snapshot.BrandName
+	// 兜底——自建站的人改了站点名却忘了改这一项时，导出图上印的还是 wmind。
+	{Key: "site.brand", Kind: KindString, Default: `""`, Public: true, MaxRunes: 64},
 	{Key: "site.logo", Kind: KindString, Default: `""`, Public: true, MaxRunes: 512},
 	{Key: "site.description", Kind: KindString, Default: `""`, Public: true, MaxRunes: 512},
 	{Key: "site.icp", Kind: KindString, Default: `""`, Public: true, MaxRunes: 64},

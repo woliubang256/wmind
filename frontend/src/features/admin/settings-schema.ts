@@ -43,6 +43,13 @@ export const SETTING_GROUPS: SettingGroup[] = [
     descriptionKey: 'admin.settings.groupSiteDescription',
     fields: [
       { key: 'site.name', labelKey: 'admin.settings.fieldSiteName', kind: 'string', placeholder: 'wmind' },
+      {
+        key: 'site.brand',
+        labelKey: 'admin.settings.fieldSiteBrand',
+        kind: 'string',
+        hintKey: 'admin.settings.hintSiteBrand',
+        placeholder: 'wmind',
+      },
       { key: 'site.logo', labelKey: 'admin.settings.fieldSiteLogo', kind: 'string', hintKey: 'admin.settings.hintSiteLogo' },
       {
         key: 'site.description',

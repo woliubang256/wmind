@@ -27,10 +27,10 @@
 | M1 账号体系：注册/登录/刷新/登出/改密/头像、管理后台、审计、三档暗色 | ✅ |
 | M2 编辑器内核：SVG 渲染、布局引擎、拖拽、快捷键、撤销重做、自动保存 | ✅ |
 | M3 样式与主题：8 种结构、10 套配色、自定义主题、面板 | ✅ |
-| M4 导入导出：XMind 8/新版、Markdown、OPML；导出 SVG/PNG/JPEG/PDF/MD/OPML | ✅ PDF 走**栅格**路线（单页图片 + 手写容器），文字不可选中，界面已说明；矢量 PDF 需要 WOFF2→TTF 子集化工具，是独立工程，见 [docs/06](./docs/06-导入导出与主题系统.md) §3.5 |
+| M4 导入导出：XMind 8/新版、Markdown、OPML；导出 SVG/PNG/JPEG/PDF/MD/OPML/XMind | ✅ PDF 走**栅格**路线（单页图片 + 手写容器），文字不可选中，界面已说明；矢量 PDF 需要 WOFF2→TTF 子集化工具，是独立工程，见 [docs/06](./docs/06-导入导出与主题系统.md) §3.5 |
 | M5 模板 / 多画布 / 大纲 / ZEN / 分享链接 | ✅ |
 | M6 无障碍、视口裁剪、错误兜底、备份与恢复 | ✅ 无障碍 23 条、裁剪 6 条、错误 3 条界面验收全过 |
-| 测试 | ✅ 前端 1060 条单测（65 个文件）；后端全绿；界面验收 168 条 / 10 套（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
+| 测试 | ✅ 前端 1081 条单测（66 个文件）；后端全绿；界面验收 175 条 / 10 套（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
 | 两套 Compose / Dockerfile / Nginx | 🟡 配置已写，**本机没有 Docker，镜像构建与编排未实跑** |
 | PostgreSQL 完整回归 | ⬜ 需要 CI 提供实例 |
 | 多语言 | ✅ zh-CN / en-US 双语约 860 个键，界面内可切换（跟随浏览器 / 中文 / English），`<html lang>` 同步；守卫测试比对 key、占位符与源码引用 |
@@ -112,7 +112,7 @@ make verify-dialect  # 迁移 parity + 方言分层检查
 界面验收（需要后端与前端都起着，见 [`frontend/e2e/README.md`](./frontend/e2e/README.md)）：
 
 ```bash
-cd frontend && npm run e2e    # 六套 108 条，串行约 90 秒
+cd frontend && npm run e2e    # 十套 175 条，串行约 15 分钟
 ```
 
 ## 目录结构
@@ -133,7 +133,7 @@ wmind/
 │   │   └── pkg/              apperr / logger / id / reqid 等通用件
 │   └── db/                   两套迁移集、sqlc 配置与查询
 ├── frontend/                 React 前端（Vite + TypeScript + Tailwind v4，自建 UI 组件）
-│   └── e2e/                  界面验收脚本（十套 168 条，见 e2e/README.md）
+│   └── e2e/                  界面验收脚本（十套 175 条，见 e2e/README.md）
 ├── deploy/                   Compose、Dockerfile、Nginx 配置
 ├── docs/                     需求、架构、接口、部署文档
 └── .agents/                  架构决策笔记与校验脚本

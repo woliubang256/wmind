@@ -26,6 +26,12 @@ export interface User {
 /** GET /site/config 的响应。未登录可读。 */
 export interface SiteConfig {
   siteName: string;
+  /**
+   * 导出图片右下角的落款文字。
+   *
+   * 后端已经把「空值」解析成站点名称了，所以这里拿到的永远是可以直接用的值。
+   */
+  brand: string;
   logoUrl: string;
   description: string;
   icp: string;
