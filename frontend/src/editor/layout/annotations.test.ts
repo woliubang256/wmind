@@ -88,6 +88,33 @@ describe('relationshipArc', () => {
 });
 
 describe('layoutAnnotations', () => {
+  const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+  it('左侧概要向左展开，不压在父主题下', () => {
+    const { sheet, theme } = sheetWith({ summaries: [summary()], structure: 'logic-left' });
+    const layout = layoutMindmap({ sheet, theme });
+    const item = layoutAnnotations(sheet, layout, theme).summaries[0]!;
+    const left = Math.min(layout.boxes.get('a1')!.x, layout.boxes.get('a2')!.x);
+    expect(item.rect.x + item.rect.width).toBeLessThan(left);
+    expect([...layout.boxes.values()].some((box) => overlaps(item.rect, box))).toBe(false);
+    expect(item.connector.to.x).toBe(item.rect.x + item.rect.width);
+  });
+
+  it('自动避让主题以及同范围的历史概要，包围盒包含避让后节点', () => {
+    const { sheet, theme } = sheetWith({ summaries: [summary(), summary({ id: 's2' })] });
+    const layout = layoutMindmap({ sheet, theme });
+    const initial = layoutAnnotations(sheet, layout, theme).summaries[0]!;
+    layout.boxes.set('obstacle', { ...layout.boxes.get('a1')!, ...initial.rect, id: 'obstacle' });
+    const annotations = layoutAnnotations(sheet, layout, theme);
+    const [first, second] = annotations.summaries;
+    for (const item of annotations.summaries) {
+      expect([...layout.boxes.values()].some((box) => overlaps(item.rect, box))).toBe(false);
+      expect(item.rect.x + item.rect.width).toBeLessThanOrEqual(annotations.bounds!.x + annotations.bounds!.width);
+    }
+    expect(overlaps(first!.rect, second!.rect)).toBe(false);
+  });
+
   it('概要贴在范围的右侧、竖直居中', () => {
     const { sheet, theme } = sheetWith({ summaries: [summary()] });
     const layout = layoutMindmap({ sheet, theme });

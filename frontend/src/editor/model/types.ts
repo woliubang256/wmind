@@ -170,7 +170,7 @@ export interface Summary {
   id: string;
   /** 汇总节点挂载的父主题。 */
   topicId: string;
-  /** 被汇总的兄弟主题。 */
+  /** 被汇总的主题（保留完整选区，允许跨分支）。 */
   range: string[];
   title: string;
   style: Partial<Style> | null;

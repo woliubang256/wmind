@@ -13,7 +13,7 @@
  * - 概要的位置依赖「被概要的那几个兄弟最终落在哪」，只能在主题布局之后算；
  * - 分开之后，改概要的画法不需要重跑 876 行的布局，也不会碰到折叠逻辑。
  *
- * 三者共用「区间并集」这一个原语：边界是一圈虚线框，概要是右侧的括号加节点，
+ * 三者共用「区间并集」这一个原语：边界是一圈虚线框，概要是外侧的括号加节点，
  * 关系线是两点之间的一段弧。谁都没有自己的坐标系。
  */
 
@@ -128,9 +128,9 @@ export function unionRect(rects: readonly Rect[], pad = 0): Rect | null {
  * `arm` 取 `min(braceArm, 高度/2)`：范围只有一个节点时高度很小，硬画 12px
  * 的圆角会让两端叠在一起，看起来像一团。
  */
-export function bracePath(rect: Rect, arm = ANNOTATION_METRICS.braceArm): string {
-  const x = rect.x + rect.width;
-  const bx = x + ANNOTATION_METRICS.summaryGap / 2;
+export function bracePath(rect: Rect, arm = ANNOTATION_METRICS.braceArm, side: 'left' | 'right' = 'right'): string {
+  const x = side === 'left' ? rect.x : rect.x + rect.width;
+  const bx = x + (side === 'left' ? -1 : 1) * ANNOTATION_METRICS.summaryGap / 2;
   const top = rect.y;
   const bottom = rect.y + rect.height;
   const radius = Math.min(arm, rect.height / 2);
@@ -165,7 +165,7 @@ function dashFor(style: 'solid' | 'dash' | 'dot' | 'none', width: number): strin
 }
 
 /**
- * 概要的矩形：贴在范围的右侧、竖直居中。
+ * 概要的矩形：在范围外侧竖直居中，遇到主题或已放置概要则向外避让。
  *
  * 标题按 `summaryMaxWidth` 折行——XMind 的概要节点不会横向长到把画布撑开，
  * 长文本一律折行。
@@ -174,6 +174,8 @@ function layoutSummary(
   summary: Summary,
   range: Rect,
   style: SummaryStyle,
+  side: 'left' | 'right',
+  occupied: readonly Rect[],
 ): { rect: Rect; lines: string[] } {
   const font = { family: style.fontFamily, size: style.fontSize, weight: style.fontWeight, italic: false };
   const measured = measureText(summary.title, font, ANNOTATION_METRICS.summaryMaxWidth);
@@ -182,13 +184,25 @@ function layoutSummary(
     Math.min(ANNOTATION_METRICS.summaryMaxWidth, measured.width) + ANNOTATION_METRICS.summaryPaddingX * 2,
   );
   const height = measured.height + ANNOTATION_METRICS.summaryPaddingY * 2;
+  const rect = {
+    x: side === 'left'
+      ? range.x - ANNOTATION_METRICS.summaryGap - width
+      : range.x + range.width + ANNOTATION_METRICS.summaryGap,
+    y: range.y + range.height / 2 - height / 2,
+    width,
+    height,
+  };
+  // 每次跳过一个阻挡盒子的外缘，坐标单调向外推进，最多处理全部障碍一次。
+  const gap = 12;
+  const obstacles = occupied.filter((box) => rect.y < box.y + box.height + gap && rect.y + rect.height + gap > box.y);
+  obstacles.sort((a, b) => side === 'left' ? b.x + b.width - a.x - a.width : a.x - b.x);
+  for (const box of obstacles) {
+    if (rect.x < box.x + box.width + gap && rect.x + rect.width + gap > box.x) {
+      rect.x = side === 'left' ? box.x - gap - rect.width : box.x + box.width + gap;
+    }
+  }
   return {
-    rect: {
-      x: range.x + range.width + ANNOTATION_METRICS.summaryGap,
-      y: range.y + range.height / 2 - height / 2,
-      width,
-      height,
-    },
+    rect,
     lines: measured.lines,
   };
 }
@@ -240,7 +254,8 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
     const rects = rectsOf(layout, item.range);
     const range = unionRect(rects);
     if (range === null) continue;
-    const placed = layoutSummary(item, range, summary);
+    const side = item.range.filter((id) => layout.boxes.has(id)).every((id) => layout.boxes.get(id)!.side === 'left') ? 'left' : 'right';
+    const placed = layoutSummary(item, range, summary, side, [...layout.boxes.values(), ...summaries.map((entry) => entry.rect)]);
     summaries.push({
       id: item.id,
       topicId: item.topicId,
@@ -248,10 +263,10 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
       title: item.title,
       lines: placed.lines,
       rect: placed.rect,
-      brace: bracePath(range),
+      brace: bracePath(range, ANNOTATION_METRICS.braceArm, side),
       connector: {
-        from: { x: range.x + range.width + ANNOTATION_METRICS.summaryGap / 2, y: range.y + range.height / 2 },
-        to: { x: placed.rect.x, y: placed.rect.y + placed.rect.height / 2 },
+        from: { x: side === 'left' ? range.x - ANNOTATION_METRICS.summaryGap / 2 : range.x + range.width + ANNOTATION_METRICS.summaryGap / 2, y: range.y + range.height / 2 },
+        to: { x: placed.rect.x + (side === 'left' ? placed.rect.width : 0), y: placed.rect.y + placed.rect.height / 2 },
       },
       style: summary,
     });

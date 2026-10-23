@@ -33,6 +33,7 @@ import { parseDocument } from '@/editor/model/validate';
 import { createEditorStore } from '@/editor/store/editor-store';
 import { EditorProvider, useEditor, useEditorStoreApi } from '@/editor/store/use-editor';
 import { layoutMindmap } from '@/editor/layout/mindmap';
+import { layoutAnnotations, unionRect } from '@/editor/layout/annotations';
 import type { LayoutResult } from '@/editor/layout/types';
 import { MIN_ZOOM, zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
 import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
@@ -65,6 +66,8 @@ import {
   addBoundaryCommand,
   addRelationshipCommand,
   addSummaryCommand,
+  summaryTarget as getSummaryTarget,
+  summaryForRange,
   removeAnnotationCommand,
   renameAnnotationCommand,
   type AnnotationKind,
@@ -425,30 +428,19 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     [store],
   );
 
-  /**
-   * 概要用在哪：选中主题的**父节点**，范围是与它同级的那部分选中项。
-   *
-   * 概要的语义是「这几个兄弟的汇总」，所以跨分支的选中（同时选了 A 的子节点
-   * 和 B 的子节点）只能落到其中一个父节点下——取第一个选中项的父节点，其余
-   * 不同级的自动被滤掉。这比直接禁用按钮好：用户至少能看到「它挂了什么」。
-   */
-  const summaryTarget = useMemo(() => {
-    if (selection.length === 0) return null;
-    const found = findTopicInSheet(sheet, selection[0] ?? '');
-    const parent = found?.parent ?? null;
-    if (parent === null) return null;
-    const siblings = new Set(parent.children.attached.map((topic) => topic.id));
-    const range = selection.filter((id) => siblings.has(id));
-    return range.length === 0 ? null : { topicId: parent.id, range };
-  }, [sheet, selection]);
+  const summaryTarget = useMemo(() => getSummaryTarget(sheet, selection), [sheet, selection]);
 
   const addSummary = useCallback(() => {
     if (summaryTarget === null) return;
     store.getState().dispatch(
       addSummaryCommand({ ...summaryTarget, title: t('editor.annotation.summaryDefault') }),
     );
+    const state = store.getState();
+    const item = summaryForRange(sheetById(state.doc, state.sheetId), summaryTarget.range);
+    if (item) setActiveAnnotation({ kind: 'summary', id: item.id });
     setPanelOpen(true);
     setPanelTab('structure');
+    requestAnimationFrame(() => fitRef.current());
   }, [summaryTarget, store, t]);
 
   const addBoundary = useCallback(() => {
@@ -467,19 +459,24 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     setPanelTab('structure');
   }, [selection, store]);
 
+  const contentBounds = useMemo(() => {
+    const annotations = layoutAnnotations(sheet, layout, sheet.themeOverride ?? doc.theme);
+    return unionRect([layout.bounds, ...(annotations.bounds ? [annotations.bounds] : [])], 16)!;
+  }, [sheet, layout, doc.theme]);
+
   const fit = useCallback(() => {
     const element = canvasRef.current;
     if (!element) return;
     const rect = element.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
-    const raw = Math.min(rect.width / layout.bounds.width, rect.height / layout.bounds.height) * 0.94;
+    const raw = Math.min(rect.width / contentBounds.width, rect.height / contentBounds.height) * 0.94;
     const zoom = Math.max(MIN_ZOOM, Math.min(1.2, raw));
     setViewport({
       zoom,
-      x: (rect.width - layout.bounds.width * zoom) / 2,
-      y: (rect.height - layout.bounds.height * zoom) / 2,
+      x: (rect.width - contentBounds.width * zoom) / 2 - contentBounds.x * zoom,
+      y: (rect.height - contentBounds.height * zoom) / 2 - contentBounds.y * zoom,
     });
-  }, [layout]);
+  }, [contentBounds]);
 
   // 只在挂载与容器尺寸变化时重新适配。用 ref 拿最新的 fit，避免把 fit 放进
   // 依赖数组——否则每敲一个字都会重新适配一次，用户手动缩放的位置会被抢走。

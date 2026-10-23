@@ -85,6 +85,8 @@ function documentFor(title) {
         rootTopic: topic('tp-root', title, [
           topic('tp-a', '分支 A', [topic('tp-a1', '分支 A1'), topic('tp-a2', '分支 A2')]),
           topic('tp-b', '分支 B', [topic('tp-b1', '分支 B1')]),
+          topic('tp-c', '分支 C', [topic('tp-c1', '分支 C1')]),
+          topic('tp-d', '分支 D', [topic('tp-d1', '分支 D1')]),
         ]),
         floatingTopics: [],
         relationships: [],
@@ -219,6 +221,34 @@ async function main() {
     await page.waitForTimeout(400);
     check('IE-ANN-10 面板里删除后画布上的边界消失', (await page.locator('[data-boundary-id]').count()) === 0);
 
+    // 截图中的场景：两个左侧分支的叶子，不能被裁成第一项的同级范围。
+    await selectOnly(page, ['tp-b1', 'tp-d1']);
+    await toolbar(page, '概要').click();
+    await page.waitForTimeout(350);
+    const summarySection = panel.locator('section').filter({ has: page.getByRole('heading', { name: '概要', exact: true }) });
+    const crossRow = summarySection.locator('li').filter({ hasText: '分支 B1、分支 D1' });
+    check('IE-SUM-01 跨父级选区的两个要点完整保留', await crossRow.count() === 1);
+    const cross = page.locator('[data-summary-id]').last();
+    const crossBox = await cross.locator('rect').boundingBox();
+    const bBox = await node(page, 'tp-b1').boundingBox();
+    const dBox = await node(page, 'tp-d1').boundingBox();
+    check('IE-SUM-02 左侧概要向左展开且完整可见', crossBox && bBox && dBox &&
+      crossBox.x >= 0 && crossBox.x + crossBox.width < Math.min(bBox.x, dBox.x));
+    const noOverlap = await page.evaluate(() => {
+      const rects = [...document.querySelectorAll('[data-summary-id] rect')].map((el) => el.getBoundingClientRect());
+      const topics = [...document.querySelectorAll('[data-topic-id]')].map((el) => el.getBoundingClientRect());
+      const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      return rects.every((rect, index) => !topics.some((box) => overlaps(rect, box)) &&
+        !rects.slice(index + 1).some((box) => overlaps(rect, box)));
+    });
+    check('IE-SUM-03 概要节点避让全部主题及其他概要', noOverlap);
+    await toolbar(page, '概要').click();
+    await toolbar(page, '概要').click();
+    check('IE-SUM-04 重复点击保持两条不同范围的概要', await page.locator('[data-summary-id]').count() === 2);
+    await page.waitForTimeout(1500);
+    await page.reload();
+    await waitForCanvas(page);
+    check('IE-SUM-05 刷新后跨分支概要仍存在', await page.locator('[data-summary-id]').count() === 2);
     check('IE-ANN-11 全程没有页面级 JS 异常', errors.length === 0, errors.slice(0, 2).join(' | '));
   } finally {
     await browser.close();

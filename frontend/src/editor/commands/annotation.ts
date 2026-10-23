@@ -13,7 +13,7 @@
  * 关系线只有画布级一个位置（它不属于任何主题）。
  */
 
-import { findTopicInSheet } from '../model/traverse';
+import { collectSummaries, findTopicInSheet } from '../model/traverse';
 import type { Boundary, Relationship, Sheet, Summary } from '../model/types';
 import { defineCommand, type EditorCommand } from './types';
 
@@ -48,12 +48,30 @@ function cleanRange(sheet: Sheet, ids: readonly string[]): string[] {
 }
 
 export interface AddSummaryInput {
-  /** 概要挂载的父主题（被概要的那几个兄弟的父节点）。 */
+  /** 概要挂载主题，通常为选区的最近共同祖先。 */
   topicId: string;
-  /** 被概要的兄弟主题。 */
+  /** 被概要的全部选中主题。 */
   range: readonly string[];
   /** 概要节点上的文字。调用方负责给默认值（命令层不碰 i18n）。 */
   title: string;
+}
+
+/** 完整保留选区；挂载位置取所有选中项的最近共同祖先。 */
+export function summaryTarget(sheet: Sheet, ids: readonly string[]): Omit<AddSummaryInput, 'title'> | null {
+  const range = cleanRange(sheet, ids);
+  if (range.length === 0) return null;
+  const paths = range.map((id) => findTopicInSheet(sheet, id)!.path.slice(0, -1));
+  const common = paths[0]!.filter((id, index) => paths.every((path) => path[index] === id));
+  return { topicId: common.at(-1) ?? sheet.rootTopic.id, range };
+}
+
+/** 以集合而非选择顺序识别概要，兼容主题级导入数据。 */
+export function summaryForRange(sheet: Sheet, range: readonly string[]): Summary | undefined {
+  const ids = new Set(range);
+  return collectSummaries(sheet).find((item) => {
+    const existing = new Set(item.range);
+    return existing.size === ids.size && [...existing].every((id) => ids.has(id));
+  });
 }
 
 /** 新增概要。范围为空或父主题不存在时什么都不做。 */
@@ -68,6 +86,7 @@ export function addSummaryCommand(input: AddSummaryInput): EditorCommand {
       if (parent === null) return;
       const range = cleanRange(sheet, input.range);
       if (range.length === 0) return;
+      if (summaryForRange(sheet, range) !== undefined) return;
       const summary: Summary = {
         id: ctx.nextId(),
         topicId: input.topicId,

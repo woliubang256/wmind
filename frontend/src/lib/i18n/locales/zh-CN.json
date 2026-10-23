@@ -183,7 +183,7 @@
     "annotation.remove": "删除",
     "annotation.summaryDefault": "概要",
     "annotation.untitledTopic": "未命名主题",
-    "annotation.summaryHint": "选中几个同级主题，生成一条汇总。",
+    "annotation.summaryHint": "选中几个主题，生成一条汇总。",
     "annotation.boundaryHint": "选中主题后加一圈虚线框，用来分组。",
     "annotation.relationshipHint": "选中两个主题，连一条跨分支的线。",
     "annotation.summaryEmpty": "还没有概要",

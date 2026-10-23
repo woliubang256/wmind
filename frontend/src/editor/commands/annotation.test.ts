@@ -9,6 +9,7 @@ import {
   annotationTitle,
   removeAnnotationCommand,
   renameAnnotationCommand,
+  summaryTarget,
 } from './annotation';
 
 function makeStore() {
@@ -22,6 +23,35 @@ function makeStore() {
 const sheetOf = (store: ReturnType<typeof makeStore>) => store.getState().doc.sheets[0]!;
 
 describe('addSummaryCommand', () => {
+  it('跨父级选择完整保留，以最近共同祖先挂载', () => {
+    const store = makeStore();
+    const target = summaryTarget(sheetOf(store), ['a1', 'b1']);
+    expect(target).toEqual({ topicId: 'root', range: ['a1', 'b1'] });
+    store.getState().dispatch(addSummaryCommand({ ...target!, title: '跨分支' }));
+    expect(collectSummaries(sheetOf(store))[0]!.range).toEqual(['a1', 'b1']);
+    store.getState().undo();
+    expect(collectSummaries(sheetOf(store))).toHaveLength(0);
+    store.getState().redo();
+    expect(collectSummaries(sheetOf(store))[0]!.range).toEqual(['a1', 'b1']);
+  });
+
+  it('同级取父主题，跨自由主题保留选区，空选区没有目标', () => {
+    const sheet = sheetOf(makeStore());
+    expect(summaryTarget(sheet, ['a1', 'a2'])).toEqual({ topicId: 'a', range: ['a1', 'a2'] });
+    expect(summaryTarget(sheet, ['a1', 'f1x', 'a1'])).toEqual({ topicId: 'root', range: ['a1', 'f1x'] });
+    expect(summaryTarget(sheet, [])).toBeNull();
+  });
+
+  it('相同范围换序或含重复 id 反复新增时，只有一条概要和一次历史', () => {
+    const store = makeStore();
+    store.getState().dispatch(addSummaryCommand({ topicId: 'a', range: ['a1', 'a2'], title: '保留标题' }));
+    const before = store.getState().doc;
+    store.getState().dispatch(addSummaryCommand({ topicId: 'a', range: ['a2', 'a1', 'a2'], title: '重复' }));
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().past).toHaveLength(1);
+    expect(collectSummaries(sheetOf(store))).toHaveLength(1);
+  });
+
   it('概要落在画布级与父主题两处，读取侧去重后只有一条', () => {
     const store = makeStore();
     store.getState().dispatch(addSummaryCommand({ topicId: 'a', range: ['a1', 'a2'], title: '概要' }));

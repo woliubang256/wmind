@@ -183,7 +183,7 @@
     "annotation.remove": "Delete",
     "annotation.summaryDefault": "Summary",
     "annotation.untitledTopic": "Untitled topic",
-    "annotation.summaryHint": "Select sibling topics to summarise them in one node.",
+    "annotation.summaryHint": "Select topics to summarise them in one node.",
     "annotation.boundaryHint": "Select topics to wrap them in a dashed outline.",
     "annotation.relationshipHint": "Select two topics to link them across branches.",
     "annotation.summaryEmpty": "No summaries yet",
