@@ -35,7 +35,7 @@ cd frontend
 node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5199
 ```
 
-dev 就够——十九套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
+dev 就够——二十套脚本断言的是 DOM 结构和渲染**数量**，不是耗时。只有量性能时才
 必须换生产构建，见下面「几处不显然的地方」。
 
 ### `playwright-core` 没写进 `package.json`
@@ -62,19 +62,20 @@ ln -s /path/to/playwright-core frontend/node_modules/playwright-core
 ```bash
 cd frontend
 
-node e2e/run-all.mjs             # 十九套全跑
+node e2e/run-all.mjs             # 二十套全跑
 node e2e/run-all.mjs a11y share  # 只跑指定的
 node e2e/a11y.mjs                # 单跑一套（输出最完整）
 ```
 
 `run-all.mjs` 会先探一次后端和前端的健康，连不上就直接报「先把服务起起来」，
-不让十九套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余套件。
+不让二十套脚本各超时一遍。每套脚本是**独立子进程**——一套崩了不影响其余套件。
 
-## 十九套分别验什么
+## 二十套分别验什么
 
 | 脚本 | 条数 | 判据 |
 | --- | --- | --- |
 | `share.mjs` | 24 | 分享全流程：创建/复制链接、密码与申请授权、撤销、过期、备注不外泄、`allow_download` 控制导出入口、站点开关关闭后历史链接立即失效 |
+| `editor-appearance.mjs` | 8 | 普通表单与侧栏实际字号、字重、深浅主题、下拉触发器与选项一致性 |
 | `palettes.mjs` | 35 | 黎明默认主题、缤纷/经典分类与键盘、19 套逐一应用及指纹、浅色连线、七色主题、保存刷新、撤销重做、旧图保留、中英文及窄屏 |
 | `two-factor.mjs` | 8 | 验证器绑定、两步登录、恢复码登录、重新生成恢复码、关闭验证、中英文与手机布局 |
 | `annotation-delete.mjs` | 11 | 联系与边界的画布选中、Delete/Backspace、控制柄焦点、Esc、工具栏删除、撤销重做及切换清理 |
@@ -94,7 +95,7 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 | `culling.mjs` | 6 | 2001 个节点时只渲染视口附近、放大后是子集、缩回来不丢、选中节点离开视口仍渲染 |
 | `errors.mjs` | 3 | 断网提示条出现与消失、首帧就离线时也带提示条 |
 
-合计 274 条。
+合计 336 条。
 
 ## 几处不显然的地方
 
@@ -111,7 +112,7 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 **性能数字必须来自生产构建。** dev 模式是双渲染 + 不压缩，同一段操作 dev 量到
 53ms、生产构建只有 22.6ms——拿 dev 的数字做优化决策会优化错地方。注意
 `vite preview` **不套用** `server.proxy`，所以量性能时要自己起一个带 `/api`
-反代的静态服务器，否则接口全 404。本仓库的十九套脚本不涉及计时，可以跑 dev。
+反代的静态服务器，否则接口全 404。本仓库的二十套脚本不涉及计时，可以跑 dev。
 
 **`register.mjs`、`locale.mjs` 与 `export.mjs` 会改站点设置，跑完自己恢复。**
 前者用管理员账号把 `auth.registration_enabled` 关掉、验完再打开；`locale.mjs`
@@ -125,12 +126,12 @@ node e2e/a11y.mjs                # 单跑一套（输出最完整）
 context，Cookie 还在，但 React Query 缓存是新的）。
 
 **登录会被限流，`login()` 自己会等。** 登录限流按「IP + 账号」分桶，5 次/分钟
-（`NewRateLimiter(5, time.Minute, 5)`）。十九套脚本一轮下来管理员账号要登七八次，
+（`NewRateLimiter(5, time.Minute, 5)`）。二十套脚本一轮下来管理员账号要登七八次，
 正好压在边界上——所以 `lib/harness.mjs` 的 `login()` 撞到 429 时会按服务端给的
 `retryAfter` 等一等再试（最多两次）。**限流不是被测对象**，不该让脚本因为跑得勤
 而红；不加这一步的话，连跑两轮必然有一套挂在 429 上，报错还长得像「登录坏了」。
 
-**注册是 3 次/小时，所以管理员建号是必经之路，不是兜底。** 十九套脚本各建一个
+**注册是 3 次/小时，所以管理员建号是必经之路，不是兜底。** 二十套脚本各建一个
 独立账号，第四套开始必然撞 429，全部改走 `POST /admin/users`。这条路的凭据由
 `lib/harness.mjs` 从 `backend/.env` 读（`WMIND_ADMIN_EMAIL` / `WMIND_ADMIN_PASSWORD`），
 也可以用 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 环境变量覆盖。写死的默认值只是最后的

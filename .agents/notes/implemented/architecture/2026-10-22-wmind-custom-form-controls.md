@@ -54,6 +54,11 @@ Status: implemented
 外观/语言是带图标与勾的卡片网格。原来设置页那两块是手写的 `role="radio"` 按钮，
 **没有方向键**——只标 ARIA 不实现键盘是最常见的半成品，这次一起补上。
 
+字体继承由 Tailwind `base` 层的 preflight 提供，不在层外重复设置 `button, input { font: inherit; }`。
+层外的简写会胜过 utilities，同时覆盖字号、行高和字重：侧栏原定的 11–12px 会继承成 16px，
+而非 button 的下拉选项仍为 12px。`e2e/editor-appearance.mjs` 以真实计算样式复现后验证修复，
+覆盖深浅主题的页签、下拉、继承按钮、复选框和输入框，以及普通表单的 14px 按钮。
+
 ## Consequences
 
 - 三处观感统一：登录页角落、编辑器面板、导出对话框用的是同一个 `Select`。
@@ -77,6 +82,9 @@ Status: implemented
   无障碍与键盘调值，代价远大于收益，旁边永远并排放着预设色块。
 
 ## Alternatives considered
+
+- **用更高优先级的面板字号覆盖全局重置。** 改动可以限于侧栏，但字重和其他页面仍被同一条
+  重置破坏；移除重复重置能恢复组件各自的定义，也不需要新增 `!important`。
 
 - **引入 Radix + shadcn 生成组件。** 最省事，但项目已有的决定是「组件自己写」，
   而且 Radix 的 `Select` 带 Popper/floating-ui 一整条依赖链，为了三个控件不值得。

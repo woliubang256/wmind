@@ -83,7 +83,7 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
-button, input { font: inherit; }
+/* 表单字体继承由 Tailwind base 层的 preflight 提供；层外重置会覆盖 text-xs/font-semibold。 */
 ::selection { background: color-mix(in srgb, var(--primary) 24%, transparent); }
 
 /* ------------------------------------------------------------------ */
