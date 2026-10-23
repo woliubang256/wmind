@@ -16,7 +16,7 @@ export default defineConfig({
    * 写进 `include` 让它和 react 一起在冷启动时预构建，之后不再触发重优化。
    */
   optimizeDeps: {
-    include: ['react-dom/server'],
+    include: ['react-dom/server', 'mathjax-full/js/mathjax.js', 'mathjax-full/js/input/tex.js', 'mathjax-full/js/output/svg.js', 'mathjax-full/js/adaptors/liteAdaptor.js', 'mathjax-full/js/handlers/html.js', 'mathjax-full/js/input/tex/ams/AmsConfiguration.js'],
   },
   build: {
     rollupOptions: {
@@ -50,6 +50,7 @@ export default defineConfig({
           if (/[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(id)) return 'react';
           if (id.includes('@tanstack') || id.includes('/zustand/') || id.includes('/immer/')) return 'data';
           if (id.includes('i18next')) return 'i18n';
+          if (id.includes('/mathjax-full/') || id.includes('/mj-context-menu/')) return 'mathjax';
           return 'vendor';
         },
       },
