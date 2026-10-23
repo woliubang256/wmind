@@ -67,6 +67,12 @@ const hasFiles = (event) => config.importEnabled && event.dataTransfer.types.inc
 
 必须先给用户看摘要，尤其是「未能还原」那一段。直接跳进编辑器的话，用户会以为导入 100% 成功，等到发现贴纸全没了时已经找不到原因。
 
+### 文件与文本共用解析、摘要和创建流程
+
+导入入口使用「文件导入 / 文本导入」两个 Tab，默认文件导入。文本输入用 UTF-8 编码成字节，以 `.md` 文件名交给 `importRegistry.run()`，继续遵守字节、主题数和标题长度上限，不能直接调用 Markdown 解析器绕过防护。空白输入禁用解析。
+
+切换 Tab 保留原始文本并回到对应输入界面；解析、图片上传和创建期间禁用 Tab，避免跨来源确认。关闭、卸载或开始新任务时失效旧运行编号，文件读取、上传进度、解析结果及创建回调均不得回写旧界面。已经发送的单张上传请求无法撤回，但失效任务不再发出后续上传，也不能创建导图。页面拖入文件始终进入文件 Tab。
+
 ## Consequences
 
 - 新增 `frontend/src/features/dashboard/import-dialog.tsx`（对话框 + 摘要）、`import-present.ts`（纯文案层）、`import-present.test.ts`（14 条）。
@@ -79,6 +85,8 @@ const hasFiles = (event) => config.importEnabled && event.dataTransfer.types.inc
   - 未知格式：`junk.bin` → 「认不出 junk.bin 的格式，目前支持 XMind、Markdown 与 OPML。」+「换一个文件」回到投放区；
   - XMind：`plan.xmind` → 摘要「主题 5 个（最大层级 3）/ 已还原 结构·备注·标签·标记·折叠状态」→ 编辑器结构为「逻辑图（向右）」，折叠节点带折叠标记。
 - 文档同步：docs/02 / 05 / 06 / 09 里关于 `fast-xml-parser` 的描述全部改为自研解析器；docs/06 §2.1.5 补摘要的「需要注意」段、入口说明、主线程解析与按需加载的理由。
+- `frontend/e2e/import-tabs.mjs` 使用接口夹具验证 22 项：文件/文本双入口、空白禁用、切换保留文本、中英与窄屏、键盘 Tab 语义、摘要确认后创建，以及关闭文件读取/图片上传后的旧任务隔离，不写开发数据库。导入文案、Markdown、注册表和语言包相关单测共 81 项通过。
+- 粘贴文本省去保存临时 `.md` 文件的操作，仍由原有摘要说明导入结果；UTF-8 编码需要额外一份字节缓冲，大小闸门在编码后按真实字节数判断。解析仍在主线程同步运行，Tab 在解析/上传/创建阶段暂时禁用。关闭后已经发出的上传可能完成，但旧结果不再进入摘要，后续图片不再发起上传。
 
 ## Alternatives considered
 
@@ -90,3 +98,4 @@ const hasFiles = (event) => config.importEnabled && event.dataTransfer.types.inc
 - **把 `count` 加进字节白名单**：一处改动。代价是真正的字节数（`size`）也会被当个数——方向反了。正确做法是让参数名各自承担唯一语义。
 - **对话框静态引入**：少一层 `lazy`。代价是每个打开首页的人都先下载三种格式的解析器和 fflate。
 - **`requestAnimationFrame` 让出渲染**：语义更准。代价是后台标签页里 rAF 不触发，对话框会一直停在空白。
+- **文本入口直接调用 `parseMarkdown`**：不需要构造虚拟文件名和 UTF-8 字节，代码路径更短。但会绕过注册表的尺寸、归一化和最终主题数闸门，使同一份内容因入口不同而受到不同防护，因此文本仍经过注册表。
