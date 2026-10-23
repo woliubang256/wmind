@@ -18,6 +18,8 @@ Style 增加可选 lineStart（none / arrow / dot），保留 lineEnd 作为终�
 
 本决定部分替代[附属结构设计](../../implemented/architecture/2026-10-22-wmind-annotations.md)中联系不计入包围盒、仅面板编辑的选择；保留独立几何层、双层概要存储及原有命令历史。XMind 导出笔记继续负责容器和资源，不另造一套导出路径。没有同主题被否提案。
 
+联系激活态与主题选区互斥；Delete、Backspace 和工具栏删除共用宿主删除入口，控制柄聚焦也沿编辑器快捷键处理。Esc 清空激活态，输入框仍保留原生文本删除。概要保持常规选区删除语义。
+
 ## Alternatives considered
 
 - 反向箭头通过交换 end1Id / end2Id：不加字段即可支持单向；但双向无法表达，交换又会改变线条法线和弧的方向，故保留端点身份。

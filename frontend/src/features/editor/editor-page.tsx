@@ -568,12 +568,22 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     void autosave.flush();
   }, [autosave]);
 
+  const deleteSelection = useCallback(() => {
+    const state = store.getState();
+    if (activeAnnotation && activeAnnotation.kind !== 'summary') {
+      state.dispatch(removeAnnotationCommand(activeAnnotation.kind, activeAnnotation.id));
+      setActiveAnnotation(null);
+    } else if (state.selection.length) state.dispatch(removeTopicsCommand(state.selection));
+  }, [activeAnnotation, store]);
+
   const actions = useEditorActions({
     layout,
     sheet,
     onFit: fit,
     onResetZoom: resetZoom,
     onSave: save,
+    onDeleteSelection: deleteSelection,
+    onClearSelection: () => setActiveAnnotation(null),
   });
 
   /**
@@ -867,8 +877,8 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                   variant="ghost"
                   size="icon"
                   aria-label={t('editor.delete')} shortcut="Delete" hint={t('editor.hint.delete')} disabledReason={t('editor.emptySelection')}
-                  disabled={selection.length === 0}
-                  onClick={() => store.getState().dispatch(removeTopicsCommand(selection))}
+                  disabled={selection.length === 0 && activeAnnotation === null}
+                  onClick={deleteSelection}
                 >
                   <Icon name="trash" className="size-4" />
                 </ToolbarButton>
@@ -1202,7 +1212,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                     theme={sheet.themeOverride ?? doc.theme}
                     selection={selection}
                     activeId={activeAnnotation?.id ?? null}
-                    onActivate={(kind, id) => setActiveAnnotation(id === null ? null : { kind, id })}
+                    onActivate={(kind, id) => {
+                      if (id !== null) store.getState().select(kind === 'summary' ? [id] : []);
+                      setActiveAnnotation(id === null ? null : { kind, id });
+                    }}
                     onAddSummary={addSummary}
                     onAddBoundary={addBoundary}
                     onAddRelationship={addRelationship}

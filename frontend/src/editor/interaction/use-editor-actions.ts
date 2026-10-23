@@ -37,6 +37,8 @@ export interface EditorActionDeps {
   onFit?(): void;
   /** 立即保存（Ctrl+S）。M2.6 接入自动保存后换成真正的 flush。 */
   onSave?(): void;
+  onDeleteSelection?(): void;
+  onClearSelection?(): void;
 }
 
 export function useEditorActions({
@@ -45,6 +47,8 @@ export function useEditorActions({
   onResetZoom,
   onFit,
   onSave,
+  onDeleteSelection,
+  onClearSelection,
 }: EditorActionDeps): HotkeyHandlers {
   const store = useEditorStoreApi();
 
@@ -111,6 +115,7 @@ export function useEditorActions({
         store.getState().setEditing(activeId());
       },
       'topic.delete': () => {
+        if (onDeleteSelection) { onDeleteSelection(); return; }
         const selection = store.getState().selection;
         if (selection.length === 0) return;
         store.getState().dispatch(removeTopicsCommand(selection));
@@ -125,6 +130,7 @@ export function useEditorActions({
       },
       'select.clear': () => {
         store.getState().clearSelection();
+        onClearSelection?.();
       },
 
       'nav.up': () => move(geometricNeighbor(layout.boxes, activeId(), 'up')),
@@ -177,5 +183,5 @@ export function useEditorActions({
       'view.fit': () => onFit?.(),
       'doc.save': () => onSave?.(),
     };
-  }, [store, sheet, layout, activeId, selectedTopics, styleTargets, computedStyle, onResetZoom, onFit, onSave]);
+  }, [store, sheet, layout, activeId, selectedTopics, styleTargets, computedStyle, onResetZoom, onFit, onSave, onDeleteSelection, onClearSelection]);
 }
