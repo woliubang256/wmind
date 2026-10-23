@@ -28,10 +28,10 @@ import { fileApi } from '@/lib/api/files';
 import { mapApi } from '@/lib/api/maps';
 import { formatBytes } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { importAcceptAttribute, importRegistry } from '@/editor/import/builtins';
-import { finalizeImport } from '@/editor/import/finalize';
+import { importAcceptAttribute } from '@/editor/import/builtins';
 import { IMPORT_LIMITS } from '@/editor/import/limits';
 import type { ImportResult } from '@/editor/import/types';
+import { createImportBatch, prepareImportBatch, type ImportBatchSource, type ImportProgress, type PreparedImport } from './import-batch';
 import {
   importErrorMessage,
   importWarningText,
@@ -42,9 +42,8 @@ import {
 
 type Phase =
   | { kind: 'idle' }
-  | { kind: 'parsing'; fileName: string }
-  | { kind: 'uploading'; fileName: string; size: number; done: number; total: number }
-  | { kind: 'ready'; fileName: string; size: number; result: ImportResult }
+  | ImportProgress
+  | { kind: 'ready'; items: PreparedImport[] }
   | { kind: 'failed'; fileName: string; message: string };
 
 type ImportSource = 'file' | 'text';
@@ -53,18 +52,19 @@ const IMPORT_SOURCES: ImportSource[] = ['file', 'text'];
 export interface ImportDialogProps {
   open: boolean;
   onClose: () => void;
-  /** 从页面拖进来的文件。消费后调用 `onFileConsumed`，避免重开对话框时重复导入。 */
-  initialFile?: File | null;
-  onFileConsumed?: () => void;
+  /** 保留页面拖入的全部文件及顺序，消费后清空以免重开时重复导入。 */
+  initialFiles?: readonly File[] | null;
+  onFilesConsumed?: () => void;
 }
 
-export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: ImportDialogProps) {
+export function ImportDialog({ open, onClose, initialFiles, onFilesConsumed }: ImportDialogProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const runId = useRef(0);
+  const creatingRef = useRef(false);
   const [source, setSource] = useState<ImportSource>('file');
   const [text, setText] = useState('');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
@@ -77,6 +77,7 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
       setPhase({ kind: 'idle' });
       setDragging(false);
       setCreating(false);
+      creatingRef.current = false;
       setSource('file');
       setText('');
     }
@@ -85,13 +86,14 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
   }, [open]);
 
   const close = () => {
+    if (creatingRef.current) return;
     runId.current += 1;
     onClose();
   };
 
   const busy = creating || phase.kind === 'parsing' || phase.kind === 'uploading';
   const selectSource = (value: ImportSource) => {
-    if (busy || value === source) return;
+    if (busy || creatingRef.current || value === source) return;
     runId.current += 1;
     setSource(value);
     setPhase({ kind: 'idle' });
@@ -109,99 +111,74 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
     tabRefs.current[next]?.focus();
   };
 
-  const runImport = async (fileName: string, size: number, readBytes: () => Promise<Uint8Array>) => {
+  const runImport = async (sources: readonly ImportBatchSource[]) => {
+    if (creatingRef.current || sources.length === 0) return;
     const current = ++runId.current;
-    const isCurrent = () => current === runId.current;
-    if (size > IMPORT_LIMITS.maxInputBytes) {
-      setPhase({
-        kind: 'failed',
-        fileName,
-        message: t('import.error.FILE_TOO_LARGE', {
-          size: formatBytes(size),
-          limit: formatBytes(IMPORT_LIMITS.maxInputBytes),
-        }),
-      });
-      return;
-    }
-
-    setPhase({ kind: 'parsing', fileName });
-    try {
-      const bytes = await readBytes();
-      if (!isCurrent()) return;
-      // 让出一帧，否则「正在解析」来不及渲染。
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
-      });
-      if (!isCurrent()) return;
-      const parsed = importRegistry.run({ fileName, bytes });
-
-      if (parsed.assets.length === 0) {
-        setPhase({ kind: 'ready', fileName, size, result: parsed });
-        return;
-      }
-
-      const total = parsed.assets.length;
-      setPhase({ kind: 'uploading', fileName, size, done: 0, total });
-      const outcome = await finalizeImport(parsed, {
-        upload: (asset) => {
-          if (!isCurrent()) return Promise.reject(new DOMException('Import cancelled', 'AbortError'));
-          return fileApi.upload(asset);
-        },
-        onProgress: (done) => {
-          if (isCurrent()) setPhase({ kind: 'uploading', fileName, size, done, total });
-        },
-      });
-      if (isCurrent()) setPhase({ kind: 'ready', fileName, size, result: outcome.result });
-    } catch (error) {
-      if (isCurrent()) setPhase({ kind: 'failed', fileName, message: importErrorMessage(error, t) });
-    }
+    const items = await prepareImportBatch(sources, {
+      isCurrent: () => current === runId.current,
+      upload: fileApi.upload,
+      onProgress: setPhase,
+    });
+    if (!items || current !== runId.current) return;
+    const first = items[0]!;
+    if (items.length === 1 && !first.result) {
+      setPhase({ kind: 'failed', fileName: first.fileName, message: importErrorMessage(first.error, t) });
+    } else setPhase({ kind: 'ready', items });
   };
 
-  const importFile = (file: File) => {
+  const importFiles = (files: readonly File[]) => {
     setSource('file');
-    void runImport(file.name, file.size, async () => new Uint8Array(await file.arrayBuffer()));
+    void runImport(files.map((file) => ({ name: file.name, size: file.size, read: async () => new Uint8Array(await file.arrayBuffer()) })));
   };
   const importText = () => {
     if (text.trim() === '' || busy) return;
     const bytes = new TextEncoder().encode(text);
-    void runImport(t('import.dialog.textFileName'), bytes.byteLength, async () => bytes);
+    void runImport([{ name: t('import.dialog.textFileName'), size: bytes.byteLength, read: async () => bytes }]);
   };
 
-  // 页面级拖放带进来的文件。
   useEffect(() => {
-    if (!open || !initialFile) return;
-    onFileConsumed?.();
-    importFile(initialFile);
-    // runImport 每次渲染都是新函数，但这里只该在「打开 + 有新文件」时跑一次。
+    if (!open || !initialFiles?.length) return;
+    onFilesConsumed?.();
+    importFiles(initialFiles);
+    // Only a newly supplied batch should start parsing, not each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialFile]);
+  }, [open, initialFiles]);
 
   const pickFiles = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    if (files.length > 1) {
-      toast.warning(t('import.dialog.multipleFiles'));
-    }
-    importFile(files[0] as File);
+    if (files?.length) importFiles(Array.from(files));
   };
 
   const confirm = async () => {
-    if (phase.kind !== 'ready' || creating) return;
+    if (phase.kind !== 'ready' || creatingRef.current) return;
     const current = runId.current;
+    creatingRef.current = true;
     setCreating(true);
     try {
-      const created = await mapApi.create({
-        title: phase.result.document.title,
-        document: phase.result.document,
+      const completed = await createImportBatch(phase.items, mapApi.create, () => current === runId.current, (index, item) => {
+        setPhase((previous) => previous.kind === 'ready'
+          ? { kind: 'ready', items: previous.items.map((entry, i) => i === index ? item : entry) } : previous);
       });
-      if (current !== runId.current) return;
+      if (!completed || current !== runId.current) return;
+      setPhase({ kind: 'ready', items: completed });
+      const last = completed.filter((item) => item.createdUid).at(-1);
+      const failed = completed.filter((item) => !item.createdUid);
+      if (!last) {
+        toast.error(t('import.dialog.createFailed'));
+        return;
+      }
+      if (failed.length > 0) toast.warning(t('import.dialog.batchFailed', { files: failed.map((item) => item.fileName).join('、') }), { duration: 10000 });
+      creatingRef.current = false;
       close();
-      navigate(`/maps/${created.uid}`);
-    } catch {
-      if (current === runId.current) toast.error(t('import.dialog.createFailed'));
+      navigate(`/maps/${last.createdUid}`);
     } finally {
-      if (current === runId.current) setCreating(false);
+      if (current === runId.current) {
+        creatingRef.current = false;
+        setCreating(false);
+      }
     }
   };
+
+  const readyCount = phase.kind === 'ready' ? phase.items.filter((item) => item.result && !item.createdUid).length : 0;
 
   const footer =
     phase.kind === 'ready' ? (
@@ -209,10 +186,10 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
         <Button variant="outline" onClick={close} disabled={creating}>
           {t('import.dialog.cancel')}
         </Button>
-        <Button onClick={() => void confirm()} disabled={creating}>
+        {readyCount > 0 ? <Button onClick={() => void confirm()} disabled={creating}>
           <Icon name="check" className="size-4" />
-          {creating ? t('import.dialog.creating') : t('import.dialog.create')}
-        </Button>
+          {creating ? t('import.dialog.creating') : t(phase.items.length > 1 ? 'import.dialog.createBatch' : 'import.dialog.create', { n: readyCount })}
+        </Button> : <Button onClick={() => setPhase({ kind: 'idle' })} disabled={creating}>{t('import.dialog.retry')}</Button>}
       </div>
     ) : phase.kind === 'failed' ? (
       <div className="grid grid-cols-2 gap-2">
@@ -265,11 +242,13 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
               <div
                 onDragOver={(event) => {
                   event.preventDefault();
+                  event.stopPropagation();
                   setDragging(true);
                 }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={(event) => {
                   event.preventDefault();
+                  event.stopPropagation();
                   setDragging(false);
                   pickFiles(event.dataTransfer.files);
                 }}
@@ -293,6 +272,7 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
                 <input
                   ref={inputRef}
                   type="file"
+                  multiple
                   accept={importAcceptAttribute()}
                   className="hidden"
                   onChange={(event) => {
@@ -309,7 +289,7 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
                 <span className="size-5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{phase.fileName}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{t('import.dialog.parsing')}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t('import.dialog.parsing')}{phase.totalFiles > 1 ? ` ${phase.index}/${phase.totalFiles}` : ''}</p>
                 </div>
               </div>
             ) : null}
@@ -321,7 +301,7 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{phase.fileName}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {t('import.dialog.uploading', { done: phase.done, total: phase.total })}
+                      {t('import.dialog.uploading', { done: phase.done, total: phase.total })}{phase.totalFiles > 1 ? ` ${phase.index}/${phase.totalFiles}` : ''}
                     </p>
                   </div>
                 </div>
@@ -349,7 +329,27 @@ export function ImportDialog({ open, onClose, initialFile, onFileConsumed }: Imp
             ) : null}
 
             {phase.kind === 'ready' ? (
-              <ImportSummary fileName={phase.fileName} size={phase.size} result={phase.result} />
+              <div className="space-y-4">
+                {phase.items.length > 1 ? <p className="text-sm text-muted-foreground">{t('import.dialog.batchReady', { n: phase.items.filter((item) => item.result).length, total: phase.items.length })}</p> : null}
+                {phase.items.map((item, index) => item.result ? (
+                  <div key={index}>
+                    {phase.items.length === 1 ? <ImportSummary fileName={item.fileName} size={item.size} result={item.result} /> : (
+                      <details className="rounded-xl border border-border p-4">
+                        <summary className="cursor-pointer break-words text-sm font-medium">
+                          {item.fileName}<span className="ml-2 text-xs font-normal text-muted-foreground">{item.createdUid ? t('import.dialog.created') : t('import.dialog.topicsValue', { n: item.result.summary.topics, depth: item.result.summary.maxDepth })}</span>
+                        </summary>
+                        <div className="mt-4"><ImportSummary fileName={item.fileName} size={item.size} result={item.result} /></div>
+                      </details>
+                    )}
+                    {item.createError !== undefined ? <p role="alert" className="mt-2 text-sm text-destructive">{item.fileName} · {t('import.dialog.createFailed')}</p> : null}
+                  </div>
+                ) : (
+                  <div key={index} role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                    <p className="break-words font-medium">{item.fileName}</p>
+                    <p className="mt-1 break-words text-muted-foreground">{importErrorMessage(item.error, t)}</p>
+                  </div>
+                ))}
+              </div>
             ) : null}
           </> : null}
         </div>

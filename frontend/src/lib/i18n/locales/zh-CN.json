@@ -628,7 +628,7 @@
     "dialog.parse": "解析",
     "dialog.editText": "修改文本",
     "dialog.dropTitle": "把文件拖到这里",
-    "dialog.dropHint": "或点击选择文件",
+    "dialog.dropHint": "或点击选择文件，可多选",
     "dialog.formats": "XMind / Markdown / OPML · 最大 {{limit}}",
     "dialog.parsing": "正在解析…",
     "dialog.uploading": "正在上传图片 {{done}}/{{total}}…",
@@ -650,7 +650,10 @@
     "dialog.errorTitle": "导入失败",
     "dialog.unknownError": "导入失败，请换一个文件试试。",
     "dialog.createFailed": "创建导图失败，请稍后重试。",
-    "dialog.multipleFiles": "一次只能导入一个文件，已取第一个。"
+    "dialog.batchReady": "{{n}} / {{total}} 个文件可创建导图",
+    "dialog.createBatch": "创建导图（{{n}}）",
+    "dialog.batchFailed": "以下文件未导入：{{files}}",
+    "dialog.created": "已创建"
   },
   "maps": {
     "title": "最近的导图",

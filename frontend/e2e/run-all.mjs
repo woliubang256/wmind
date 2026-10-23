@@ -26,6 +26,7 @@ const SUITE = [
   ['select-overflow', '下拉菜单高度 / 受限空间与键盘滚动'],
   ['trash-retention', '回收站保留设置 / 剩余天数'],
   ['import-tabs', '文件与 Markdown 文本导入'],
+  ['import-batch', '批量导入 / 原生 XMind 连线 / 最后成功项'],
   ['user-menu', '用户导航 / 权限 / 键盘与窄屏'],
   ['two-factor', '账户双因素认证'],
   ['login-encryption', '登录密码公钥加密与防重放'],

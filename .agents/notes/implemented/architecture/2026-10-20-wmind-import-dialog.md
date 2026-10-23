@@ -63,9 +63,11 @@ const hasFiles = (event) => config.importEnabled && event.dataTransfer.types.inc
 
 `features/dashboard/pages.tsx` 用 `React.lazy(() => import('./import-dialog'))`，并且**只在打开时才挂载**。首屏 index chunk 从 137.84 kB 回落到 86.35 kB，导入相关的 49.31 kB（gzip 16.59）单独成块。
 
-### 摘要对话框不做「导入后自动进编辑器」
+### 先确认摘要，再进入编辑器
 
 必须先给用户看摘要，尤其是「未能还原」那一段。直接跳进编辑器的话，用户会以为导入 100% 成功，等到发现贴纸全没了时已经找不到原因。
+
+[批量导入](../feature/2026-10-24-wmind-batch-import.md)将文件选择、弹窗和页面拖放扩展为有序队列，逐项展示摘要或错误；确认后依次创建，完成后进入最后成功项。保留这里的摘要确认、文本入口和失效任务隔离规则。
 
 ### 文件与文本共用解析、摘要和创建流程
 

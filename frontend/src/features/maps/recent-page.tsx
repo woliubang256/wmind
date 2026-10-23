@@ -61,7 +61,7 @@ export function RecentPage() {
   const [creating, setCreating] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [dropping, setDropping] = useState(false);
   const [renaming, setRenaming] = useState<MapSummary | null>(null);
   const [sharing, setSharing] = useState<MapSummary | null>(null);
@@ -186,9 +186,9 @@ export function RecentPage() {
         if (!hasFiles(event)) return;
         event.preventDefault();
         setDropping(false);
-        const file = event.dataTransfer.files[0];
-        if (!file) return;
-        setPendingFile(file);
+        const files = Array.from(event.dataTransfer.files);
+        if (files.length === 0) return;
+        setPendingFiles(files);
         setImportOpen(true);
       }}
     >
@@ -405,8 +405,8 @@ export function RecentPage() {
           <ImportDialog
             open
             onClose={() => setImportOpen(false)}
-            initialFile={pendingFile}
-            onFileConsumed={() => setPendingFile(null)}
+            initialFiles={pendingFiles}
+            onFilesConsumed={() => setPendingFiles(null)}
           />
         </Suspense>
       ) : null}

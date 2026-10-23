@@ -628,7 +628,7 @@
     "dialog.parse": "Parse",
     "dialog.editText": "Edit text",
     "dialog.dropTitle": "Drop a file here",
-    "dialog.dropHint": "or click to browse",
+    "dialog.dropHint": "or click to choose multiple files",
     "dialog.formats": "XMind / Markdown / OPML · up to {{limit}}",
     "dialog.parsing": "Parsing…",
     "dialog.uploading": "Uploading images {{done}}/{{total}}…",
@@ -650,7 +650,10 @@
     "dialog.errorTitle": "Import failed",
     "dialog.unknownError": "Import failed. Try a different file.",
     "dialog.createFailed": "Could not create the map. Please try again.",
-    "dialog.multipleFiles": "Only one file can be imported at a time; using the first one."
+    "dialog.batchReady": "{{n}} / {{total}} files ready to create",
+    "dialog.createBatch": "Create maps ({{n}})",
+    "dialog.batchFailed": "These files were not imported: {{files}}",
+    "dialog.created": "Created"
   },
   "maps": {
     "title": "Recent maps",

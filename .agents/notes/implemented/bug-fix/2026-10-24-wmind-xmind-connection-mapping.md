@@ -18,7 +18,7 @@ Status: implemented
 
 - [现代格式导入](../architecture/2026-10-20-wmind-xmind-modern-import.md)部分重叠，本篇纠正样式属性契约，保留 id、图片和主题认领策略。
 - [XMind 导出](../architecture/2026-10-23-wmind-xmind-export.md)部分重叠，保留现代包结构与显式计算样式；读写两端往返之外必须增加独立标准属性断言。
-- [导入对话框](../architecture/2026-10-20-wmind-import-dialog.md)只涉及入口、任务隔离与摘要，映射修复不改变确认流程。
+- [导入对话框](../architecture/2026-10-20-wmind-import-dialog.md)只涉及入口、任务隔离与摘要，映射修复不改变确认流程。[多文件能力](../feature/2026-10-24-wmind-batch-import.md)独立说明队列规则。
 - 检索活跃 proposed / implemented / rejected 后，无同主题旧提案需要替代；其余导入框架、XMind 8 与导出能力笔记保留各自职责。
 
 ## Alternatives considered
