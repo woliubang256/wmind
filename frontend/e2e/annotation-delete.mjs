@@ -9,6 +9,9 @@ run(async () => {
       rootTopic: { id: 'root', title: '中心', children: { attached: [{ id: 'a', title: '甲' }, { id: 'b', title: '乙' }] } },
       relationships: [{ id: 'r', end1Id: 'a', end2Id: 'b', title: '依赖' }],
       boundaries: [{ id: 'bd', range: ['a', 'b'], title: '范围' }],
+    }, { id: 'sh2', title: '画布二', structure: 'mindmap',
+      rootTopic: { id: 'root2', title: '另一个中心', children: { attached: [{ id: 'a2', title: '丙' }, { id: 'b2', title: '丁' }] } },
+      relationships: [{ id: 'r', end1Id: 'a2', end2Id: 'b2', title: '另一个联系' }],
     }],
   } } });
   const browser = await launchBrowser();
@@ -34,6 +37,11 @@ run(async () => {
     await relation.locator('text').click(); await page.getByRole('button', { name: '删除所选', exact: true }).click();
     assert.equal(await relation.count(), 0); await undo();
     check('联系标题编辑安全，工具栏删除共用选中对象', true);
+    await relation.locator('text').click(); await page.keyboard.press('ArrowRight');
+    assert.ok(await page.locator('g.wmind-topic[aria-selected="true"]').count());
+    await page.keyboard.press('Delete'); assert.equal(await topics.count(), 2, '导航到主题后必须删除当前主题');
+    await undo(); assert.equal(await topics.count(), 3); assert.equal(await relation.count(), 1);
+    check('联系切换到键盘主题选区后删除当前对象', true);
     {
       await boundary.locator('text').click(); assert.equal(await boundary.getAttribute('aria-pressed'), 'true');
       await page.keyboard.press('Delete'); assert.equal(await boundary.count(), 0); assert.equal(await topics.count(), 3); await undo();
@@ -53,6 +61,13 @@ run(async () => {
       await page.locator('[data-topic-id="a"]').click(); await page.keyboard.press('Escape');
       assert.equal(await boundary.getAttribute('aria-pressed'), 'false');
       check('取消边界选中后 Delete 无副作用，内部主题仍能选中', true);
+      await relation.locator('text').click();
+      await page.getByRole('tab', { name: '画布二', exact: true }).click();
+      assert.equal(await relation.getAttribute('aria-pressed'), 'false');
+      await page.getByRole('tree').focus(); await page.keyboard.press('Delete');
+      assert.equal(await relation.count(), 1); assert.equal(await topics.count(), 3);
+      await page.getByRole('tab', { name: '画布', exact: true }).click();
+      check('切换画布清空旧激活态，不误删同 id 联系', true);
       await page.getByRole('button', { name: '只读预览', exact: true }).click();
       assert.equal(await boundary.getAttribute('role'), null);
       check('只读预览没有边界编辑入口', true);

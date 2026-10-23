@@ -87,7 +87,7 @@ XMind 里最常用的三种注释手段，wmind 一个都没有：
 
 边界的边框使用固定屏幕宽度的透明描边命中区，标题也可选择；填充不接管指针事件，内部主题与空白框选保持原行为。编辑器 SelectionPlugin 负责鼠标与 Enter/空格激活边界，结构面板和画布共用激活态，Delete/Backspace/工具栏共用删除与撤销命令。只读、导出和缩略图不生成命中区或键盘入口。
 
-annotation-delete.mjs 浏览器回归 9/9，覆盖边框/标题命中、控制柄聚焦、输入框原生删除、Delete/Backspace/工具栏统一目标、撤销重做、Esc 取消及只读模式；内部主题保持可选择。
+annotation-delete.mjs 浏览器回归 11/11，覆盖边框/标题命中、控制柄聚焦、输入框原生删除、Delete/Backspace/工具栏统一目标、撤销重做、Esc 取消及只读模式；内部主题保持可选择。补充覆盖键盘导航后切换删除目标和跨画布同 id 激活态隔离。
 
 ## Alternatives considered
 

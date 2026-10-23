@@ -310,6 +310,9 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
    * 一行」变成一次可能被写进历史的状态变更。
    */
   const [activeAnnotation, setActiveAnnotation] = useState<{ kind: AnnotationKind; id: string } | null>(null);
+  useEffect(() => {
+    if (selection.length > 0) setActiveAnnotation((current) => current?.kind === 'summary' ? current : null);
+  }, [selection]);
   const [insertState, setInsertState] = useState<{ action: InsertAction; ids: string[]; sheetId: string } | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -474,7 +477,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     );
     const state = store.getState();
     const item = sheetById(state.doc, state.sheetId).relationships.at(-1);
-    if (item) setActiveAnnotation({ kind: 'relationship', id: item.id });
+    if (item) { state.select([]); setActiveAnnotation({ kind: 'relationship', id: item.id }); }
     setPanelOpen(true);
     setPanelTab('structure');
   }, [selection, store]);
@@ -544,6 +547,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   useEffect(() => {
     if (fittedSheet.current === sheetId) return;
     fittedSheet.current = sheetId;
+    setActiveAnnotation(null);
     fitRef.current();
   }, [sheetId]);
 
@@ -570,10 +574,13 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
 
   const deleteSelection = useCallback(() => {
     const state = store.getState();
-    if (activeAnnotation && activeAnnotation.kind !== 'summary') {
+    if (state.selection.length) {
+      state.dispatch(removeTopicsCommand(state.selection));
+      setActiveAnnotation(null);
+    } else if (activeAnnotation && activeAnnotation.kind !== 'summary') {
       state.dispatch(removeAnnotationCommand(activeAnnotation.kind, activeAnnotation.id));
       setActiveAnnotation(null);
-    } else if (state.selection.length) state.dispatch(removeTopicsCommand(state.selection));
+    }
   }, [activeAnnotation, store]);
 
   const actions = useEditorActions({
