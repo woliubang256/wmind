@@ -239,3 +239,20 @@ func TestTwoFactorConcurrentConsumption(t *testing.T) {
 		t.Fatalf("recovery consumed %d times", success)
 	}
 }
+
+func TestTwoFactorRecoveryWithUnreadableAuthenticator(t *testing.T) {
+	f := factorServer(t)
+	enabled := f.enable(t)
+	challenge := f.challenge(t)
+	state, err := f.repo.Get(t.Context(), f.initial.User.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Secret = "unreadable-after-key-rotation"
+	if err = f.repo.Save(t.Context(), f.initial.User.ID, state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.svc.VerifyTwoFactorLogin(t.Context(), challenge, enabled.RecoveryCodes[0], service.SessionMeta{}); err != nil {
+		t.Fatalf("independent recovery code must still work: %v", err)
+	}
+}

@@ -171,6 +171,13 @@ func (s *AuthService) verifyFactor(user *domain.User, state *domain.TwoFactorSta
 	if !state.Enabled {
 		return false, nil
 	}
+	hash := auth.HashRecoveryCode(code)
+	for i, stored := range state.RecoveryHashes {
+		if subtle.ConstantTimeCompare([]byte(hash), []byte(stored)) == 1 {
+			state.RecoveryHashes = append(state.RecoveryHashes[:i], state.RecoveryHashes[i+1:]...)
+			return true, nil
+		}
+	}
 	secret, err := s.twoFactorCipher.Decrypt(state.Secret, user.UID+":active")
 	if err != nil {
 		return false, err
@@ -179,13 +186,7 @@ func (s *AuthService) verifyFactor(user *domain.User, state *domain.TwoFactorSta
 		state.LastCounter = counter
 		return true, nil
 	}
-	hash := auth.HashRecoveryCode(code)
-	for i, stored := range state.RecoveryHashes {
-		if subtle.ConstantTimeCompare([]byte(hash), []byte(stored)) == 1 {
-			state.RecoveryHashes = append(state.RecoveryHashes[:i], state.RecoveryHashes[i+1:]...)
-			return true, nil
-		}
-	}
+
 	return false, nil
 }
 func (s *AuthService) factorFailure(key string) error {

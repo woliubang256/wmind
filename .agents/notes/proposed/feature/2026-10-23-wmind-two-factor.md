@@ -24,6 +24,8 @@ Status: proposed
 
 服务测试覆盖未确认不启用、旧令牌与缓存失效、TOTP 与恢复码重放、挑战/设置过期、跨挑战锁定、改密使挑战失效及并发恢复码消费。SQLite 契约通过；未配置 WMIND_TEST_DATABASE_URL，PostgreSQL 实库契约由 CI 运行，本地仅生成、编译和迁移对等检查。
 
+恢复码先独立验证，再尝试解密验证器密钥；加密密钥意外丢失时，仍能凭密码和已保存的恢复码登录、停用并重新设置。篡改后的密文不能用于验证码验证，恢复码消费仍与会话签发同事务。
+
 ## Related decisions
 
 检索认证、双因素、TOTP 和会话笔记：现有[认证会话](../../implemented/architecture/2026-10-17-wmind-auth-session.md)与[认证数据层](../../implemented/architecture/2026-10-17-wmind-auth-data-layer.md)部分重叠，保留密码/刷新策略并互链；本篇增加第二步与安全版本。限流笔记继续负责进程内密码锁定；第二步挑战次数保存在数据库，多进程共享。邮件提案处理邮件交付，与 TOTP 无关。没有同主题旧提案需替代。
