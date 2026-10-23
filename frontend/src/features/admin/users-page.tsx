@@ -89,7 +89,6 @@ export function AdminUsersPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('admin.users.title')}
-        description={t('admin.users.description')}
         actions={
           <Button onClick={() => setCreating(true)}>
             <Icon name="plus" className="size-4" />

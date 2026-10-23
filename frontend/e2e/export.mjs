@@ -261,8 +261,8 @@ async function main() {
 
     // ── 5. 界面语言：切到英文 ───────────────────────────────
     await page.goto(`${BASE}/account`);
-    await page.getByRole('radiogroup', { name: '界面语言' }).waitFor({ timeout: 30000 });
-    await page.getByRole('radio', { name: 'English' }).click();
+    await page.locator('header').getByRole('combobox', { name: '界面语言' }).click();
+    await page.getByRole('option', { name: 'English', exact: true }).click();
     await page.waitForTimeout(500);
 
     check(
@@ -316,7 +316,8 @@ async function main() {
 
     // ── 8. 切回中文 ─────────────────────────────────────────
     await page.goto(`${BASE}/account`);
-    await page.getByRole('radio', { name: '中文' }).click();
+    await page.locator('header').getByRole('combobox', { name: 'Language' }).click();
+    await page.getByRole('option', { name: '中文', exact: true }).click();
     await page.waitForTimeout(400);
     check(
       'IE-M7-20 切回中文后导航恢复',

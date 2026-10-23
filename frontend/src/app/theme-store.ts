@@ -26,8 +26,8 @@ interface ThemeState {
 /**
  * 外观状态放在模块级 store 里，而不是每个组件各自 useState。
  *
- * 顶栏的切换按钮与「个人设置 → 外观」是两处入口，各自持有一份状态时
- * 会出现「在设置页切了，顶栏图标没变」——直到刷新才对上。
+ * 顶栏按钮、系统主题监听和路由切换共用同一偏好，避免各自保存状态后
+ * 出现页面之间外观不一致。
  */
 export const useThemeStore = create<ThemeState>((set, get) => ({
   // 初始值来自 localStorage；首帧的 class 已由 index.html 的内联脚本写好，

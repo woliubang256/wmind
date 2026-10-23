@@ -84,7 +84,6 @@ export function TrashPage() {
     <div className="space-y-6">
       <PageHeader
         title={t('trash.title')}
-        description={t('trash.subtitle')}
         actions={
           total > 0 ? (
             <Button variant="outline" onClick={() => setEmptying(true)} disabled={busy}>

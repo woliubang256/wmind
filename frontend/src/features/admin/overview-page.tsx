@@ -50,7 +50,6 @@ export function AdminOverviewPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('admin.overview.title')}
-        description={t('admin.overview.description')}
         actions={
           <Button variant="outline" size="sm" onClick={() => void stats.refetch()} disabled={stats.isFetching}>
             <Icon name="clock" className="size-4" />
@@ -101,7 +100,6 @@ export function AdminOverviewPage() {
 
         <Panel
           title={t('admin.overview.auditTitle')}
-          description={t('admin.overview.auditDescription')}
           actions={
             <Badge tone="neutral">
               {t('admin.overview.auditCount', { count: formatNumber(audit.data?.pagination.total ?? 0) })}

@@ -62,7 +62,7 @@ export function SharesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('share.mine.title')} description={t('share.mine.subtitle')} />
+      <PageHeader title={t('share.mine.title')} />
 
       {query.isPending ? (
         <p className="text-sm text-muted-foreground">{t('common.loading')}</p>

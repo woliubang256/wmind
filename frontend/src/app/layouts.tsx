@@ -35,8 +35,7 @@ export function RequireAdmin() {
 
 function ThemeToggle() {
   const { t } = useTranslation();
-  // 状态在 store 里，和「个人设置 → 外观」共用：两处各存一份会导致
-  // 在设置页切了之后顶栏图标不动。
+  // 使用全站共享偏好，页面跳转和刷新保持相同外观。
   const preference = useThemeStore((state) => state.preference);
   const cycle = useThemeStore((state) => state.cycle);
   const icon = preference === 'light' ? 'sun' : preference === 'dark' ? 'moon' : 'monitor';

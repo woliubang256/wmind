@@ -8,34 +8,12 @@ import { Icon } from '@/components/ui/icon';
 import { UserAvatar } from '@/components/user-avatar';
 import { TextField } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
-import { RadioGroup } from '@/components/ui/radio-group';
 import { authKeys, useCurrentUser } from '@/app/auth';
 import { useSiteConfig } from '@/features/site/use-site-config';
-import { useLocaleStore } from '@/app/locale-store';
-import { useThemeStore } from '@/app/theme-store';
-import { THEME_ORDER, type ThemePreference } from '@/app/theme';
-import { LOCALE_LABEL, LOCALE_ORDER } from '@/lib/i18n/preference';
 import { userApi } from '@/lib/api/endpoints';
 import type { User } from '@/lib/api/types';
 import { ApiError, codeToField, fieldErrorsFrom } from '@/lib/api/errors';
 import { hasErrors, validatePasswordChange, validateProfile, type FieldErrors } from '@/lib/validation';
-
-const THEME_LABEL_KEY: Record<ThemePreference, string> = {
-  light: 'account.themeLight',
-  dark: 'account.themeDark',
-  system: 'account.themeSystem',
-};
-
-/**
- * 语言的显示名在 `lib/i18n/preference.ts`：设置页与登录页右上角的选择器共用
- * 同一张表，两处各写一份就会在「加语言时漏改一处」。
- */
-
-const THEME_ICON: Record<ThemePreference, 'sun' | 'moon' | 'monitor'> = {
-  light: 'sun',
-  dark: 'moon',
-  system: 'monitor',
-};
 
 export function AccountPage() {
   const { t } = useTranslation();
@@ -45,14 +23,11 @@ export function AccountPage() {
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{t('account.title')}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('account.subtitle')}</p>
       </header>
       <AvatarCard user={user} />
       <ProfileCard user={user} />
       <PasswordCard />
       <TwoFactorCard userUID={user.uid} />
-      <AppearanceCard />
-      <LanguageCard />
     </div>
   );
 }
@@ -91,7 +66,7 @@ function AvatarCard({ user }: { user: NonNullable<ReturnType<typeof useCurrentUs
   };
 
   return (
-    <Card title={t('account.avatar')} description={t('account.avatarHint')}>
+    <Card title={t('account.avatar')}>
       <div className="flex flex-wrap items-center gap-4">
         <UserAvatar user={user} className="size-16 rounded-2xl text-2xl" />
         <div className="space-y-2">
@@ -257,53 +232,6 @@ function PasswordCard() {
           </Button>
         </div>
       </form>
-    </Card>
-  );
-}
-
-function AppearanceCard() {
-  const { t } = useTranslation();
-  const preference = useThemeStore((state) => state.preference);
-  const setPreference = useThemeStore((state) => state.setPreference);
-
-  return (
-    <Card title={t('account.appearance')} description={t('account.appearanceHint')}>
-      <RadioGroup
-        label={t('account.appearance')}
-        variant="card"
-        value={preference}
-        options={THEME_ORDER.map((option) => ({
-          value: option,
-          label: t(THEME_LABEL_KEY[option]),
-          icon: THEME_ICON[option],
-        }))}
-        onChange={setPreference}
-      />
-    </Card>
-  );
-}
-
-function LanguageCard() {
-  const { t } = useTranslation();
-  const preference = useLocaleStore((state) => state.preference);
-  const setPreference = useLocaleStore((state) => state.setPreference);
-
-  return (
-    <Card title={t('account.language')} description={t('account.languageHint')}>
-      <RadioGroup
-        label={t('account.language')}
-        variant="card"
-        value={preference}
-        options={LOCALE_ORDER.map((option) => ({
-          value: option,
-          label: t(LOCALE_LABEL[option]),
-          icon: option === 'system' ? 'monitor' : 'globe',
-          // 语言名是**该语言自己的写法**，所以要标上 `lang`，读屏才会用对语音包。
-          // 「跟随浏览器」跟着界面语言变，不标。
-          lang: option === 'system' ? undefined : option,
-        }))}
-        onChange={setPreference}
-      />
     </Card>
   );
 }
