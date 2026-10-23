@@ -28,6 +28,7 @@ const SUITE = [
   ['import-tabs', '文件与 Markdown 文本导入'],
   ['user-menu', '用户导航 / 权限 / 键盘与窄屏'],
   ['two-factor', '账户双因素认证'],
+  ['login-encryption', '登录密码公钥加密与防重放'],
   ['templates', '模板选择与管理'],
   ['palettes', '参考色板 / 分类切换 / 旧主题兼容'],
   ['editor-appearance', '控件字号 / 全画布形状 / 分支连线'],

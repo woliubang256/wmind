@@ -70,7 +70,8 @@ run(async () => {
     await settings.getByLabel('验证码或恢复码').fill(newCodes[0]); await settings.getByRole('button', { name: '提交', exact: true }).click();
     await settings.getByRole('status').filter({ hasText: '尚未启用' }).waitFor();
     check('密码和第二因子确认后停用，当前设备继续可用', true);
-    await page.getByRole('radio', { name: 'English', exact: true }).click();
+    await page.getByRole('combobox', { name: '界面语言', exact: true }).click();
+    await page.getByRole('option', { name: 'English', exact: true }).click();
     await settings.getByRole('button', { name: 'Set up two-factor authentication', exact: true }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     await settings.scrollIntoViewIfNeeded();

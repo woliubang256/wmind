@@ -16,6 +16,7 @@
  */
 
 import { chromium } from 'playwright-core';
+import { constants, createPublicKey, publicEncrypt } from 'node:crypto';
 import os from 'node:os';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -125,7 +126,14 @@ export async function api(path, { method = 'GET', token, body, headers = {}, raw
  */
 export async function login(identifier, password, attempt = 0) {
   try {
-    const res = await api('/auth/login', { method: 'POST', body: { identifier, password } });
+    const { data: challenge } = await api('/auth/login/challenge', { method: 'POST', body: { identifier } });
+    const encryptedPassword = publicEncrypt({
+      key: createPublicKey({ key: challenge.publicKey, format: 'jwk' }),
+      padding: constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: 'sha256',
+      oaepLabel: Buffer.from(`wmind/login/v1:${challenge.challengeId}`),
+    }, Buffer.from(password)).toString('base64');
+    const res = await api('/auth/login', { method: 'POST', body: { identifier, challengeId: challenge.challengeId, encryptedPassword } });
     return res.data.accessToken;
   } catch (error) {
     const retryAfter = /"retryAfter":(\d+)/.exec(String(error))?.[1];
