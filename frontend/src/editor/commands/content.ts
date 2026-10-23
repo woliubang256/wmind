@@ -15,6 +15,7 @@ export function updateContentCommand(ids: readonly string[], patch: ContentPatch
       if (!sheet || ids.length === 0) return;
       const topics = [...new Set(ids)].map((id) => findTopicInSheet(sheet, id)?.topic);
       if (topics.some((item) => !item)) return;
+      if ((patch.content?.attachments?.length ?? 0) > 100) throw new Error('file-too-large');
       if (patch.href && !safeTopicHref(patch.href)) throw new Error('invalid-link');
       for (const topic of topics) {
         if (!topic) continue;

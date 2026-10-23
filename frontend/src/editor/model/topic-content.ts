@@ -5,7 +5,9 @@ const text = (value: unknown, max = 2000) => typeof value === 'string' ? value.s
 const date = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(text(value)) ? text(value) : '';
 
 export function safeTopicHref(value: string): boolean {
-  return /^(https?:\/\/|mailto:|tel:|xmind:#[^\s]+$)/i.test(value) && !/[\u0000-\u0020]/.test(value);
+  if (/[\u0000-\u0020]/.test(value)) return false;
+  if (/^xmind:#[^\s]+$/.test(value)) return true;
+  try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? !!url.hostname : ['mailto:', 'tel:'].includes(url.protocol) && !!url.pathname; } catch { return false; }
 }
 
 export function parseEmbeddedFile(value: unknown): EmbeddedFile | undefined {
@@ -31,7 +33,7 @@ export function parseTopicContent(value: unknown): TopicContent | undefined {
   if (typeof raw.todo === 'boolean') out.todo = raw.todo;
   const task = parseTask(raw.task); if (task) out.task = task;
   const localLink = parseEmbeddedFile(raw.localLink); if (localLink) out.localLink = localLink;
-  if (Array.isArray(raw.attachments)) out.attachments = raw.attachments.slice(0, 30).map(parseEmbeddedFile).filter((item): item is EmbeddedFile => !!item);
+  if (Array.isArray(raw.attachments)) out.attachments = raw.attachments.slice(0, 100).map(parseEmbeddedFile).filter((item): item is EmbeddedFile => !!item);
   if (/^[a-z][a-z0-9-]{0,40}$/.test(text(raw.sticker))) out.sticker = text(raw.sticker);
   if (/^[a-z][a-z0-9-]{0,40}$/.test(text(raw.illustration))) out.illustration = text(raw.illustration);
   const equation = record(raw.equation);
