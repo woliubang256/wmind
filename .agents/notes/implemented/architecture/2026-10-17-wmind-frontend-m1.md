@@ -38,6 +38,10 @@ M1-6 要把已经做完的后端接口接到界面上：登录/注册、个人�
 
 ### 管理后台路由级懒加载 + 依赖分包
 
+全站顶栏保留最近、模板、我的分享、回收站四个主导航。个人设置和管理入口归入右侧 `UserMenu`（[统一头像](2026-10-17-wmind-user-profile.md)、用户名、向下箭头）；个人设置始终可见，管理概览、用户管理、网站设置只按当前用户 `role === 'admin'` 加入菜单。桌面与移动共用同一用户菜单，移动导航抽屉也只保留主导航，避免重复入口。路由权限继续由 RequireAdmin 和后端保障，菜单隐藏不承担鉴权。
+
+菜单用原生链接保留 URL、当前页高亮和新标签打开能力，支持方向键、Home/End、Enter、Esc 还焦点、Tab 离开、外部点击与导航后关闭。浮层复用共享 `placeMenu` 并 portal 到 body，避免被粘性顶栏裁切；右对齐且限制在视口内。320px 下收起顶栏语言选择器的当前值文字，语言图标和可访问名仍保留，图标按钮缩为 32px。退出、语言和外观保留各自操作。
+
 三个 admin 页面用路由的 `lazy: async () => ({ Component })`，产物是三个独立 chunk（5.7 / 9.1 / 15.0 KB）。`vite.config.ts` 里用**函数式** `manualChunks` 而不是对象映射：对象映射只覆盖列出的包本身，它们的传递依赖（scheduler、use-sync-external-store）仍留在主 chunk，等于白拆。拆完主 chunk 从 523 KB 降到 50 KB，react 依赖单独一个 317 KB 的长期缓存文件。
 
 ### 表单校验手写，不引 zod
@@ -66,6 +70,9 @@ M1-6 要把已经做完的后端接口接到界面上：登录/注册、个人�
 
 ## Alternatives considered
 
+- **把个人设置和管理入口也留在移动抽屉** — 改动更少且沿用现有导航，但会出现两个不同用户入口；所有屏宽统一进用户菜单。
+- **用 Select 承载路由动作** — 现有控件自带键盘和定位，但选择值不等于导航动作，且不能原生在新标签打开链接；菜单保留真实 Link 与 menu/menuitem 语义，复用定位函数。
+
 - **用 react-hook-form + zod** — 声明式、生态成熟。被否：本期只有 4 个表单、每张 2–5 个字段，收益不足以抵消两个依赖（zod 约 13 KB min）。校验结果手写成 `Record<string, string>` 后，与后端字段错误天然同构，反而更省。
 - **把 access token 也存进 `localStorage`** — 刷新页面不用重新换取令牌。被否：XSS 能直接读走长效令牌；现在只存内存，刷新时靠 httpOnly 的 refresh cookie 换一次，代价是一次额外的请求。
 - **`apiRequest` 统一返回 `{data, pagination}`** — 少一个函数。被否：非列表接口的调用点全部要解构或忽略第二个字段，类型也变成联合。
@@ -89,6 +96,8 @@ M1-6 要把已经做完的后端接口接到界面上：登录/注册、个人�
 - **已知限制**：匿名访问任何页面都会在控制台留下 401（`/auth/me` 与 `/auth/refresh` 各一次）。这是 cookie 会话的固有代价——浏览器里读不到 httpOnly cookie 是否存在，只能试一次。
 
 ## Verification
+
+- `e2e/user-menu.mjs` 22 项通过：管理与普通用户可见项、真实路由与单项高亮、键盘和焦点、外部点击、320/375/768px 几何、中英文与深色。`zoom-presets.mjs` 16 项和既有 `toolbar.mjs` 12 项回归通过；语言包检查与前端生产构建通过。
 
 - `node node_modules/typescript/bin/tsc --noEmit`：0 错误（`noUnusedLocals` + `verbatimModuleSyntax` 全开）。
 - `node node_modules/vitest/vitest.mjs run`：4 个文件 35 个用例通过——`theme.test.ts`（7，含循环切换与纯函数解析）、`validation.test.ts`（13）、`format.test.ts`（8，含字节单位与相对时间边界）、`client.test.ts`（7，含并发 401 只刷新一次、`apiList` 保留分页）。

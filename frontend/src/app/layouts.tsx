@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { LocaleSwitcher } from '@/components/locale-switcher';
-import { UserAvatar } from '@/components/user-avatar';
+import { UserMenu } from '@/components/user-menu';
 import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useThemeStore } from './theme-store';
@@ -41,7 +41,7 @@ function ThemeToggle() {
   const cycle = useThemeStore((state) => state.cycle);
   const icon = preference === 'light' ? 'sun' : preference === 'dark' ? 'moon' : 'monitor';
   return (
-    <Button variant="ghost" size="icon" aria-label={t('common.theme')} title={t(`theme.${preference}`)} onClick={cycle}>
+    <Button variant="ghost" size="icon" className="size-8 sm:size-10" aria-label={t('common.theme')} title={t(`theme.${preference}`)} onClick={cycle}>
       <Icon name={icon} className="size-4" />
     </Button>
   );
@@ -55,7 +55,7 @@ function ThemeToggle() {
  * 默认靠 `margin: auto` 居中，preflight 又把 margin 清零，所以 `m-0` 就落到了
  * 左上角，配 `h-svh` 就是一条侧栏。
  *
- * 为什么窄屏要收起来而不是横向滚动：八条链接在 375px 上横向滚动条根本看不出
+   * 为什么窄屏要收起来而不是横向滚动：多条链接在 375px 上横向滚动条根本看不出
  * 还有内容，用户会以为「我的分享」之后就没有了。
  */
 function MobileNav({
@@ -157,7 +157,6 @@ export function AppLayout() {
     { to: '/templates', label: t('nav.templates'), icon: 'waypoints' as const },
     { to: '/shares', label: t('nav.shares'), icon: 'link' as const },
     { to: '/trash', label: t('nav.trash'), icon: 'trash' as const },
-    { to: '/account', label: t('nav.account'), icon: 'settings' as const },
   ];
   const adminLinks = user?.role === 'admin'
     ? [
@@ -167,7 +166,8 @@ export function AppLayout() {
       ]
     : [];
 
-  const allLinks = [...links, ...adminLinks];
+  const userLinks = [{ to: '/account', label: t('nav.account'), icon: 'settings' as const }, ...adminLinks];
+  const allLinks = [...links, ...userLinks];
 
   /**
    * 导航高亮。
@@ -201,12 +201,12 @@ export function AppLayout() {
 
           {/*
             桌面端导航。
-            `md` 到 `xl` 之间只留图标：八条链接带文字在 768px 上必然折行，
+            `md` 到 `xl` 之间只留图标，给右侧用户、语言与外观操作保留空间；
             折行后顶栏会突然变高、画布跟着跳一下。图标有 `title` 与
             `aria-label`，悬停和读屏都拿得到名字。
           */}
           <nav aria-label={t('nav.primary')} className="ml-1 hidden items-center gap-0.5 md:flex">
-            {allLinks.map(({ to, label, icon }) => {
+            {links.map(({ to, label, icon }) => {
               const active = isActive(to);
               return (
                 <Link
@@ -225,30 +225,27 @@ export function AppLayout() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1">
-            {user ? <UserAvatar user={user} className="mr-1" /> : null}
-            <span className="hidden max-w-32 truncate pr-1 text-sm text-muted-foreground lg:inline">
-              {user?.nickname || user?.username}
-            </span>
+            {user ? <UserMenu user={user} links={userLinks} isActive={isActive} /> : null}
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="size-8 sm:size-10 md:hidden"
               aria-label={t('nav.menu')}
               aria-expanded={navOpen}
               onClick={() => setNavOpen(true)}
             >
               <Icon name="menu" className="size-5" />
             </Button>
-            <LocaleSwitcher />
+            <LocaleSwitcher className="max-sm:[&_[role=combobox]>span]:hidden" />
             <ThemeToggle />
-            <Button variant="ghost" size="icon" aria-label={t('common.logout')} onClick={() => void signOut()}>
+            <Button variant="ghost" size="icon" className="size-8 sm:size-10" aria-label={t('common.logout')} onClick={() => void signOut()}>
               <Icon name="logout" className="size-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      <MobileNav open={navOpen} links={allLinks} isActive={isActive} onClose={() => setNavOpen(false)} />
+      <MobileNav open={navOpen} links={links} isActive={isActive} onClose={() => setNavOpen(false)} />
 
       {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>

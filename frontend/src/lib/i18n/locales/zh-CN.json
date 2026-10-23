@@ -42,6 +42,7 @@
     "adminUsers": "用户管理",
     "adminSettings": "网站设置",
     "menu": "菜单",
+    "userMenu": "用户菜单",
     "primary": "主导航"
   },
   "auth": {
