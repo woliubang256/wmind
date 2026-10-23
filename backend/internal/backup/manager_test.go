@@ -304,3 +304,20 @@ func TestManagerReclaimsExpiredOwnedStagingOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestLaunchReturnsImmutableInitialJob(t *testing.T) {
+	f := newManagerFixture(t)
+	for range 25 {
+		job, err := f.manager.StartBackup("manual")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.Status != "running" || job.Stage != "preparing" || job.FinishedAt != nil {
+			t.Fatalf("launch response was mutated by worker: %+v", job)
+		}
+		f.manager.Wait()
+		if job.Status != "running" || job.Stage != "preparing" {
+			t.Fatal("returned snapshot changed")
+		}
+	}
+}

@@ -275,8 +275,9 @@ func run() error {
 		stopBackups()
 		return fmt.Errorf("initialize backup service: %w", err)
 	}
-	defer func() { stopBackups(); backups.Wait() }()
-	go backups.Run(backupsCtx)
+	backupsDone := make(chan struct{})
+	defer func() { stopBackups(); <-backupsDone; backups.Wait() }()
+	go func() { defer close(backupsDone); backups.Run(backupsCtx) }()
 
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(

@@ -235,7 +235,7 @@ func (m *Manager) launch(kind, trigger string, run func(context.Context, *Job) e
 	job := Job{ID: rand.Text(), Kind: kind, Trigger: trigger, Status: "running", Stage: "preparing", StartedAt: time.Now().UTC()}
 	m.update(job)
 	m.wg.Add(1)
-	go func() {
+	go func(job Job) {
 		defer m.wg.Done()
 		defer m.release()
 		ctx, cancel := context.WithTimeout(m.ctx, time.Hour)
@@ -267,7 +267,7 @@ func (m *Manager) launch(kind, trigger string, run func(context.Context, *Job) e
 		if err = m.cfg.Settings.Upsert(persistCtx, "backup.history", string(raw), nil, time.Now().UTC()); err != nil {
 			m.cfg.Logger.Warn("backup history persistence failed")
 		}
-	}()
+	}(job)
 	return job
 }
 func (m *Manager) update(job Job)               { m.mu.Lock(); copy := job; m.current = &copy; m.mu.Unlock() }
