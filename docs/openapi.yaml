@@ -1476,6 +1476,210 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /api/v1/admin/backups:
+    get:
+      tags: [admin]
+      summary: 读取备份配置、后续执行时间与最近任务
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackupState' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/backups/config:
+    put:
+      tags: [admin]
+      summary: 保存备份配置，空白凭据保留已有值
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupConfiguration' }
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackupState' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/backups/test:
+    post:
+      tags: [admin]
+      summary: 测试远端写入与删除权限
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupConfiguration' }
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/backups/run:
+    post:
+      tags: [admin]
+      summary: 立即创建一次异步备份任务
+      responses:
+        '201':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackupJob' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/backups/schedule:
+    post:
+      tags: [admin]
+      summary: 校验五段 Cron 并计算五次后续执行
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupSchedule' }
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackupScheduleResult' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/backups/restore/preview:
+    post:
+      tags: [admin]
+      summary: 上传 ZIP 并校验兼容性，不修改业务数据
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: { type: string, format: binary, maxLength: 2147483648 }
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackupRestorePreview' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+
+  /api/v1/admin/backups/restore:
+    post:
+      tags: [admin]
+      summary: 确认覆盖恢复，仅接受本管理员上传的暂存令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupRestoreRequest' }
+      responses:
+        '201':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackupJob' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1533,6 +1737,89 @@ components:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   schemas:
+    BackupConfiguration:
+      type: object
+      required: [enabled, cron, timezone, target, webdav, s3]
+      properties:
+        enabled: { type: boolean, default: false }
+        cron: { type: string, example: '0 3 * * *' }
+        timezone: { type: string, example: Asia/Shanghai }
+        target: { type: string, enum: [webdav, s3] }
+        webdav:
+          type: object
+          properties:
+            url: { type: string }
+            username: { type: string }
+            password: { type: string, writeOnly: true, description: 留空保留已有密码 }
+            passwordSet: { type: boolean, readOnly: true }
+        s3:
+          type: object
+          properties:
+            endpoint: { type: string, description: 留空使用 AWS S3 }
+            region: { type: string }
+            bucket: { type: string }
+            prefix: { type: string }
+            pathStyle: { type: boolean }
+            accessKey: { type: string, writeOnly: true }
+            secretKey: { type: string, writeOnly: true }
+            sessionToken: { type: string, writeOnly: true }
+            clearSessionToken: { type: boolean, writeOnly: true }
+            accessKeySet: { type: boolean, readOnly: true }
+            secretKeySet: { type: boolean, readOnly: true }
+            sessionTokenSet: { type: boolean, readOnly: true }
+    BackupJob:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [backup, restore] }
+        trigger: { type: string, enum: [manual, schedule] }
+        status: { type: string, enum: [running, succeeded, failed] }
+        stage: { type: string }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        filename: { type: string }
+        bytes: { type: integer }
+        errorCode: { type: string }
+        recoveryFile: { type: string, description: 服务器本地恢复前 ZIP 的文件名 }
+    BackupState:
+      type: object
+      properties:
+        configuration: { $ref: '#/components/schemas/BackupConfiguration' }
+        nextRuns: { type: array, items: { type: string, format: date-time } }
+        current: { $ref: '#/components/schemas/BackupJob' }
+        history: { type: array, items: { $ref: '#/components/schemas/BackupJob' } }
+        busy: { type: boolean }
+        maxUploadBytes: { type: integer }
+    BackupSchedule:
+      type: object
+      required: [cron, timezone]
+      properties:
+        cron: { type: string }
+        timezone: { type: string }
+    BackupScheduleResult:
+      type: object
+      properties:
+        nextRuns: { type: array, items: { type: string, format: date-time } }
+    BackupRestorePreview:
+      type: object
+      properties:
+        id: { type: string, description: 绑定上传管理员的一次性令牌 }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        database:
+          type: object
+          properties:
+            driver: { type: string }
+            schema: { type: integer }
+        files: { type: integer }
+        bytes: { type: integer }
+    BackupRestoreRequest:
+      type: object
+      required: [id, confirm]
+      properties:
+        id: { type: string }
+        confirm: { type: boolean, const: true }
+
     Envelope:
       type: object
       required: [data]
@@ -1580,6 +1867,11 @@ components:
       type: string
       description: 稳定契约。完整表见 `docs/04-后端设计与API规范.md` §3.2。
       enum:
+        - BACKUP_BUSY
+        - BACKUP_CONFIG_INVALID
+        - BACKUP_REMOTE_FAILED
+        - BACKUP_ARCHIVE_INVALID
+        - BACKUP_STAGE_INVALID
         - BAD_REQUEST
         - VALIDATION_FAILED
         - RESOURCE_NOT_FOUND

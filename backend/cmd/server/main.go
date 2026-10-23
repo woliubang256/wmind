@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/woliubang256/wmind/backend/internal/auth"
+	"github.com/woliubang256/wmind/backend/internal/backup"
 	"github.com/woliubang256/wmind/backend/internal/config"
 	"github.com/woliubang256/wmind/backend/internal/domain"
 	"github.com/woliubang256/wmind/backend/internal/handler"
@@ -78,6 +79,7 @@ func run() error {
 	// These are the dialect-agnostic handles the service layer works with.
 	// Only this switch is allowed to name a concrete dialect.
 	var (
+		backupRepo   domain.BackupRepository
 		factorRepo   domain.TwoFactorRepo
 		userRepo     domain.UserRepo
 		tokenRepo    domain.RefreshTokenRepo
@@ -105,6 +107,7 @@ func run() error {
 			}
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: sqliterepo.Check(db)})
+		backupRepo = sqliterepo.NewBackupRepository(db)
 		factorRepo = sqliterepo.NewTwoFactorRepository(db)
 		userRepo = sqliterepo.NewUserRepository(db)
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
@@ -139,6 +142,7 @@ func run() error {
 			return fmt.Errorf("close PostgreSQL migration connection: %w", err)
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: postgresrepo.Check(pool)})
+		backupRepo = postgresrepo.NewBackupRepository(pool)
 		factorRepo = postgresrepo.NewTwoFactorRepository(pool)
 		userRepo = postgresrepo.NewUserRepository(pool)
 		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
@@ -260,6 +264,18 @@ func run() error {
 		return err
 	}
 
+	backupsCtx, stopBackups := context.WithCancel(context.Background())
+	backups, err := backup.NewManager(backupsCtx, backup.ManagerConfig{
+		Repository: backupRepo, Settings: settingsRepo, UploadDir: cfg.Storage.Dir, Secret: factorKey, Logger: log,
+		AfterRestore: func(ctx context.Context) error { authSvc.InvalidateAllUsers(); return settingsSvc.Reload(ctx) },
+	})
+	if err != nil {
+		stopBackups()
+		return fmt.Errorf("initialize backup service: %w", err)
+	}
+	defer func() { stopBackups(); backups.Wait() }()
+	go backups.Run(backupsCtx)
+
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	authHandler := handler.NewAuthHandler(
 		authSvc,
@@ -276,6 +292,8 @@ func run() error {
 		Users:            handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
 		Site:             handler.NewSiteHandler(settingsSvc, config.Version),
 		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
+		Backups:          handler.NewBackupHandler(backups),
+		Maintenance:      backups.Gate(),
 		Admin:            handler.NewAdminHandler(adminSvc),
 		Maps:             handler.NewMapHandler(mapSvc),
 		Themes:           handler.NewThemeHandler(themeSvc),
@@ -306,6 +324,7 @@ func run() error {
 		log.Info("shutdown signal received")
 	}
 
+	stopBackups()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

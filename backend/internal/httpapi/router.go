@@ -49,6 +49,8 @@ type Deps struct {
 	// Site 处理公开的站点配置；AdminSettings 处理管理员的设置读写。
 	Site          *handler.SiteHandler
 	AdminSettings *handler.AdminSettingsHandler
+	Backups       *handler.BackupHandler
+	Maintenance   middleware.MaintenanceGate
 	// Admin 处理管理后台的用户、统计与审计接口。
 	Admin *handler.AdminHandler
 	// Maps 处理导图的增删改查与回收站。
@@ -81,6 +83,7 @@ func NewRouter(deps Deps) http.Handler {
 		middleware.RequestID(),
 		middleware.Logger(deps.Logger),
 		middleware.CORS(deps.Config.CORSOrigins),
+		middleware.Maintenance(deps.Maintenance),
 	)
 
 	// 只有来自受信网段的 X-Forwarded-For 才可信。不配置就完全不信任，
@@ -271,6 +274,15 @@ func registerAdmin(v1 *gin.RouterGroup, deps Deps) {
 		middleware.RequireAuth(deps.Sessions),
 		middleware.RequireRole(domain.RoleAdmin),
 	)
+	if deps.Backups != nil {
+		g.GET("/backups", deps.Backups.Get)
+		g.PUT("/backups/config", deps.Backups.Save)
+		g.POST("/backups/test", deps.Backups.Test)
+		g.POST("/backups/run", deps.Backups.Run)
+		g.POST("/backups/schedule", deps.Backups.Schedule)
+		g.POST("/backups/restore/preview", deps.Backups.Preview)
+		g.POST("/backups/restore", deps.Backups.Restore)
+	}
 	if deps.AdminSettings != nil {
 		g.GET("/settings", deps.AdminSettings.Get)
 		g.PUT("/settings", deps.AdminSettings.Update)

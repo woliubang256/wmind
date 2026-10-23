@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/woliubang256/wmind/backend/internal/auth"
+	"github.com/woliubang256/wmind/backend/internal/backup"
 	"github.com/woliubang256/wmind/backend/internal/config"
 	"github.com/woliubang256/wmind/backend/internal/handler"
 	"github.com/woliubang256/wmind/backend/internal/httpapi"
@@ -42,6 +43,7 @@ type authTestServer struct {
 	router http.Handler
 	// uploads 是头像落盘的目录，测试用来断言「文件真的写出来了」。
 	uploads string
+	backups *backup.Manager
 }
 
 func newAuthTestServer(t *testing.T) *authTestServer {
@@ -159,6 +161,17 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("NewShareService: %v", err)
 	}
 
+	backupCtx, stopBackups := context.WithCancel(t.Context())
+	backups, err := backup.NewManager(backupCtx, backup.ManagerConfig{
+		Repository: sqlite.NewBackupRepository(db), Settings: sqlite.NewSettingsRepository(db), UploadDir: uploads,
+		WorkDir: filepath.Join(t.TempDir(), "backups"), Secret: "http-test-encryption-key-long-enough", Logger: logger,
+		AfterRestore: func(ctx context.Context) error { svc.InvalidateAllUsers(); return settingsSvc.Reload(ctx) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stopBackups(); backups.Wait() })
+
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Config: &config.Config{
@@ -175,6 +188,8 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Users:            handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
 		Site:             handler.NewSiteHandler(settingsSvc, "test-version"),
 		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
+		Backups:          handler.NewBackupHandler(backups),
+		Maintenance:      backups.Gate(),
 		Admin:            handler.NewAdminHandler(adminSvc),
 		Maps:             handler.NewMapHandler(mapSvc),
 		Themes:           handler.NewThemeHandler(themeSvc),
@@ -191,7 +206,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("创建 Cookie jar: %v", err)
 	}
 	return &authTestServer{
-		t: t, server: server, router: router, uploads: uploads,
+		t: t, server: server, router: router, uploads: uploads, backups: backups,
 		client: &http.Client{Jar: jar, Timeout: 10 * time.Second},
 	}
 }

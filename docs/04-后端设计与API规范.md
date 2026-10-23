@@ -1363,3 +1363,9 @@ func (s *MapService) Save(ctx context.Context, in SaveInput) (*Map, error) {
 17. **迁移一致性**：`verify-migration-parity` 在两边迁移集上通过；人为删掉 SQLite 的一个索引后该检查失败（验证门禁本身有效）。
 18. **SQLite 并发安全**：并发 50 个写请求（保存导图）不出现 `SQLITE_BUSY` / `database is locked`；`journal_mode` 确认为 `wal`、`foreign_keys` 确认为 `1`。
 19. **方言不泄漏**：静态检查（`go list` + 正则）断言 `internal/service/**` 与 `internal/handler/**` 中不出现 `repository/postgres`、`repository/sqlite` 的 import。
+
+### 后台备份与恢复接口
+
+所有 `/api/v1/admin/backups` 接口要求管理员。GET 根路径返回脱敏配置、未来五次运行与最近 20 个作业；PUT `/config` 保存，POST `/test` 测试写入与清理，POST `/run` 启动异步上传，POST `/schedule` 校验五段 Cron 与 IANA 时区，POST `/restore/preview` 直接上传 ZIP 二进制并返回属主绑定的一小时暂存令牌，POST `/restore` 使用 `{id, confirm:true}` 确认覆盖。具体字段以 [OpenAPI](openapi.yaml) 为准。新增错误码：BACKUP_BUSY（409）、BACKUP_CONFIG_INVALID（422）、BACKUP_REMOTE_FAILED（502）、BACKUP_ARCHIVE_INVALID（422）、BACKUP_STAGE_INVALID（409）。
+
+备份捕获和恢复期间，业务接口返回 503 与 Retry-After；活性探针仍可访问。管理控制入口自行互斥，避免持有请求读锁再申请维护写锁。成功恢复撤销全部会话，客户端需重新登录查看最终作业结果。运行范围与恢复限制见 [后台备份](admin-backup.md)。
