@@ -152,6 +152,53 @@ describe('pickFaces', () => {
     expect(picked.map((face) => face.url)).toEqual(['/fonts/sans/cjk-700.woff2']);
   });
 
+  it.each([
+    { requested: 500, available: [300, 400, 600], matched: 400 },
+    { requested: 400, available: [300, 500, 600], matched: 500 },
+    { requested: 450, available: [400, 500, 600], matched: 500 },
+    { requested: 450, available: [300, 400, 600], matched: 400 },
+    { requested: 350, available: [300, 400], matched: 300 },
+    { requested: 200, available: [300, 400], matched: 300 },
+    { requested: 650, available: [400, 600, 700], matched: 700 },
+    { requested: 900, available: [400, 700, 800], matched: 800 },
+    { requested: 500, available: [600, 700], matched: 600 },
+    { requested: 500, available: [100, 300, 700], matched: 300 },
+    { requested: 700, available: [300, 400, 700, 800], matched: 700 },
+  ])('请求 $requested 时在 $available 中按 CSS 规则选 $matched', ({ requested, available, matched }) => {
+    const candidates = parseFontFaces(available.map((weight) => faceRule(`/weight-${weight}.woff2`, weight, 'U+4E00')).join('\n'));
+    const picked = pickFaces(candidates, { family: 'sans', weights: new Set([String(requested)]), codePoints: new Set([0x4e00]) });
+    expect(picked.map((face) => face.url)).toEqual([`/weight-${matched}.woff2`]);
+  });
+
+  it('回退字重后仍只取命中码位的分片，多个请求命中同一字重不重复', () => {
+    const picked = pickFaces(faces, { family: 'sans', weights: new Set(['400', '500']), codePoints: new Set([0x3002]) });
+    expect(picked.map((face) => face.url)).toEqual(['/fonts/sans/punct-400.woff2']);
+    expect(picked[0]!.weight).toBe('400');
+  });
+
+  it('先在整族匹配字重，不能因该字重缺字而改选更重的分片', () => {
+    const candidates = parseFontFaces([
+      faceRule('/latin-400.woff2', 400, 'U+0041'),
+      faceRule('/cjk-600.woff2', 600, 'U+4E00'),
+    ].join('\n'));
+    expect(pickFaces(candidates, { family: 'sans', weights: new Set(['500']), codePoints: new Set([0x4e00]) })).toEqual([]);
+  });
+
+  it('共享 URL 保留各字重和范围的声明，仅合并完全相同的声明', () => {
+    const candidates = parseFontFaces([
+      faceRule('/shared.woff2', 400, 'U+4E00'),
+      faceRule('/shared.woff2', 400, 'U+4E00'),
+      faceRule('/shared.woff2', 800, 'U+4E00'),
+      faceRule('/shared.woff2', 400, 'U+3002'),
+    ].join('\n'));
+    const picked = pickFaces(candidates, { family: 'sans', weights: new Set(['400', '800']), codePoints: new Set([0x4e00, 0x3002]) });
+    expect(picked.map((face) => [face.weight, face.ranges])).toEqual([
+      ['400', ['U+4E00']],
+      ['800', ['U+4E00']],
+      ['400', ['U+3002']],
+    ]);
+  });
+
   it('码位不在任何片里时返回空', () => {
     expect(pickFaces(faces, { family: 'sans', weights: new Set(['400']), codePoints: new Set([0x1f600]) })).toEqual([]);
   });
@@ -223,6 +270,44 @@ describe('loadFontCss', () => {
     expect(result.css).toContain('data:font/woff2;base64,/fonts/sans/cjk-');
     expect(spy.textCalls).toEqual(['/fonts/sans.css']);
     expect(result.faces).toBeGreaterThan(0);
+  });
+
+  it('仅概要使用 sans 500 时内嵌 400 分片并保留概要渲染字重', async () => {
+    resetFontCache();
+    const sheet = sheetWith(['系统字体']);
+    sheet.rootTopic.style = { fontFamily: 'system' };
+    sheet.rootTopic.children.attached[0]!.style = { fontFamily: 'system' };
+    sheet.summaries.push({ id: 'summary', topicId: 'root', range: ['t-0'], title: '概要', style: null });
+    const ctx = ctxOf(sheet);
+    expect(ctx.brand).toBe(false);
+    expect(ctx.date).toBeNull();
+    expect(planFamilies(ctx).map((need) => [need.family, [...need.weights]])).toEqual([['sans', ['500']]]);
+    const spy = deps();
+    const result = await loadFontCss(ctx, spy);
+    expect(spy.dataCalls).toEqual([CJK_WEIGHT_400]);
+    expect(result.faces).toBe(1);
+    expect(result.css).toContain('font-weight: 400;');
+    expect(result.css).not.toContain('font-weight: 600;');
+    expect(buildExportSvg(applyFontCss(ctx, result.css))).toMatch(/<text\b[^>]*font-weight:500[^>]*>概要<\/text>/);
+  });
+
+  it('共享 URL 的多个字重只读一次字节，内嵌时保留各条声明', async () => {
+    resetFontCache();
+    const sheet = sheetWith(['正文']);
+    sheet.rootTopic.style = { fontFamily: 'sans', fontWeight: 800 };
+    sheet.rootTopic.children.attached[0]!.style = { fontFamily: 'sans', fontWeight: 400 };
+    const dataCalls: string[] = [];
+    const result = await loadFontCss(ctxOf(sheet), {
+      async fetchText() {
+        return [faceRule('/shared.woff2', 400, 'U+4E00-9FFF'), faceRule('/shared.woff2', 800, 'U+4E00-9FFF')].join('\n');
+      },
+      async fetchDataUrl(url) { dataCalls.push(url); return 'data:font/woff2;base64,AAA'; },
+    });
+    expect(dataCalls).toEqual(['/shared.woff2']);
+    expect(result.faces).toBe(1);
+    const embedded = parseFontFaces(result.css);
+    expect(embedded.map((face) => face.weight)).toEqual(['400', '800']);
+    expect(embedded.every((face) => face.url === 'data:font/woff2;base64,AAA')).toBe(true);
   });
 
   it('同一个族只读一次样式表（模块级缓存）', async () => {

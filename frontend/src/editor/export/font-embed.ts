@@ -162,19 +162,40 @@ export function planFamilies(ctx: ExportContext): FamilyNeed[] {
   return [...needs.values()];
 }
 
+/** CSS 字重匹配先在整族完成，之后才能筛 unicode-range。候选是生成 CSS 的数值字重。 */
+function matchWeight(requested: number, available: readonly number[]): number | undefined {
+  if (!Number.isFinite(requested)) return undefined;
+  if (available.includes(requested)) return requested;
+  const lower = [...available].reverse().find((weight) => weight < requested);
+  const higher = available.find((weight) => weight > requested);
+  if (requested < 400) return lower ?? higher;
+  if (requested <= 500) {
+    return available.find((weight) => weight > requested && weight <= 500)
+      ?? lower ?? available.find((weight) => weight > 500);
+  }
+  return higher ?? lower;
+}
+
 /**
  * 从一族的全部 face 里挑出真正要内嵌的那些。
  *
- * 去重按 url：同一片在不同 `@font-face` 里不会重复出现，但同一条 CSS 被解析
- * 两次（sans 与 serif 各自的表里都有 latin 分片）时会出现同一个地址。
+ * 同一可变字体文件会供不同字重声明共用：这里只合并完整重复的声明，字节读取
+ * 在 loadFontCss 中按 URL 去重。缺失字重遵循 CSS 顺序，500 优先匹配 400。
  */
 export function pickFaces(faces: readonly FontFace[], need: FamilyNeed): FontFace[] {
   const out: FontFace[] = [];
   const seen = new Set<string>();
+  const available = [...new Set(faces.map((face) => Number(face.weight)))].filter(Number.isFinite).sort((a, b) => a - b);
+  const weights = new Set<number>();
+  for (const requested of need.weights) {
+    const matched = matchWeight(Number(requested), available);
+    if (matched !== undefined) weights.add(matched);
+  }
 
   for (const face of faces) {
-    if (!need.weights.has(face.weight)) continue;
-    if (seen.has(face.url)) continue;
+    if (!weights.has(Number(face.weight))) continue;
+    const key = JSON.stringify([face.family, face.style, face.weight, face.url, face.ranges]);
+    if (seen.has(key)) continue;
 
     let hit = false;
     for (const cp of need.codePoints) {
@@ -185,14 +206,14 @@ export function pickFaces(faces: readonly FontFace[], need: FamilyNeed): FontFac
     }
     if (!hit) continue;
 
-    seen.add(face.url);
+    seen.add(key);
     out.push(face);
   }
 
   return out;
 }
 
-/** 生成要写进 SVG 的 `<style>` 内容。`data` 里缺的地址按原地址写回（不该发生）。 */
+/** 生成要写进 SVG 的 `<style>` 内容，跳过未读到字节的声明。 */
 export function buildFontCss(
   faces: readonly FontFace[],
   data: ReadonlyMap<string, string>,
@@ -278,7 +299,7 @@ export const browserFontDeps: FontEmbedDeps = {
 export interface FontEmbedResult {
   /** 写进 `<style>` 的内容，没有可嵌的东西时为空串。 */
   css: string;
-  /** 实际内嵌的字节数（base64 之前的估算），用于提示体积。 */
+  /** 成功读取的唯一字体分片数（按 URL 去重）。 */
   faces: number;
 }
 
@@ -313,9 +334,9 @@ export async function loadFontCss(
   if (allFaces.length === 0) return { css: '', faces: 0 };
 
   const data = new Map<string, string>();
-  for (const face of allFaces) {
-    const url = await deps.fetchDataUrl(face.url);
-    if (url !== null) data.set(face.url, url);
+  for (const source of new Set(allFaces.map((face) => face.url))) {
+    const url = await deps.fetchDataUrl(source);
+    if (url !== null) data.set(source, url);
   }
 
   return { css: buildFontCss(allFaces, data), faces: data.size };
