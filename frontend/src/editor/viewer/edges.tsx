@@ -58,6 +58,10 @@ export function edgePath(edge: EdgePath): string {
     }
     case 'curve':
     default:
+      if (edge.curveControls) {
+        const [start, end] = edge.curveControls;
+        return `M ${from.x} ${from.y} C ${start.x} ${start.y} ${end.x} ${end.y} ${to.x} ${to.y}`;
+      }
       if (orientation === 'v') {
         const midY = (from.y + to.y) / 2;
         return `M ${from.x} ${from.y} C ${from.x} ${midY} ${to.x} ${midY} ${to.x} ${to.y}`;

@@ -24,6 +24,7 @@ import { countDescendants } from '../model/traverse';
 import type { ComputedStyle, ShapeClass, Sheet, StructureClass, Theme, Topic } from '../model/types';
 import { defaultBackend, measureTopic } from './measure';
 import { spacingFor, type LayoutSpacing } from './constants';
+import { fanCurveControls, topicOutlinePoint } from './branch-routing';
 import type { EdgePath, EdgeShape, LayoutResult, NodeBox, Side, TopicSize } from './types';
 
 /** 共用「一层一列」几何的结构。其余结构各有各的摆法。 */
@@ -99,7 +100,7 @@ interface Columns {
   left: Map<number, number>;
 }
 
-function buildColumns(root: MeasuredNode, spacing: LayoutSpacing): Columns {
+function buildColumns(root: MeasuredNode, spacing: LayoutSpacing, rootGap: number): Columns {
   const maxWidth = new Map<number, number>();
   let maxDepth = 0;
   const visit = (node: MeasuredNode): void => {
@@ -109,8 +110,8 @@ function buildColumns(root: MeasuredNode, spacing: LayoutSpacing): Columns {
   };
   visit(root);
 
-  const right = new Map<number, number>([[1, root.size.width / 2 + spacing.levelGap]]);
-  const left = new Map<number, number>([[1, -root.size.width / 2 - spacing.levelGap]]);
+  const right = new Map<number, number>([[1, root.size.width / 2 + rootGap]]);
+  const left = new Map<number, number>([[1, -root.size.width / 2 - rootGap]]);
   for (let depth = 2; depth <= maxDepth; depth += 1) {
     const prevRight = right.get(depth - 1) ?? 0;
     const prevLeft = left.get(depth - 1) ?? 0;
@@ -145,7 +146,8 @@ export function layoutMindmap(input: LayoutInput): LayoutResult {
     out,
     // 列对齐只对「一层一列」的横向树有意义；纵向树对齐的是行，其余三种
     // 结构有自己的摆放规则。
-    columns: alignSiblings && HORIZONTAL_STRUCTURES.has(structure) ? buildColumns(root, spacing) : null,
+    columns: alignSiblings && HORIZONTAL_STRUCTURES.has(structure)
+      ? buildColumns(root, spacing, structure === 'mindmap' ? spacing.rootGap : spacing.levelGap) : null,
   };
 
   switch (structure) {
@@ -300,7 +302,8 @@ function splitSides(children: MeasuredNode[], autoBalance: boolean, structure: S
 }
 
 function layoutHorizontal(root: MeasuredNode, autoBalance: boolean, ctx: Ctx): void {
-  const { siblingGap, levelGap } = ctx.spacing;
+  const { siblingGap } = ctx.spacing;
+  const rootGap = ctx.structure === 'mindmap' ? ctx.spacing.rootGap : ctx.spacing.levelGap;
 
   // 先把所有子树高度算出来（用真实间距），再分配左右——分配算法依赖高度，
   // 用 gap=0 算出来的高度会系统性偏小，导致两侧明显不平衡。
@@ -316,8 +319,8 @@ function layoutHorizontal(root: MeasuredNode, autoBalance: boolean, ctx: Ctx): v
 
   const rootBox = placeNodeAt(root, -root.size.width / 2, -root.size.height / 2, 'none', ctx);
 
-  placeSide(right, 'right', root.size.width / 2 + levelGap, -rightTotal / 2, rootBox, ctx);
-  placeSide(left, 'left', -root.size.width / 2 - levelGap, -leftTotal / 2, rootBox, ctx);
+  placeSide(right, 'right', root.size.width / 2 + rootGap, -rightTotal / 2, rootBox, ctx);
+  placeSide(left, 'left', -root.size.width / 2 - rootGap, -leftTotal / 2, rootBox, ctx);
 }
 
 function placeSide(
@@ -389,15 +392,28 @@ function placeSubtreeH(
 function makeEdgeH(parent: NodeBox, child: NodeBox, style: ComputedStyle, side: Side, ctx: Ctx): EdgePath {
   const fromY = parent.y + parent.height / 2;
   const toY = child.y + child.height / 2;
+  const sign = side === 'left' ? -1 : 1;
+  const mindmap = ctx.structure === 'mindmap';
+  const fan = mindmap && parent.depth === 0;
+  const to = mindmap ? topicOutlinePoint(child, style.shape, { x: -sign, y: 0 })
+    : { x: side === 'left' ? child.x + child.width : child.x, y: toY };
+  // 按真实方位分配端口，不能按序号均分角度：不等高子树会让序号与上下方位错位。
+  const angle = fan ? Math.atan2(to.y - fromY, Math.abs(to.x - parent.x - parent.width / 2)) : 0;
+  const direction = { x: sign * Math.cos(angle), y: Math.sin(angle) };
+  const from = mindmap
+    ? topicOutlinePoint(parent, ctx.out.styles.get(parent.id)?.shape ?? 'rounded-rect', direction)
+    : { x: side === 'left' ? parent.x : parent.x + parent.width, y: fromY };
+  const lineStyle = edgeLineStyle(style, ctx);
   return {
     id: `${parent.id}->${child.id}`,
     parentId: parent.id,
     childId: child.id,
-    from: side === 'left' ? { x: parent.x, y: fromY } : { x: parent.x + parent.width, y: fromY },
-    to: side === 'left' ? { x: child.x + child.width, y: toY } : { x: child.x, y: toY },
+    from,
+    to,
+    ...(fan && lineStyle === 'curve' ? { curveControls: fanCurveControls(from, to, direction) } : {}),
     orientation: 'h',
     // 连线的颜色取自子节点：分支色跟着分支走，而不是跟着父节点。
-    lineStyle: edgeLineStyle(style, ctx),
+    lineStyle: mindmap && !fan && lineStyle === 'curve' ? 'brace' : lineStyle,
     lineEnd: style.lineEnd,
     lineColor: style.lineColor,
     lineWidth: style.lineWidth,
@@ -864,6 +880,10 @@ function finalize(out: Out, padding: number): LayoutResult {
       edge.from.y += dy;
       edge.to.x += dx;
       edge.to.y += dy;
+      for (const control of edge.curveControls ?? []) {
+        control.x += dx;
+        control.y += dy;
+      }
     }
   }
 

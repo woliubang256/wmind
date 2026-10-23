@@ -76,6 +76,8 @@ export interface EdgePath {
   childId: string;
   from: Point;
   to: Point;
+  /** 布局指定的三次曲线控制点；只影响 curve，不保存到文档。 */
+  curveControls?: [Point, Point];
   orientation: EdgeOrientation;
   lineStyle: EdgeShape;
   lineEnd: LineEnd;

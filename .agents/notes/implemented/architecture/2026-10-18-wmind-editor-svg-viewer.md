@@ -49,6 +49,8 @@ export const EDITOR_PLUGINS = [panZoomPlugin, collapsePlugin, selectionPlugin, e
 
 四种线型（`curve` / `straight` / `elbow` / `none`）共用同一个 `edgePath()`，`elbow` 用 `M … H … V …` 手工拐角，`curve` 用三次贝塞尔、控制点取水平方向的 1/2 距离——控制点太近会显得线「软」，太远会在分叉处打结。
 
+思维导图的默认曲线由[分散端点与圆角分叉](2026-10-23-wmind-mindmap-branch-routing.md)部分取代：主分支使用布局给出的 `curveControls`，子主题复用圆角括号路径；其他结构保留原路径规则。
+
 ### 编辑用绝对定位的 `<textarea>` 覆盖层，不用 `foreignObject`
 
 `foreignObject` 在 Safari 里对 `textarea` 的滚动、IME 候选框定位都有问题，中文输入法尤其明显（候选框会飘到屏幕左上角）。

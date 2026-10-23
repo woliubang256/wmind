@@ -12,6 +12,8 @@ export interface LayoutSpacing {
   siblingGap: number;
   /** 父子节点之间的水平间距。 */
   levelGap: number;
+  /** 思维导图中心到一级分支的独立间距。 */
+  rootGap: number;
   /** 画布内容四周的内边距。 */
   padding: number;
 }
@@ -19,12 +21,14 @@ export interface LayoutSpacing {
 export const DEFAULT_SPACING: LayoutSpacing = {
   siblingGap: 24,
   levelGap: 48,
+  rootGap: 128,
   padding: 80,
 };
 
 export const COMPACT_SPACING: LayoutSpacing = {
   siblingGap: 12,
   levelGap: 28,
+  rootGap: 80,
   padding: 40,
 };
 

@@ -19,6 +19,10 @@ function makeEdge(overrides: Partial<EdgePath> = {}): EdgePath {
 }
 
 describe('edgePath', () => {
+  it('思维导图使用布局给出的展开控制点', () => {
+    expect(edgePath(makeEdge({ curveControls: [{ x: 125, y: 40 }, { x: 180, y: 80 }] })))
+      .toBe('M 100 50 C 125 40 180 80 200 80');
+  });
   it('curve 用三次贝塞尔，控制点在水平中点', () => {
     expect(edgePath(makeEdge())).toBe('M 100 50 C 150 50 150 80 200 80');
   });

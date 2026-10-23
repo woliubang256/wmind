@@ -34,6 +34,84 @@ function overlaps(a: NodeBox, b: NodeBox): boolean {
 }
 
 describe('mindmap 布局', () => {
+  it('20 个主分支沿中心主题轮廓有序分散，而不是每侧共用一个中点', () => {
+    const doc = createDocument();
+    const sheet = doc.sheets[0]!;
+    sheet.rootTopic.id = 'root';
+    sheet.rootTopic.children.attached = Array.from({ length: 20 }, (_, i) => topic(`main-${i}`, `分支 ${i}`));
+    const result = layoutMindmap({ sheet, theme: doc.theme, measure: stubMeasure });
+    const root = box(result, 'root');
+    for (const side of ['left', 'right']) {
+      const edges = result.edges.filter((edge) => box(result, edge.childId).side === side);
+      expect(edges).toHaveLength(10);
+      expect(new Set(edges.map((edge) => `${edge.from.x},${edge.from.y}`)).size).toBe(10);
+      expect(edges[0]!.from.y).toBeLessThan(root.y + root.height / 2);
+      expect(edges.at(-1)!.from.y).toBeGreaterThan(root.y + root.height / 2);
+    }
+  });
+
+  it('子树高度不均时，曲线从端口向外展开，不折回中心主题内部', () => {
+    const doc = createDocument();
+    const sheet = doc.sheets[0]!;
+    sheet.topicShape = 'rect';
+    sheet.rootTopic.children.attached = Array.from({ length: 10 }, (_, i) => topic(`main-${i}`, `分支 ${i}`));
+    sheet.rootTopic.children.attached[0]!.children.attached = Array.from({ length: 12 }, (_, i) => topic(`sub-${i}`, `子主题 ${i}`));
+    const result = layoutMindmap({ sheet, theme: doc.theme, measure: stubMeasure });
+    const root = result.boxes.get(sheet.rootTopic.id)!;
+    for (const edge of result.edges.filter((edge) => edge.parentId === root.id)) {
+      const first = edge.curveControls![0];
+      if (Math.abs(edge.from.y - root.y) < 1e-6) expect(first.y).toBeLessThanOrEqual(edge.from.y);
+      if (Math.abs(edge.from.y - root.y - root.height) < 1e-6) expect(first.y).toBeGreaterThanOrEqual(edge.from.y);
+      if (Math.abs(edge.from.x - root.x) < 1e-6) expect(first.x).toBeLessThanOrEqual(edge.from.x);
+      if (Math.abs(edge.from.x - root.x - root.width) < 1e-6) expect(first.x).toBeGreaterThanOrEqual(edge.from.x);
+    }
+  });
+
+  it('曲线子主题使用短横线接圆角分叉，主分支间距大于子主题间距', () => {
+    const result = layout();
+    expect(result.edges.find((edge) => edge.childId === 'a1')!.lineStyle).toBe('brace');
+    const root = box(result, 'root');
+    const a = box(result, 'a');
+    const a1 = box(result, 'a1');
+    expect(a.x - root.x - root.width).toBeGreaterThan(a1.x - a.x - a.width);
+  });
+
+  it.each(['rect', 'rounded-rect', 'capsule', 'ellipse', 'circle', 'diamond', 'hexagon', 'parallelogram', 'underline', 'none'] as const)(
+    '%s 在紧凑/单侧模式中保持有限几何，平移控制点后仍在端点范围内', (shape) => {
+      const doc = createDocument();
+      const sheet = doc.sheets[0]!;
+      sheet.topicShape = shape;
+      sheet.rootTopic.children.attached = Array.from({ length: 7 }, (_, i) => topic(`main-${i}`, `分支 ${i}`, [topic(`child-${i}`, '子主题')]));
+      for (const compact of [true, false]) {
+        const result = layoutMindmap({ sheet, theme: doc.theme, measure: stubMeasure, options: { compact, autoBalance: false } });
+        for (const edge of result.edges) {
+          for (const point of [edge.from, edge.to, ...(edge.curveControls ?? [])]) {
+            expect(Number.isFinite(point.x) && Number.isFinite(point.y)).toBe(true);
+            expect(point.x).toBeGreaterThanOrEqual(0);
+            expect(point.y).toBeGreaterThanOrEqual(0);
+          }
+          for (const point of edge.curveControls ?? []) {
+            expect(point.x).toBeGreaterThanOrEqual(Math.min(edge.from.x, edge.to.x));
+            expect(point.x).toBeLessThanOrEqual(Math.max(edge.from.x, edge.to.x));
+            expect(point.y).toBeGreaterThanOrEqual(Math.min(edge.from.y, edge.to.y));
+            expect(point.y).toBeLessThanOrEqual(Math.max(edge.from.y, edge.to.y));
+          }
+        }
+      }
+    });
+
+  it('分散端点保留子主题显式线型、颜色、宽度和箭头', () => {
+    const doc = docWithTree();
+    const sheet = doc.sheets[0]!;
+    sheet.rootTopic.children.attached[0]!.style = { lineStyle: 'straight', lineColor: '#123456', lineWidth: 4, lineEnd: 'arrow' };
+    sheet.rootTopic.children.attached[0]!.children.attached[0]!.style = { lineStyle: 'elbow' };
+    sheet.rootTopic.children.attached[1]!.style = { lineStyle: 'none' };
+    const result = layoutMindmap({ sheet, theme: doc.theme, measure: stubMeasure });
+    expect(result.edges.find((edge) => edge.childId === 'a')).toMatchObject({ lineStyle: 'straight', lineColor: '#123456', lineWidth: 4, lineEnd: 'arrow' });
+    expect(result.edges.find((edge) => edge.childId === 'a1')!.lineStyle).toBe('elbow');
+    expect(result.edges.find((edge) => edge.childId === 'b')!.lineStyle).toBe('none');
+  });
+
   it('所有可见节点都有盒子，根节点 side 为 none', () => {
     const result = layout();
     expect([...result.boxes.keys()].sort()).toEqual(['a', 'a1', 'a2', 'b', 'b1', 'f1', 'f1x', 'root']);
