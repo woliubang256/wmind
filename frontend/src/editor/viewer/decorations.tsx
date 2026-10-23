@@ -24,28 +24,39 @@ const SELECTED = '#2563EB';
 export function BoundariesLayer({
   annotations,
   selectedId = null,
+  interactive = false,
+  interactiveLabel = "Boundary",
 }: {
   annotations: AnnotationLayout;
   selectedId?: string | null;
+  interactive?: boolean;
+  interactiveLabel?: string;
 }) {
   return (
     <g className="layer-boundaries">
       {annotations.boundaries.map((boundary) => {
         const selected = selectedId === boundary.id;
         return (
-          <g key={boundary.id} data-boundary-id={boundary.id}>
+          <g key={boundary.id} data-boundary-id={boundary.id}
+            role={interactive ? 'button' : undefined} tabIndex={interactive ? 0 : undefined}
+            aria-label={interactive ? boundary.title || interactiveLabel : undefined}
+            aria-pressed={interactive ? selected : undefined}
+            className={interactive ? 'cursor-pointer outline-none focus-visible:opacity-70' : undefined}>
             <rect
               x={boundary.rect.x}
               y={boundary.rect.y}
               width={boundary.rect.width}
               height={boundary.rect.height}
               rx={10}
+              pointerEvents="none"
               fill={boundary.fill}
               fillOpacity={boundary.fillOpacity}
               stroke={selected ? SELECTED : boundary.stroke}
               strokeWidth={selected ? boundary.strokeWidth + 1 : boundary.strokeWidth}
               strokeDasharray={boundary.strokeDasharray}
             />
+            {interactive ? <rect data-boundary-hit="" {...boundary.rect} rx={10} fill="none" stroke="transparent"
+              strokeWidth={14} vectorEffect="non-scaling-stroke" pointerEvents="stroke" /> : null}
             {boundary.title ? (
               <text
                 x={boundary.rect.x + 8}

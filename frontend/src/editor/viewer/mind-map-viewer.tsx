@@ -55,6 +55,7 @@ export interface MindMapViewerProps {
   onBeginEdit?(id: string): void;
   onCommitTitle?(id: string, title: string, options?: CommitTitleOptions): void;
   onSelectRelationship?(id: string): void;
+  onSelectBoundary?(id: string): void;
   onCommitRelationshipRouting?(id: string, routing: RelationshipRouting, curve: boolean): void;
   onCommitRelationshipTitle?(id: string, title: string | null, restoreFocus: boolean): void;
   onCancelEdit?(): void;
@@ -82,6 +83,7 @@ export function MindMapViewer({
   onBeginEdit,
   onCommitTitle,
   onSelectRelationship,
+  onSelectBoundary,
   onCommitRelationshipTitle,
   onCommitRelationshipRouting,
   onCancelEdit,
@@ -232,6 +234,9 @@ export function MindMapViewer({
     [onCommitTitle],
   );
 
+  const selectBoundary = useCallback((id: string) => {
+    if (!readOnly) onSelectBoundary?.(id);
+  }, [readOnly, onSelectBoundary]);
   const selectRelationship = useCallback((id: string) => {
     if (!readOnly) onSelectRelationship?.(id);
   }, [readOnly, onSelectRelationship]);
@@ -283,6 +288,7 @@ export function MindMapViewer({
       previewRelationshipRouting,
       commitRelationshipRouting,
       selectRelationship,
+      selectBoundary,
       beginRelationshipEdit,
       moveTopics,
       detachTopics,
@@ -309,6 +315,7 @@ export function MindMapViewer({
       previewRelationshipRouting,
       commitRelationshipRouting,
       selectRelationship,
+      selectBoundary,
       beginRelationshipEdit,
       moveTopics,
       detachTopics,
@@ -372,7 +379,7 @@ export function MindMapViewer({
             className="viewport"
             transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}
           >
-            <BoundariesLayer annotations={annotations} selectedId={selectedAnnotationId} />
+            <BoundariesLayer annotations={annotations} selectedId={selectedAnnotationId} interactive={!readOnly && Boolean(onSelectBoundary)} interactiveLabel={t('editor.annotation.boundary')} />
 
             <EdgesLayer edges={layout.edges} cullRect={cullRect} />
 

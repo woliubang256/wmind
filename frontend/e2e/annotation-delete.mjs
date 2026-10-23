@@ -34,7 +34,7 @@ run(async () => {
     await relation.locator('text').click(); await page.getByRole('button', { name: '删除所选', exact: true }).click();
     assert.equal(await relation.count(), 0); await undo();
     check('联系标题编辑安全，工具栏删除共用选中对象', true);
-    if (process.env.BOUNDARY_TEST) {
+    {
       await boundary.locator('text').click(); assert.equal(await boundary.getAttribute('aria-pressed'), 'true');
       await page.keyboard.press('Delete'); assert.equal(await boundary.count(), 0); assert.equal(await topics.count(), 3); await undo();
       check('边界标题可选中、删除、撤销，内部主题保留', true);

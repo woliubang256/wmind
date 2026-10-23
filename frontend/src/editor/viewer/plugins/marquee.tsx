@@ -34,7 +34,7 @@ export function MarqueePlugin() {
       if (event.button !== 0) return;
       const target = event.target as Element | null;
       // 按在节点或折叠按钮上，交给选中 / 拖拽插件。
-      if (!target || target.closest('[data-topic-id], [data-summary-id], [data-relationship-id]') || target.closest('[data-collapse-toggle]')) {
+      if (!target || target.closest('[data-topic-id], [data-summary-id], [data-relationship-id], [data-boundary-id]') || target.closest('[data-collapse-toggle]')) {
         return;
       }
       // 空格拖拽是平移，不画选框。

@@ -29,6 +29,7 @@ const SUITE = [
   ['drag-return', '拖拽回归 / 取消脱离'],
   ['insert-content', 'Insert 内容编辑与导出'],
   ['summary-endpoints', '概要选中与联系端点'],
+  ['annotation-delete', '联系与边界选中删除'],
   ['relationship-routing', '联系线走向调整'],
   ['markers', '主题标记'],
   ['culling', '视口裁剪'],

@@ -1138,6 +1138,12 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                   const summary = ids.length === 1 && collectSummaries(sheet).find((item) => item.id === ids[0]);
                   setActiveAnnotation(summary ? { kind: 'summary', id: summary.id } : null);
                 }}
+                onSelectBoundary={(id) => {
+                  store.getState().select([]);
+                  store.getState().setEditing(null);
+                  setActiveAnnotation({ kind: 'boundary', id });
+                  setPanelOpen(true); setPanelTab('structure');
+                }}
                 onSelectRelationship={(id) => {
                   store.getState().select([]);
                   store.getState().setEditing(null);

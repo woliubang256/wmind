@@ -29,6 +29,12 @@ export function SelectionPlugin() {
       // 折叠按钮自己会 stopPropagation，这里再挡一次，防止捕获阶段的顺序变化。
       if (target.closest('[data-collapse-toggle]')) return;
 
+      const boundary = target.closest('[data-boundary-id][role="button"]');
+      if (boundary) {
+        const id = boundary.getAttribute('data-boundary-id');
+        if (id) latest.current.selectBoundary(id);
+        return;
+      }
       const { selection, setSelection, toggleSelection } = latest.current;
 
       const node = target.closest('[data-topic-id], [data-summary-id]');
@@ -49,8 +55,16 @@ export function SelectionPlugin() {
       setSelection([]);
     };
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!['Enter', ' '].includes(event.key) || event.isComposing) return;
+      const node = (event.target as Element | null)?.closest('[data-boundary-id][role="button"]');
+      const id = node?.getAttribute('data-boundary-id');
+      if (!id) return;
+      event.preventDefault(); event.stopPropagation(); latest.current.selectBoundary(id);
+    };
+    svg.addEventListener('keydown', onKeyDown);
     svg.addEventListener('pointerdown', onPointerDown);
-    return () => svg.removeEventListener('pointerdown', onPointerDown);
+    return () => { svg.removeEventListener('pointerdown', onPointerDown); svg.removeEventListener('keydown', onKeyDown); };
   }, [svgRef, latest]);
 
   return null;

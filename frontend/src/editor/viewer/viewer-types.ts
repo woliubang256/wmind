@@ -64,6 +64,7 @@ export interface ViewerContextValue {
   previewRelationshipRouting(id: string, routing: RelationshipRouting | null, curve?: boolean): void;
   commitRelationshipRouting(id: string, routing: RelationshipRouting, curve?: boolean): void;
   selectRelationship(id: string): void;
+  selectBoundary(id: string): void;
   beginRelationshipEdit(id: string): void;
   /** 拖拽落定：把一组节点移到新父节点下（`index` 省略表示追加到末尾）。 */
   moveTopics(ids: string[], parentId: string, index?: number): void;
