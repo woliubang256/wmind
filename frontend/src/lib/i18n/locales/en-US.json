@@ -1297,6 +1297,7 @@
       "RESTORE_RELOAD_FAILED": "Data was restored, but settings could not reload. Restart the backend and sign in again."
     },
     "operationFailed": "Operation failed. Check the server logs.",
-    "recoveryFile": "Recovery copy retained on the server: {{filename}}"
+    "recoveryFile": "Recovery copy retained on the server: {{filename}}",
+    "selectedValues": "Selected: {{values}}"
   }
 }

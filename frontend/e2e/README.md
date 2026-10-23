@@ -164,3 +164,15 @@ context，Cookie 还在，但 React Query 缓存是新的）。
 （编辑器面板的「边框宽度」「边框颜色」也算），改成 `getByRole('combobox', { name: '边框', exact: true })`。
 `<label>` 包着自绘下拉时，可访问名会变成「标签文字 + 当前值」拼在一起，
 所以这几个控件的可访问名都显式写在 `aria-label` 上。
+
+## 后台备份与恢复
+
+`backup.mjs` 会恢复整个数据库与上传目录，只能指向新建的隔离后端。它启动本地 WebDAV，验证 Cron 双向编辑、凭据脱敏、S3 条件表单、窄屏、中英文、真实 ZIP 上传、手动覆盖恢复与会话失效。该脚本不加入默认全量套件；显式运行：
+
+```sh
+WMIND_BACKUP_E2E_ISOLATED=1 BASE=http://127.0.0.1:5299 API=http://127.0.0.1:8099 \
+ADMIN_EMAIL=backup-admin@example.test ADMIN_PASSWORD=backup-e2e-admin-password \
+node e2e/backup.mjs
+```
+
+截图保存到 `/tmp/wmind-backup-desktop.png` 与 `/tmp/wmind-backup-mobile.png`。后端必须使用独立 SQLite 路径、上传目录及测试加密密钥，不能使用日常开发数据。

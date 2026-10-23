@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
@@ -25,6 +25,8 @@ interface ModalProps {
 export function Modal({ open, title, description, children, footer, onClose, dismissible = true, size = 'md' }: ModalProps) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -46,6 +48,8 @@ export function Modal({ open, title, description, children, footer, onClose, dis
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       onClose={onClose}
       onClick={(event) => {
         // 点击遮罩时 target 是 dialog 本身（内容在子元素里）。
@@ -62,8 +66,8 @@ export function Modal({ open, title, description, children, footer, onClose, dis
     >
       <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold">{title}</h2>
-          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+          <h2 id={titleId} className="text-base font-semibold">{title}</h2>
+          {description ? <p id={descriptionId} className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {dismissible ? (
           <Button variant="ghost" size="icon" aria-label={t('common.close')} onClick={onClose} className="-mr-1 -mt-1 shrink-0">

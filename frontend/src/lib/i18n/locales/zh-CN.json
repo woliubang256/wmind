@@ -1297,6 +1297,7 @@
       "RESTORE_RELOAD_FAILED": "数据已恢复，但配置刷新失败，请重启后端并重新登录。"
     },
     "operationFailed": "操作失败，请检查服务器日志。",
-    "recoveryFile": "服务器保留的恢复前副本：{{filename}}"
+    "recoveryFile": "服务器保留的恢复前副本：{{filename}}",
+    "selectedValues": "已选：{{values}}"
   }
 }

@@ -53,7 +53,7 @@ export function Switch({ checked, onCheckedChange, label, description, disabled,
         <span
           aria-hidden="true"
           className={cn(
-            'absolute top-0.5 size-4.5 rounded-full bg-background shadow transition-transform',
+            'absolute left-0.5 top-0.5 size-4.5 rounded-full bg-background shadow transition-transform',
             checked ? 'translate-x-5' : 'translate-x-0.5',
           )}
         />

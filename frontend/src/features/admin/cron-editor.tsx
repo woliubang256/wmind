@@ -35,7 +35,9 @@ export function CronEditor({ value, onChange, disabled }: Props) {
                 <span className="text-xs text-muted-foreground">–</span>
                 <Input type="number" aria-label={t('backup.rangeEnd', { field: label })} min={field.min} max={field.max} value={model.end} onChange={(e) => update({ end: Number(e.target.value) })} className="h-8 text-xs" />
               </div>}
-              {model.mode === 'values' && <div className={cn('mt-2 grid gap-1', field.key === 'weekday' ? 'grid-cols-4' : 'grid-cols-6')}>
+              {model.mode === 'values' && <details className="mt-2 rounded-md bg-muted/40 px-2 py-1.5">
+                <summary className="cursor-pointer text-xs text-muted-foreground">{t('backup.selectedValues', { values: model.values.map((n) => field.key === 'weekday' ? t(`backup.weekdays.${n}`) : n).join(', ') })}</summary>
+                <div className={cn('mt-2 grid gap-1', field.key === 'weekday' ? 'grid-cols-4' : 'grid-cols-6')}>
                 {Array.from({ length: field.max - field.min + 1 }, (_, i) => i + field.min).map((n) => {
                   const selected = model.values.includes(n);
                   return <button key={n} type="button" aria-label={`${label} ${field.key === 'weekday' ? t(`backup.weekdays.${n}`) : n}`} aria-pressed={selected} disabled={disabled}
@@ -44,7 +46,7 @@ export function CronEditor({ value, onChange, disabled }: Props) {
                     {field.key === 'weekday' ? t(`backup.weekdays.${n}`) : n}
                   </button>;
                 })}
-              </div>}
+              </div></details>}
               {model.mode === 'custom' && <Input className="mt-2 h-8 font-mono text-xs" aria-label={t('backup.customFor', { field: label })} value={model.raw} onChange={(e) => update({ raw: e.target.value })} />}
             </fieldset>
           );

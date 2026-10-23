@@ -14,14 +14,24 @@ import type { SettingsMap, SettingsValue } from '@/lib/api/types';
 import { ApiError, fieldErrorsFrom } from '@/lib/api/errors';
 import { diffSettings, SETTING_GROUPS, type SettingField } from './settings-schema';
 import { adminKeys } from './queries';
+import { BackupPanel } from './backup-panel';
 
 export function AdminSettingsPage() {
   const { t } = useTranslation();
+  const [tab, setTab] = useState<'general' | 'backup'>('general');
   const settings = useQuery({ queryKey: adminKeys.settings, queryFn: adminApi.getSettings });
 
   return (
     <div className="space-y-5">
       <PageHeader title={t('admin.settings.title')} description={t('admin.settings.description')} />
+      <div role="tablist" aria-label={t('backup.sections')} className="flex gap-1 border-b border-border">
+        {(['general', 'backup'] as const).map((key) => <button key={key} type="button" role="tab" id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} onKeyDown={(event) => {
+          const next = event.key === 'Home' ? 'general' : event.key === 'End' ? 'backup' : event.key === 'ArrowRight' || event.key === 'ArrowLeft' ? (key === 'general' ? 'backup' : 'general') : undefined;
+          if (next) { event.preventDefault(); setTab(next); document.getElementById(`settings-tab-${next}`)?.focus(); }
+        }} onClick={() => setTab(key)} className={`border-b-2 px-4 py-2.5 text-sm transition-colors ${tab === key ? 'border-primary font-medium text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{t(key === 'general' ? 'backup.generalTab' : 'backup.tab')}</button>)}
+      </div>
+      <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}><BackupPanel /></div>
+      <div role="tabpanel" id="settings-panel-general" aria-labelledby="settings-tab-general" hidden={tab !== 'general'}>
       {settings.isError ? (
         <EmptyState
           icon="alert"
@@ -40,6 +50,7 @@ export function AdminSettingsPage() {
       ) : (
         <EmptyState icon="settings" title={t('admin.settings.loading')} />
       )}
+      </div>
     </div>
   );
 }
