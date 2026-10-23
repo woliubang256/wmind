@@ -54,9 +54,10 @@ var envBindings = map[string]string{
 	"db.url":         "WMIND_DATABASE_URL",
 	"db.max_conns":   "WMIND_DB_MAX_CONNS",
 
-	"auth.jwt_secret":  "WMIND_JWT_SECRET",
-	"auth.access_ttl":  "WMIND_ACCESS_TOKEN_TTL",
-	"auth.refresh_ttl": "WMIND_REFRESH_TOKEN_TTL",
+	"auth.two_factor_key": "WMIND_2FA_ENCRYPTION_KEY",
+	"auth.jwt_secret":     "WMIND_JWT_SECRET",
+	"auth.access_ttl":     "WMIND_ACCESS_TOKEN_TTL",
+	"auth.refresh_ttl":    "WMIND_REFRESH_TOKEN_TTL",
 
 	"storage.driver": "WMIND_STORAGE_DRIVER",
 	"storage.dir":    "WMIND_STORAGE_DIR",
@@ -91,9 +92,10 @@ type DB struct {
 
 // Auth 是认证配置。
 type Auth struct {
-	JWTSecret  string        `mapstructure:"jwt_secret"`
-	AccessTTL  time.Duration `mapstructure:"access_ttl"`
-	RefreshTTL time.Duration `mapstructure:"refresh_ttl"`
+	TwoFactorKey string        `mapstructure:"two_factor_key"`
+	JWTSecret    string        `mapstructure:"jwt_secret"`
+	AccessTTL    time.Duration `mapstructure:"access_ttl"`
+	RefreshTTL   time.Duration `mapstructure:"refresh_ttl"`
 }
 
 // Storage 是文件存储配置。
@@ -192,6 +194,9 @@ func (c *Config) validate() error {
 		problems = append(problems, fmt.Sprintf(
 			"WMIND_JWT_SECRET 至少需要 %d 字节（当前 %d 字节）；生成：openssl rand -base64 48",
 			minJWTSecretLen, len(c.Auth.JWTSecret)))
+	}
+	if c.Auth.TwoFactorKey != "" && len(c.Auth.TwoFactorKey) < 32 {
+		problems = append(problems, "WMIND_2FA_ENCRYPTION_KEY 至少需要 32 字节")
 	}
 	if c.Auth.AccessTTL <= 0 {
 		problems = append(problems, "WMIND_ACCESS_TOKEN_TTL 必须为正数时长")

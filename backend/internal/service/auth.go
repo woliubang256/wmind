@@ -33,6 +33,7 @@ type SessionMeta struct {
 // RefreshToken 是明文，只在签发这一刻存在；调用方必须立刻写进 Cookie
 // 或返回给客户端，不得落库、不得写日志。
 type AuthResult struct {
+	ChallengeToken   string
 	User             *domain.User
 	AccessToken      string
 	ExpiresIn        int
@@ -60,9 +61,11 @@ type LoginInput struct {
 
 // AuthServiceConfig 是 AuthService 的依赖与策略。
 type AuthServiceConfig struct {
-	Issuer     *auth.TokenIssuer
-	RefreshTTL time.Duration
-	Site       SiteConfigProvider
+	TwoFactor    domain.TwoFactorRepo
+	TwoFactorKey string
+	Issuer       *auth.TokenIssuer
+	RefreshTTL   time.Duration
+	Site         SiteConfigProvider
 	// UserCacheTTL 是 RequireAuth 用户状态的缓存时长。0 表示不缓存。
 	// 禁用账号时由管理端调用 InvalidateUser 主动失效，所以缓存不会让
 	// 「禁用」延迟生效。
@@ -77,14 +80,16 @@ type AuthServiceConfig struct {
 //
 // 它不关心 HTTP：Cookie 怎么发、状态码是多少，都是 handler 的事。
 type AuthService struct {
-	users      domain.UserRepo
-	tokens     domain.RefreshTokenRepo
-	tx         domain.TxManager
-	issuer     *auth.TokenIssuer
-	refreshTTL time.Duration
-	site       SiteConfigProvider
-	now        Clock
-	throttle   *LoginThrottle
+	twoFactor       domain.TwoFactorRepo
+	twoFactorCipher *auth.TwoFactorCipher
+	users           domain.UserRepo
+	tokens          domain.RefreshTokenRepo
+	tx              domain.TxManager
+	issuer          *auth.TokenIssuer
+	refreshTTL      time.Duration
+	site            SiteConfigProvider
+	now             Clock
+	throttle        *LoginThrottle
 
 	cacheTTL time.Duration
 	mu       sync.RWMutex
@@ -127,7 +132,16 @@ func NewAuthService(users domain.UserRepo, tokens domain.RefreshTokenRepo, tx do
 	if cfg.Throttle == nil {
 		cfg.Throttle = NewLoginThrottle(5, 15*time.Minute, cfg.Now)
 	}
+	var factorCipher *auth.TwoFactorCipher
+	if cfg.TwoFactor != nil {
+		var err error
+		factorCipher, err = auth.NewTwoFactorCipher(cfg.TwoFactorKey)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &AuthService{
+		twoFactor: cfg.TwoFactor, twoFactorCipher: factorCipher,
 		users: users, tokens: tokens, tx: tx,
 		issuer: cfg.Issuer, refreshTTL: cfg.RefreshTTL, site: cfg.Site, now: cfg.Now,
 		throttle: cfg.Throttle,
@@ -237,13 +251,22 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 	}
 
 	s.throttle.Reset(throttleKey)
-	loginAt := s.now()
-	if err := s.users.TouchLastLogin(ctx, user.ID, loginAt); err == nil {
-		// 仓储返回的是副本，响应里要带上本次登录时间，否则前端拿到的
-		// lastLoginAt 永远是上一次的值。
+	var result *AuthResult
+	err = s.withTwoFactor(ctx, user, func(ctx context.Context, state *domain.TwoFactorState) error {
+		var err error
+		if state.Enabled {
+			result, err = s.beginTwoFactorLogin(ctx, user, state)
+			return err
+		}
+		loginAt := s.now()
+		if err = s.users.TouchLastLogin(ctx, user.ID, loginAt); err != nil {
+			return err
+		}
 		user.LastLoginAt = &loginAt
-	}
-	return s.issueSession(ctx, user, in.Meta)
+		result, err = s.issueSession(ctx, user, in.Meta)
+		return err
+	})
+	return result, err
 }
 
 // loginFailure 记一次失败并决定返回哪个错误。
@@ -310,7 +333,7 @@ func (s *AuthService) Refresh(ctx context.Context, plainToken string, meta Sessi
 	}
 
 	var result *AuthResult
-	err = s.tx.WithTx(ctx, func(ctx context.Context) error {
+	err = s.withTwoFactor(ctx, user, func(ctx context.Context, _ *domain.TwoFactorState) error {
 		// 撤销与签发必须在同一事务里：否则「旧的已撤销、新的没写成」
 		// 会把用户直接踢下线。
 		revoked, revokeErr := s.tokens.Revoke(ctx, hash, now)
@@ -419,25 +442,31 @@ func (s *AuthService) Authenticate(ctx context.Context, accessToken string) (*do
 		return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
 	}
 
-	if cached, ok := s.cachedUser(claims.Subject); ok {
-		if !cached.IsActive() {
-			return nil, apperr.New(apperr.CodeAuthAccountDisabled, "")
+	user, cached := s.cachedUser(claims.Subject)
+	if !cached {
+		user, err = s.users.GetByUID(ctx, claims.Subject)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
+			}
+			return nil, apperr.Wrap(apperr.CodeInternalError, err)
 		}
-		return cached, nil
-	}
-
-	user, err := s.users.GetByUID(ctx, claims.Subject)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			// 用户被删除后，旧令牌立即失效。
-			return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
-		}
-		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
 	if !user.IsActive() {
 		return nil, apperr.New(apperr.CodeAuthAccountDisabled, "")
 	}
-	s.cacheUser(user)
+	if s.twoFactor != nil {
+		state, err := s.twoFactor.Get(ctx, user.ID, false)
+		if err != nil {
+			return nil, err
+		}
+		if state.SessionVersion != claims.SecurityVersion {
+			return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
+		}
+	}
+	if !cached {
+		s.cacheUser(user)
+	}
 	return user, nil
 }
 
@@ -525,7 +554,15 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) (bo
 }
 
 func (s *AuthService) issueSession(ctx context.Context, user *domain.User, meta SessionMeta) (*AuthResult, error) {
-	accessToken, expiresIn, err := s.issuer.Issue(user.UID, string(user.Role))
+	version := ""
+	if s.twoFactor != nil {
+		state, err := s.twoFactor.Get(ctx, user.ID, false)
+		if err != nil {
+			return nil, err
+		}
+		version = state.SessionVersion
+	}
+	accessToken, expiresIn, err := s.issuer.IssueWithSecurityVersion(user.UID, string(user.Role), version)
 	if err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}

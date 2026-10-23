@@ -100,6 +100,7 @@ type loginRequest struct {
 
 // Login 处理 POST /api/v1/auth/login。
 func (h *AuthHandler) Login(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, apperr.Wrap(apperr.CodeBadRequest, err))
@@ -114,6 +115,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 	if err != nil {
 		response.Fail(c, err)
+		return
+	}
+	if result.ChallengeToken != "" {
+		response.OK(c, gin.H{"twoFactorRequired": true, "challengeToken": result.ChallengeToken, "expiresIn": result.ExpiresIn})
 		return
 	}
 	h.setRefreshCookie(c, result)

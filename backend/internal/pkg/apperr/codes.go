@@ -12,6 +12,9 @@ type Code string
 const (
 	CodeBadRequest Code = "BAD_REQUEST"
 
+	CodeAuthTwoFactorInvalid   Code = "AUTH_2FA_INVALID"
+	CodeAuthTwoFactorExpired   Code = "AUTH_2FA_EXPIRED"
+	CodeAuthTwoFactorState     Code = "AUTH_2FA_STATE"
 	CodeAuthInvalidCredentials Code = "AUTH_INVALID_CREDENTIALS"
 	CodeAuthTokenExpired       Code = "AUTH_TOKEN_EXPIRED"
 	CodeAuthTokenInvalid       Code = "AUTH_TOKEN_INVALID"
@@ -83,7 +86,10 @@ type spec struct {
 }
 
 var registry = map[Code]spec{
-	CodeBadRequest: {http.StatusBadRequest, "请求体格式错误"},
+	CodeBadRequest:           {http.StatusBadRequest, "请求体格式错误"},
+	CodeAuthTwoFactorInvalid: {http.StatusUnprocessableEntity, "验证码无效、已使用或已过期"},
+	CodeAuthTwoFactorExpired: {http.StatusUnprocessableEntity, "验证已过期，请重新开始"},
+	CodeAuthTwoFactorState:   {http.StatusConflict, "双因素认证状态已改变，请刷新后重试"},
 
 	CodeAuthInvalidCredentials: {http.StatusUnauthorized, "账号或密码错误"},
 	CodeAuthTokenExpired:       {http.StatusUnauthorized, "登录状态已过期"},

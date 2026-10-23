@@ -18,6 +18,12 @@ Status: proposed
 
 迁移 0003 和双方言 sqlc 查询已建立独立安全记录。Ensure 保证行存在，事务内读取锁定记录，Save 根据 revision 拒绝过期副本。共享仓储契约覆盖缺省状态、往返、过期写和回滚。状态 JSON 只作为内部领域记录，HTTP 使用独立 DTO。
 
+## Backend implementation
+
+服务与六个 API 已落地，HTTP/OpenAPI 保持对等。验证器密钥 AES-GCM 加密并绑定用户及 pending/active 用途；挑战与恢复码仅存哈希。挑战失败次数在事务提交后返回错误，不能因回滚重置次数。共享安全行锁覆盖密码登录、刷新、启停及恢复码消费；随机安全版本在每次访问时独立检查，不复用用户状态缓存。启停返回当前设备新会话，旧刷新全部撤销。
+
+服务测试覆盖未确认不启用、旧令牌与缓存失效、TOTP 与恢复码重放、挑战/设置过期、跨挑战锁定、改密使挑战失效及并发恢复码消费。SQLite 契约通过；未配置 WMIND_TEST_DATABASE_URL，PostgreSQL 实库契约由 CI 运行，本地仅生成、编译和迁移对等检查。
+
 ## Related decisions
 
 检索认证、双因素、TOTP 和会话笔记：现有[认证会话](../../implemented/architecture/2026-10-17-wmind-auth-session.md)与[认证数据层](../../implemented/architecture/2026-10-17-wmind-auth-data-layer.md)部分重叠，保留密码/刷新策略并互链；本篇增加第二步与安全版本。限流笔记继续负责进程内密码锁定；第二步挑战次数保存在数据库，多进程共享。邮件提案处理邮件交付，与 TOTP 无关。没有同主题旧提案需替代。

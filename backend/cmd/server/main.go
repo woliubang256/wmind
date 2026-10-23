@@ -78,6 +78,7 @@ func run() error {
 	// These are the dialect-agnostic handles the service layer works with.
 	// Only this switch is allowed to name a concrete dialect.
 	var (
+		factorRepo   domain.TwoFactorRepo
 		userRepo     domain.UserRepo
 		tokenRepo    domain.RefreshTokenRepo
 		settingsRepo domain.SettingsRepo
@@ -104,6 +105,7 @@ func run() error {
 			}
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: sqliterepo.Check(db)})
+		factorRepo = sqliterepo.NewTwoFactorRepository(db)
 		userRepo = sqliterepo.NewUserRepository(db)
 		tokenRepo = sqliterepo.NewRefreshTokenRepository(db)
 		settingsRepo = sqliterepo.NewSettingsRepository(db)
@@ -137,6 +139,7 @@ func run() error {
 			return fmt.Errorf("close PostgreSQL migration connection: %w", err)
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: postgresrepo.Check(pool)})
+		factorRepo = postgresrepo.NewTwoFactorRepository(pool)
 		userRepo = postgresrepo.NewUserRepository(pool)
 		tokenRepo = postgresrepo.NewRefreshTokenRepository(pool)
 		settingsRepo = postgresrepo.NewSettingsRepository(pool)
@@ -170,7 +173,12 @@ func run() error {
 	go settingsSvc.Run(settingsCtx)
 	warnRiskySettings(settingsSvc, log)
 
+	factorKey := cfg.Auth.TwoFactorKey
+	if factorKey == "" {
+		factorKey = cfg.Auth.JWTSecret
+	}
 	authSvc, err := service.NewAuthService(userRepo, tokenRepo, txManager, service.AuthServiceConfig{
+		TwoFactor: factorRepo, TwoFactorKey: factorKey,
 		Issuer:       issuer,
 		RefreshTTL:   cfg.Auth.RefreshTTL,
 		Site:         settingsSvc,

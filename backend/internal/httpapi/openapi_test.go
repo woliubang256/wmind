@@ -30,7 +30,7 @@ const specPath = "../../../docs/openapi.yaml"
 //
 // 钉住它是为了让「加了接口忘了改文档」多一道拦网：真加了一个接口，改这个
 // 常量时手会停一下，多半就会顺手去更新 docs/04 §5 与 docs/openapi.yaml。
-const apiOperationCount = 49
+const apiOperationCount = 55
 
 // notAPI 是不进 OpenAPI 的路由。
 var notAPI = map[string]bool{

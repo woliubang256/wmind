@@ -311,11 +311,18 @@ func registerAuth(v1 *gin.RouterGroup, deps Deps, limiters authLimiters) {
 		limiters.register.Middleware(middleware.ClientIPKey),
 		deps.Auth.Register)
 	g.POST("/login", deps.Auth.Login)
+	g.POST("/2fa/verify", middleware.NewRateLimiter(10, time.Minute, 10).Middleware(middleware.ClientIPKey), deps.Auth.VerifyTwoFactor)
 	g.POST("/refresh", limiters.refresh.Middleware(middleware.ClientIPKey), deps.Auth.Refresh)
 	g.POST("/logout", deps.Auth.Logout)
 
 	if deps.Sessions != nil {
 		g.GET("/me", middleware.RequireAuth(deps.Sessions), deps.Auth.Me)
+		factor := g.Group("/2fa", middleware.RequireAuth(deps.Sessions), middleware.NewRateLimiter(20, time.Minute, 20).Middleware(middleware.ClientIPKey))
+		factor.GET("/status", deps.Auth.TwoFactorStatus)
+		factor.POST("/setup", deps.Auth.SetupTwoFactor)
+		factor.POST("/enable", deps.Auth.EnableTwoFactor)
+		factor.POST("/disable", deps.Auth.DisableTwoFactor)
+		factor.POST("/recovery-codes", deps.Auth.RegenerateRecoveryCodes)
 	}
 }
 

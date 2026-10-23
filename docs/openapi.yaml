@@ -191,7 +191,7 @@ paths:
       tags: [auth]
       summary: 登录
       description: |
-        `identifier` 同时接受邮箱与用户名。
+        `identifier` 同时接受邮箱与用户名。启用 2FA 时返回五分钟挑战，必须调用 `/auth/2fa/verify`。
 
         失败一律 `AUTH_INVALID_CREDENTIALS`，不区分「用户不存在」与「密码错误」
         ——区分开等于免费提供账号枚举接口。连续失败达到阈值后返回 429
@@ -204,7 +204,7 @@ paths:
             schema: { $ref: '#/components/schemas/LoginInput' }
       responses:
         '200':
-          description: 登录成功
+          description: 登录成功或需要第二因子；挑战响应不签发会话 Cookie
           content:
             application/json:
               schema:
@@ -212,10 +212,189 @@ paths:
                   - $ref: '#/components/schemas/Envelope'
                   - type: object
                     properties:
-                      data: { $ref: '#/components/schemas/AuthSession' }
+                      data:
+                        oneOf:
+                          - { $ref: '#/components/schemas/AuthSession' }
+                          - { $ref: '#/components/schemas/TwoFactorChallenge' }
         '401':
           $ref: '#/components/responses/Error'
         '403':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+
+  /api/v1/auth/2fa/verify:
+    post:
+      tags: [auth]
+      summary: 验证登录第二因子
+      description: 敏感响应使用 Cache-Control no-store。验证码与恢复码只能使用一次；启停会撤销旧会话。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorVerifyInput' }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Envelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AuthSession' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+
+  /api/v1/auth/2fa/status:
+    get:
+      tags: [auth]
+      summary: 读取双因素认证状态
+      description: 敏感响应使用 Cache-Control no-store。验证码与恢复码只能使用一次；启停会撤销旧会话。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Envelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TwoFactorStatus' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+
+  /api/v1/auth/2fa/setup:
+    post:
+      tags: [auth]
+      summary: 生成验证器设置（十分钟有效）
+      description: 敏感响应使用 Cache-Control no-store。验证码与恢复码只能使用一次；启停会撤销旧会话。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorPasswordInput' }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Envelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TwoFactorSetup' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+
+  /api/v1/auth/2fa/enable:
+    post:
+      tags: [auth]
+      summary: 确认并启用双因素认证
+      description: 敏感响应使用 Cache-Control no-store。验证码与恢复码只能使用一次；启停会撤销旧会话。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorManageInput' }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Envelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TwoFactorChange' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+
+  /api/v1/auth/2fa/disable:
+    post:
+      tags: [auth]
+      summary: 停用双因素认证
+      description: 敏感响应使用 Cache-Control no-store。验证码与恢复码只能使用一次；启停会撤销旧会话。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorManageInput' }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Envelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TwoFactorChange' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+
+  /api/v1/auth/2fa/recovery-codes:
+    post:
+      tags: [auth]
+      summary: 重新生成恢复码（旧码立即失效）
+      description: 敏感响应使用 Cache-Control no-store。验证码与恢复码只能使用一次；启停会撤销旧会话。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorManageInput' }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Envelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TwoFactorChange' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
           $ref: '#/components/responses/Error'
         '429':
           $ref: '#/components/responses/TooManyAttempts'
@@ -1407,6 +1586,9 @@ components:
         - INTERNAL_ERROR
         - SERVICE_UNAVAILABLE
         - RATE_LIMITED
+        - AUTH_2FA_INVALID
+        - AUTH_2FA_EXPIRED
+        - AUTH_2FA_STATE
         - AUTH_INVALID_CREDENTIALS
         - AUTH_TOKEN_EXPIRED
         - AUTH_TOKEN_INVALID
@@ -1493,6 +1675,53 @@ components:
       properties:
         identifier: { type: string, description: 邮箱或用户名 }
         password: { type: string }
+
+    TwoFactorChallenge:
+      type: object
+      required: [twoFactorRequired, challengeToken, expiresIn]
+      properties:
+        twoFactorRequired: { type: boolean, const: true }
+        challengeToken: { type: string, description: 仅用于第二步，不能作为访问令牌 }
+        expiresIn: { type: integer, const: 300 }
+    TwoFactorVerifyInput:
+      type: object
+      required: [challengeToken, code]
+      properties:
+        challengeToken: { type: string }
+        code: { type: string, description: 六位验证器验证码或一次性恢复码 }
+    TwoFactorPasswordInput:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, format: password }
+    TwoFactorManageInput:
+      type: object
+      required: [password, code]
+      properties:
+        password: { type: string, format: password }
+        code: { type: string }
+    TwoFactorStatus:
+      type: object
+      required: [enabled, recoveryCodesRemaining]
+      properties:
+        enabled: { type: boolean }
+        recoveryCodesRemaining: { type: integer }
+    TwoFactorSetup:
+      type: object
+      required: [secret, uri, qrCode, expiresIn]
+      properties:
+        secret: { type: string }
+        uri: { type: string, format: uri }
+        qrCode: { type: string, description: 本地生成 PNG 的 data URL }
+        expiresIn: { type: integer, const: 600 }
+    TwoFactorChange:
+      type: object
+      properties:
+        session: { $ref: '#/components/schemas/AuthSession' }
+        recoveryCodes:
+          type: array
+          description: 仅启用或重新生成时返回明文，必须立即保存
+          items: { type: string }
 
     AuthSession:
       type: object

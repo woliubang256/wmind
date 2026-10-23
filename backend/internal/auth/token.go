@@ -27,7 +27,8 @@ const tokenIssuerName = "wmind"
 // 收回。用户状态由 RequireAuth 每次查库（带 60 秒缓存，禁用时主动失效），
 // 见 docs/04 §2.3。
 type Claims struct {
-	Role string `json:"role"`
+	SecurityVersion string `json:"sv,omitempty"`
+	Role            string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -64,9 +65,14 @@ func (i *TokenIssuer) SetClock(now func() time.Time) {
 
 // Issue 为指定用户签发 Access Token，返回令牌与有效期秒数。
 func (i *TokenIssuer) Issue(userUID, role string) (string, int, error) {
+	return i.IssueWithSecurityVersion(userUID, role, "")
+}
+
+func (i *TokenIssuer) IssueWithSecurityVersion(userUID, role, version string) (string, int, error) {
 	now := i.now().UTC()
 	claims := Claims{
-		Role: role,
+		SecurityVersion: version,
+		Role:            role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userUID,
 			Issuer:    tokenIssuerName,

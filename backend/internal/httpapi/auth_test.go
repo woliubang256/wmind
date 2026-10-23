@@ -80,6 +80,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		sqlite.NewRefreshTokenRepository(db),
 		txManager,
 		service.AuthServiceConfig{
+			TwoFactor: sqlite.NewTwoFactorRepository(db), TwoFactorKey: "http-test-encryption-key-long-enough",
 			Issuer: issuer, RefreshTTL: 7 * 24 * time.Hour,
 			Site: settingsSvc, UserCacheTTL: 60 * time.Second,
 		},
