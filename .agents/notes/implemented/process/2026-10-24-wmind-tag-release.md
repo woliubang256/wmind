@@ -12,6 +12,8 @@ Status: implemented
 
 Go 和 Node 构建阶段固定为 BUILDPLATFORM，Go 通过 TARGETOS/TARGETARCH 交叉编译；仅 API 最终 Alpine 初始化需要目标平台模拟，避免在 QEMU 中编译 Go 或前端。Docker 构建参数 VERSION 写入后端 config.Version。Compose 默认使用 GHCR 镜像并保留本地 build 配置。
 
+API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `/data` 属主。SQLite 挂载整个 `/data`，PostgreSQL 仅挂载 `/data/uploads`；两种全新命名卷均必须从镜像中的非 root 属主初始化，否则 PostgreSQL 的上传卷会被 Docker 以 root 目录创建，运行进程无法写入。
+
 根目录作为构建上下文，因此 `.dockerignore` 位于根目录；放在 `deploy/` 不生效。构建上下文排除本地配置、依赖、运行数据和刚生成的 `release/` 压缩包，避免把私有配置发给构建器或重复传输部署包。
 
 ## Related notes
@@ -35,6 +37,7 @@ Go 和 Node 构建阶段固定为 BUILDPLATFORM，Go 通过 TARGETOS/TARGETARCH 
 - 两个架构的压缩包与校验和、两个多架构镜像和更新日志对应同一标签。
 - 本机 `actionlint` 通过；Ruby YAML 静态解析确认 tag 触发、完整历史、发布顺序及两套 Compose 镜像/版本参数。Docker 构建、Compose 运行语义和 registry 发布由 CI 验证。
 - `scripts/release-workflow.test.mjs` 先复现构建阶段提前更新 `latest` 的缺陷，再验证两个固定镜像、统一晋升和正式 Release 的先后顺序；修复后通过。
+- 上传卷镜像契约先复现缺少 `/data/uploads` 挂载点的问题，再验证预建、递归属主和默认 UID/GID 的顺序；修复后通过。
 
 ## Consequences
 

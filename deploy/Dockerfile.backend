@@ -16,7 +16,7 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget \
     && addgroup -S -g 10001 wmind \
     && adduser -S -D -H -u 10001 -G wmind wmind \
-    && mkdir -p /data \
+    && mkdir -p /data/uploads \
     && chown -R 10001:10001 /data
 WORKDIR /app
 COPY --from=builder /out/wmind /app/wmind

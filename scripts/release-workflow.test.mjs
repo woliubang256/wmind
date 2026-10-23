@@ -28,3 +28,13 @@ test('两个固定镜像构建成功后才晋升 latest，最后创建正式 Rel
     assert.ok(command.includes(`"ghcr.io/woliubang256/wmind-${name}:$GITHUB_REF_NAME"`), `${name} 必须从同标签固定镜像晋升`);
   }
 });
+
+test('API 镜像预建上传卷挂载点并交给默认非 root 用户', () => {
+  const dockerfile = readFileSync(new URL('../deploy/Dockerfile.backend', import.meta.url), 'utf8');
+  const runtime = dockerfile.split(/\nFROM alpine:[^\n]+\n/)[1];
+  assert.ok(runtime);
+  assert.match(runtime, /mkdir -p \/data\/uploads\b/, '新命名卷必须从已设置属主的上传挂载点初始化');
+  assert.match(runtime, /chown -R 10001:10001 \/data\b/);
+  assert.match(runtime, /\nUSER 10001:10001\n/);
+  assert.ok(runtime.indexOf('mkdir -p /data/uploads') < runtime.indexOf('chown -R 10001:10001 /data'));
+});
