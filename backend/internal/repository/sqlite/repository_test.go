@@ -29,4 +29,5 @@ func TestRepositoryContract(t *testing.T) {
 		Themes:    NewThemeRepository(db),
 		TwoFactor: NewTwoFactorRepository(db),
 	})
+	contracttest.RunLoginChallenges(t, NewLoginChallengeRepository(db), NewTxManager(db))
 }
