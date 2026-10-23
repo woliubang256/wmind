@@ -13,6 +13,7 @@ services:
       WMIND_DB_DRIVER: sqlite
       WMIND_SQLITE_PATH: /data/wmind.db
       WMIND_JWT_SECRET: ${WMIND_JWT_SECRET:?Set WMIND_JWT_SECRET in .env}
+      WMIND_2FA_ENCRYPTION_KEY: ${WMIND_2FA_ENCRYPTION_KEY:-}
       WMIND_STORAGE_DRIVER: local
       WMIND_STORAGE_DIR: /data/uploads
       WMIND_AUTO_MIGRATE: "true"

@@ -121,6 +121,8 @@ such file or directory`）。所以先算出绝对 `SCRIPT_PATH` 再 `cd`。
   `bash -n`、全部参数/文件/驱动校验分支、以及恢复流程里两段一次性容器命令在临
   时目录里的原样执行。真实演练需要在有 Docker 的环境或 CI 里补。
 
+2FA 加密密钥也必须随配置加密备份：优先 WMIND_2FA_ENCRYPTION_KEY，未设置时使用 JWT 密钥的用途隔离派生。换密钥不能恢复原验证器密钥；保留恢复码的用户仍可登录后重新登记。数据库快照自动包含 user_two_factor，环境密钥仍由 --with-env 或独立密钥管理保管。
+
 ## Alternatives considered
 
 - **`cp /data/wmind.db`**：WAL 模式下会丢最近的提交，运行中拷还可能拿到损坏

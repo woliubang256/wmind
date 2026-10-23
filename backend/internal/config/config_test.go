@@ -157,3 +157,20 @@ func toStr(v any) string {
 	}
 	return ""
 }
+
+func TestTwoFactorKeyConfiguration(t *testing.T) {
+	t.Setenv("WMIND_JWT_SECRET", strings.Repeat("j", 48))
+	t.Setenv("WMIND_2FA_ENCRYPTION_KEY", "short")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "WMIND_2FA_ENCRYPTION_KEY") {
+		t.Fatalf("short key: %v", err)
+	}
+	key := strings.Repeat("m", 48)
+	t.Setenv("WMIND_2FA_ENCRYPTION_KEY", key)
+	cfg, err := Load()
+	if err != nil || cfg.Auth.TwoFactorKey != key {
+		t.Fatalf("key binding: %v", err)
+	}
+	if strings.Contains(renderSummary(cfg.Summary()), key) {
+		t.Fatal("2FA key leaked in startup summary")
+	}
+}
