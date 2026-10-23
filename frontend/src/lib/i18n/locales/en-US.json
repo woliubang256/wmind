@@ -414,7 +414,11 @@
     "hint.boundary": "Enclose selected topics in a boundary",
     "hint.boundarySelection": "Select at least one topic first",
     "hint.relationship": "Connect two topics with a relationship",
-    "hint.relationshipSelection": "Select exactly two topics"
+    "hint.relationshipSelection": "Select exactly two topics",
+    "insert": "Insert topic",
+    "addSibling": "Add sibling topic",
+    "hint.insert": "Choose a sibling topic or a subtopic",
+    "hint.rootSibling": "The root has no siblings. Add a subtopic instead."
   },
   "import": {
     "title": "Import",

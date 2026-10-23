@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { ToolbarButton } from './toolbar-button';
+import { InsertTopicMenu } from './insert-topic-menu';
 import { Icon } from '@/components/ui/icon';
 import { Select } from '@/components/ui/select';
 import { countSheetNodes, findTopicInSheet, sheetById } from '@/editor/model/traverse';
@@ -56,6 +57,7 @@ import { isTextEntryTarget } from '@/editor/interaction/keymap';
 import { useEditorActions } from '@/editor/interaction/use-editor-actions';
 import {
   addChildCommand,
+  addSiblingCommand,
   detachTopicsCommand,
   moveTopicsCommand,
   removeTopicsCommand,
@@ -802,14 +804,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
 
         {!preview ? (
           <div className="flex items-center gap-0.5">
-            <ToolbarButton
-              variant="ghost"
-              size="icon"
-              aria-label={t('editor.addChild')} shortcut="Tab" hint={t('editor.hint.addChild')}
-              onClick={() => store.getState().dispatch(addChildCommand(activeId))}
-            >
-              <Icon name="plus" className="size-4" />
-            </ToolbarButton>
+            <InsertTopicMenu
+              rootSelected={activeId === sheet.rootTopic.id}
+              onInsert={(kind) => store.getState().dispatch(kind === 'sibling' ? addSiblingCommand(activeId) : addChildCommand(activeId))}
+            />
             <ToolbarButton
               variant="ghost"
               size="icon"

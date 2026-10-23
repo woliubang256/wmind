@@ -414,7 +414,11 @@
     "hint.boundary": "用边界包围所选主题",
     "hint.boundarySelection": "请先选中至少一个主题",
     "hint.relationship": "在两个主题之间建立联系",
-    "hint.relationshipSelection": "请选中两个主题"
+    "hint.relationshipSelection": "请选中两个主题",
+    "insert": "插入主题",
+    "addSibling": "新建同级主题",
+    "hint.insert": "选择创建同级主题或子主题",
+    "hint.rootSibling": "根主题没有同级，请创建子主题"
   },
   "import": {
     "title": "导入",
