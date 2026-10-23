@@ -227,6 +227,7 @@ function topicToXmind(topic: Topic, maps: TopicMaps): Record<string, unknown> {
   }
 
   if (topic.href !== '') node.href = topic.href;
+  if (topic.content) node.wmindContent = topic.content;
   if (topic.collapsed) node.collapsed = true;
 
   const plain = topic.notes?.plain?.trim() ?? '';

@@ -1,3 +1,5 @@
+import { TopicDetailsView } from './topic-details';
+import type { TopicDetails } from '../layout/topic-details';
 /**
  * 单个主题节点的渲染。
  *
@@ -31,6 +33,7 @@ export interface TopicNodeProps {
   /** 节点内的图片（含地址与显示尺寸）；没有图片为 null。 */
   image?: ImageSize | null;
   markers?: MarkerLayout;
+  details?: TopicDetails;
   selected: boolean;
   editing: boolean;
   /**
@@ -59,6 +62,7 @@ export const TopicNode = memo(function TopicNode({
   title,
   image = null,
   markers,
+  details,
   selected,
   editing,
   showBadges = true,
@@ -66,7 +70,7 @@ export const TopicNode = memo(function TopicNode({
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
   const showImage = image !== null && image.src !== '';
-  const { textX, textAnchor: anchor, firstY, imageX, imageY, markerRects } = topicContentGeometry(box, style, lines, image, markers);
+  const { textX, textAnchor: anchor, firstY, imageX, imageY, markerRects, detailsY } = topicContentGeometry(box, style, lines, image, markers, details?.height);
 
   // 折叠徽标放在「远离根」的一侧：左侧分支在左边缘，右侧在右边缘，
   // 自上而下的结构（org-chart）在下沿。
@@ -99,6 +103,7 @@ export const TopicNode = memo(function TopicNode({
       aria-label={treeItem && title !== '' ? title : undefined}
     >
       <TopicShape box={box} style={style} />
+      {details ? <TopicDetailsView details={details} box={box} y={detailsY} color={style.textColor} /> : null}
 
       {showImage ? (
         <image
@@ -215,7 +220,7 @@ function areEqual(prev: TopicNodeProps, next: TopicNodeProps): boolean {
     prev.lines === next.lines &&
     prev.title === next.title &&
     prev.image === next.image &&
-    prev.markers === next.markers &&
+    prev.markers === next.markers && prev.details === next.details &&
     prev.showBadges === next.showBadges &&
     prev.selected === next.selected &&
     prev.editing === next.editing &&

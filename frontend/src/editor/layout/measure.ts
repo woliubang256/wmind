@@ -1,3 +1,4 @@
+import { measureDetails } from './topic-details';
 /**
  * 文本测量。
  *
@@ -371,15 +372,18 @@ export function measureTopic(
     : style.width;
   if (image !== null) width = Math.max(width, image.width + paddingX * 2);
 
+  const details = measureDetails(topic, available, impl);
+  if (details) width = Math.max(width, details.width + paddingX * 2);
   const height = image === null
     ? headerHeight + paddingY * 2
     : headerHeight + imageGap + image.height + paddingY * 2;
 
   return {
     width: roundHalf(width),
-    height: roundHalf(height),
+    height: roundHalf(height + (details?.height ?? 0)),
     lines: measured.lines,
     image,
     ...(markers ? { markers } : {}),
+    ...(details ? { details } : {}),
   };
 }

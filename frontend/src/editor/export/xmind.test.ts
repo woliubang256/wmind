@@ -110,6 +110,7 @@ describe('往返：内容与层级', () => {
   it('备注、标签、标记、链接、折叠都带过去', () => {
     const doc = fixture();
     const a = doc.sheets[0]!.rootTopic.children.attached[0]!;
+    a.content = { todo: true, sticker: 'star', attachments: [{ id: 'f', name: 'a.txt', data: 'YWJj', bytes: 3, kind: 'file' }] };
     a.notes = { plain: '一段备注', html: '<p>一段备注</p>' };
     a.labels = ['重点'];
     a.markers = [{ groupId: 'priority', markerId: 'priority-1' }];
@@ -119,6 +120,7 @@ describe('往返：内容与层级', () => {
     const { sheet } = exportThenImport(doc);
     const back = sheet.rootTopic.children.attached[0]!;
 
+    expect(back.content).toEqual(a.content);
     expect(back.notes.plain).toBe('一段备注');
     expect(back.labels).toEqual(['重点']);
     expect(back.markers).toEqual([{ groupId: 'priority', markerId: 'priority-1' }]);

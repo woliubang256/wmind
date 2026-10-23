@@ -416,7 +416,7 @@ export function MindMapViewer({
             key={editingBox.id}
             box={editingBox}
             style={editingStyle}
-            contentRect={editingSize?.markers ? topicContentGeometry(editingBox, editingStyle, editingSize.lines, editingSize.image, editingSize.markers).textRect : undefined}
+            contentRect={editingSize && (editingSize.markers || editingSize.details) ? topicContentGeometry(editingBox, editingStyle, editingSize.lines, editingSize.image, editingSize.markers, editingSize.details?.height).textRect : undefined}
             textHeight={editingSize ? editingSize.lines.length * Math.round(editingStyle.fontSize * 1.4) : editingBox.height}
             viewport={viewport}
             initialValue={findTitle(sheet, editingBox.id)}

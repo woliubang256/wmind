@@ -37,6 +37,7 @@ export function cloneTopic(topic: Topic, options: CloneOptions): Topic {
     labels: keepAnnotations ? [...topic.labels] : [],
     markers: keepAnnotations ? topic.markers.map((m) => ({ ...m })) : [],
     image: keepAnnotations && topic.image ? { ...topic.image } : null,
+    ...(keepAnnotations && topic.content ? { content: structuredClone(topic.content) } : {}),
     children: {
       attached: topic.children.attached.map((child) => cloneTopic(child, options)),
       detached: topic.children.detached.map((child) => cloneTopic(child, options)),

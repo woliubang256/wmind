@@ -1,3 +1,4 @@
+import { parseTopicContent } from '../../model/topic-content';
 import { parseRelationshipRouting } from '../../model/relationship-routing';
 /**
  * XMind 2020+ / 2021+ / 2022+ 的 `content.json` 解析。
@@ -183,6 +184,8 @@ function convertTopic(raw: unknown, ctx: ImportContext, state: SheetState, float
   topic.href = textOf(node.href);
 
   topic.notes = readNotes(node.notes);
+  const content = parseTopicContent(node.wmindContent);
+  if (content) topic.content = content;
 
   topic.labels = asArray(node.labels)
     .map(textOf)

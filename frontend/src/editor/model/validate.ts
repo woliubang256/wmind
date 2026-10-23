@@ -1,3 +1,4 @@
+import { parseTopicContent } from './topic-content';
 import { parseRelationshipRouting } from './relationship-routing';
 /**
  * 文档解析与归一化。
@@ -298,6 +299,7 @@ function parseTopic(
           height: clamp(asFiniteNumber(image.height, 80), 1, 4000),
         }
       : null,
+    ...(parseTopicContent(input.content) ? { content: parseTopicContent(input.content) } : {}),
     children: { attached: [], detached: [] },
     summaries: [],
     boundaries: [],

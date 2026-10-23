@@ -144,6 +144,8 @@ export interface Topic {
   labels: string[];
   markers: Marker[];
   image: TopicImage | null;
+  /** Insert 新增的附加内容；旧文件可省略。 */
+  content?: TopicContent;
   children: {
     attached: Topic[];
     detached: Topic[];
@@ -151,6 +153,33 @@ export interface Topic {
   summaries: Summary[];
   boundaries: Boundary[];
   extensions: unknown[];
+}
+
+export interface EmbeddedFile {
+  id: string;
+  name: string;
+  /** 原始文件或文件夹 ZIP 的 base64；仅通过下载恢复。 */
+  data: string;
+  bytes: number;
+  kind: 'file' | 'folder';
+}
+
+export interface TopicTask {
+  progress: number;
+  priority: number;
+  assignee: string;
+  start: string;
+  due: string;
+}
+
+export interface TopicContent {
+  todo?: boolean;
+  task?: TopicTask;
+  localLink?: EmbeddedFile;
+  attachments?: EmbeddedFile[];
+  sticker?: string;
+  illustration?: string;
+  equation?: TopicImage & { latex: string };
 }
 
 export interface Relationship {

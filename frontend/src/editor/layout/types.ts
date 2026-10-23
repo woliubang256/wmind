@@ -1,3 +1,4 @@
+import type { TopicDetails } from './topic-details';
 /**
  * 布局与渲染共用的几何类型。
  *
@@ -135,4 +136,5 @@ export interface TopicSize {
   /** 节点内的图片；没有图片为 null。 */
   image: ImageSize | null;
   markers?: MarkerLayout;
+  details?: TopicDetails;
 }

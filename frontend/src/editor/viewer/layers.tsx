@@ -99,6 +99,7 @@ export const TopicsLayer = memo(function TopicsLayer({
             title={titles?.get(box.id) ?? ''}
             image={size?.image ?? null}
             markers={size?.markers}
+            details={size?.details}
             selected={selection.has(box.id)}
             editing={editingId === box.id}
             showBadges={showBadges}
