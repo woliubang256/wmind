@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import { ADMIN, BASE, api, check, ensureUser, launchBrowser, login, makeUser, newContext, newPage, run, summary, uiLogin } from './lib/harness.mjs';
 
+const menuLabels = (menu) => menu.getByRole('menuitem').evaluateAll((items) => items.map((item) => item.querySelector('span')?.textContent));
+
 run(async () => {
   const browser = await launchBrowser();
   let testUser;
@@ -17,7 +19,7 @@ run(async () => {
     check('用户入口有头像和向下箭头', await trigger.locator('[data-user-avatar]').count() === 1 && await trigger.locator('svg').count() === 1);
     await trigger.click();
     await menu.waitFor();
-    check('管理员的四项入口收入菜单且每项有图标', (await menu.getByRole('menuitem').allTextContents()).join(',') === '个人设置,管理概览,用户管理,网站设置' && await menu.getByRole('menuitem').locator('svg').count() === 4);
+    check('管理员的四项入口收入菜单且每项有图标', (await menuLabels(menu)).join(',') === '个人设置,管理概览,用户管理,网站设置' && await menu.getByRole('menuitem').locator('svg').count() === 4);
     const rect = await menu.boundingBox();
     const anchor = await trigger.boundingBox();
     check('菜单位于用户入口下方且不超出屏幕', rect.y >= anchor.y + anchor.height && rect.x >= 0 && rect.x + rect.width <= 1440);
@@ -71,7 +73,7 @@ run(async () => {
     await englishTrigger.click();
     const english = page.getByRole('menu', { name: 'User menu', exact: true });
     await english.waitFor();
-    check('用户菜单完整支持英文', (await english.getByRole('menuitem').allTextContents()).join(',') === 'Account,Overview,Users,Site settings');
+    check('用户菜单完整支持英文', (await menuLabels(english)).join(',') === 'Account,Overview,Users,Site settings');
     await page.keyboard.press('Escape');
     await page.evaluate(() => document.documentElement.classList.add('dark'));
     await englishTrigger.click();
@@ -89,7 +91,7 @@ run(async () => {
     await regular.getByRole('button', { name: '用户菜单', exact: true }).click();
     const regularMenu = regular.getByRole('menu', { name: '用户菜单', exact: true });
     await regularMenu.waitFor();
-    check('普通用户只显示个人设置，没有管理员菜单', await regularMenu.getByRole('menuitem').count() === 1 && await regularMenu.getByRole('menuitem').textContent() === '个人设置');
+    check('普通用户只显示个人设置，没有管理员菜单', (await menuLabels(regularMenu)).join(',') === '个人设置');
     await regularMenu.getByRole('menuitem').click();
     await regular.waitForURL('**/account');
     check('普通用户可从用户菜单进入个人设置', !await regularMenu.isVisible());

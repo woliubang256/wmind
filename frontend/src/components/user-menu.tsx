@@ -6,6 +6,7 @@ import { Icon, type IconName } from './ui/icon';
 import { placeMenu, type MenuPlacement } from './ui/select';
 import { UserAvatar } from './user-avatar';
 import type { AvatarUser } from '@/lib/avatar';
+import { useSiteConfig } from '@/features/site/use-site-config';
 
 export function UserMenu({ user, links, isActive }: {
   user: AvatarUser;
@@ -13,6 +14,9 @@ export function UserMenu({ user, links, isActive }: {
   isActive: (to: string) => boolean;
 }) {
   const { t } = useTranslation();
+  const { config } = useSiteConfig();
+  const version = config.version?.trim() || 'dev';
+  const displayVersion = /^\d/.test(version) ? `v${version}` : version;
   const location = useLocation();
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -86,7 +90,9 @@ export function UserMenu({ user, links, isActive }: {
         <Link to={to} role="menuitem" tabIndex={-1} aria-current={isActive(to) ? 'page' : undefined}
           onClick={() => close(false)}
           className={`flex items-center gap-2.5 rounded-md px-3 py-2 outline-none hover:bg-accent focus-visible:bg-accent ${isActive(to) ? 'bg-accent/60 font-medium text-accent-foreground' : ''}`}>
-          <Icon name={icon} className="size-4 shrink-0 text-muted-foreground" />{label}
+          <Icon name={icon} className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">{label}</span>
+          {to === '/account' ? <span data-app-version className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{displayVersion}</span> : null}
         </Link>
       </div>)}
     </div>, document.body) : null}
