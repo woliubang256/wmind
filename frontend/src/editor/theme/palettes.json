@@ -239,28 +239,28 @@
     "name": "彩虹",
     "category": "classic",
     "colors": [
-      "#E32925",
-      "#FB8C00",
-      "#FDD835",
-      "#43A047",
-      "#1878CD",
-      "#8E24AA"
+      "#EB8589",
+      "#E9B07E",
+      "#DCCD8C",
+      "#96BFA7",
+      "#8BB9CE",
+      "#B5A0CB"
     ],
     "lineColors": [
-      "#E32925",
-      "#FB8C00",
-      "#FDD835",
-      "#43A047",
-      "#1878CD",
-      "#8E24AA"
+      "#EB8589",
+      "#E9B07E",
+      "#DCCD8C",
+      "#96BFA7",
+      "#8BB9CE",
+      "#B5A0CB"
     ],
     "backgroundColor": "#FFFFFF",
     "centralTopic": {
       "shape": "rounded-rect",
       "fontSize": 24,
       "fontWeight": 700,
-      "fill": "#1878CD",
-      "borderColor": "#1878CD",
+      "fill": "#7EA9C0",
+      "borderColor": "#7EA9C0",
       "borderWidth": 0,
       "lineWidth": 3
     },

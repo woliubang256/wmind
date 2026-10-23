@@ -32,21 +32,21 @@ beforeEach(() => {
 describe('解析顺序', () => {
   it('根节点用 centralTopic，且不被调色板覆盖', () => {
     const style = styleOf('root');
-    expect(style.fill).toBe('#1878CD');
+    expect(style.fill).toBe('#7EA9C0');
     expect(style.fontSize).toBe(24);
     expect(style.fontWeight).toBe(700);
     expect(style.rainbowBranch).toBe(false); // 根没有分支序号
   });
 
   it('一级分支按 branchIndex 取调色板颜色', () => {
-    expect(styleOf('a').fill).toBe('#E32925');
-    expect(styleOf('b').fill).toBe('#FB8C00');
+    expect(styleOf('a').fill).toBe('#EB8589');
+    expect(styleOf('b').fill).toBe('#E9B07E');
   });
 
   it('二级及以下继承分支序号，但保留 subTopic 的显式白色填充', () => {
     const a1 = styleOf('a1');
     expect(a1.fill).toBe('#FFFFFF'); // subTopic 显式指定
-    expect(a1.lineColor).toBe('#E32925'); // 未被指定 → 取分支色
+    expect(a1.lineColor).toBe('#EB8589'); // 未被指定 → 取分支色
   });
 
   it('theme.global 提供字体、字号与线宽', () => {
