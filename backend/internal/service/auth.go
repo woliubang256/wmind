@@ -474,6 +474,13 @@ func (s *AuthService) Authenticate(ctx context.Context, accessToken string) (*do
 //
 // 禁用、删除、改角色之后必须调用：JWT 里不带状态，缓存是「禁用即时生效」
 // 唯一可能被拖慢的地方。
+// InvalidateAllUsers clears cached account state after a database restore.
+func (s *AuthService) InvalidateAllUsers() {
+	s.mu.Lock()
+	clear(s.cache)
+	s.mu.Unlock()
+}
+
 func (s *AuthService) InvalidateUser(uid string) {
 	if s.cacheTTL <= 0 || uid == "" {
 		return

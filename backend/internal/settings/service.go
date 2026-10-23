@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,6 +102,10 @@ func (s *Service) Reload(ctx context.Context) error {
 	}
 
 	for _, row := range rows {
+		// Private backup records are encrypted and managed by the backup service.
+		if strings.HasPrefix(row.Key, "backup.") {
+			continue
+		}
 		spec, ok := Lookup(row.Key)
 		if !ok {
 			// 库里有本版本不认识的键：可能是降级运行，或某个键在新版本被删了。
