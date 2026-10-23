@@ -14,6 +14,8 @@ XMind 的图片不在 `content.json` 里，而是以 zip 条目 `resources/xxx.p
 
 另外还有几个只在真机上才会暴露的坑：图片尺寸来自用户文件（可能是 `0`、负数、`Infinity`、或者 5000px）；图片数量可能上千；上传会撞限流。
 
+上传成功后返回的是 `/uploads/...`，不在 `/api/` 前缀下。生产 Web 容器只有静态前端，不能从自身磁盘读取 API 的上传文件；缺少这条反向代理时，头像和导入图片会被 SPA 回退成 `index.html`。
+
 ## Decision
 
 ### 后端：按解码结果判类型，不信任文件名与 `Content-Type`
@@ -29,6 +31,10 @@ info, err := imageproc.Inspect(data, maxPixels)   // image.DecodeConfig
 ### 后端：文件名用 128 位随机串，不用 ULID
 
 `/uploads` 是公开可读的（图片要能在 `<image href>` 里直接用，不能带 cookie），URL 本身就是唯一的凭证。ULID 前 48 位是时间戳，同毫秒内生成的 ID 前缀相同，剩下的随机位不足以当凭证用。`id.Random()` 用 `crypto/rand` 出 32 位十六进制，128 位全随机。
+
+### 部署：上传路径由 API 提供，Nginx 保留完整 URI 转发
+
+`deploy/nginx.conf` 对 `/uploads/` 使用 `^~` 前缀代理至 `http://api:8080`，`proxy_pass` 不附加 URI，避免剥掉 API 静态路由要求的 `/uploads/` 前缀。上传资源不经过 Web 容器静态目录、字体扩展名正则或 SPA 回退；不存在的文件保留 API 的 404。开发 Vite、Web 镜像和部署包必须使用相同的路径契约；发布打包复用同一份 Nginx 配置。
 
 ### 后端：限流按用户，120 次/分钟
 
@@ -73,10 +79,12 @@ contentTop = box.y + (box.height - contentHeight) / 2;
 - 新增 `frontend/src/lib/api/files.ts`、`frontend/src/editor/import/finalize.ts`。
 - `ImportResult` 多一个 `assets: ImportAsset[]`；`ImportContext` 多一个 `asset()`。三个适配器里只有 XMind 现代格式在用（Markdown 的相对路径图片暂时还进 `image-skipped`，等 M4.5 之后再看要不要按文件名从同目录找）。
 - 布局与渲染支持图片：`IMAGE_METRICS`、`TopicSize.image`、`TopicNode` 的 `<image>` 输出。
-- `vite.config.ts` 的代理多了 `/uploads`——不加的话开发环境下图片 404，而生产环境正常，是最难查的那类差异。
+- `vite.config.ts` 与生产 Nginx 均代理 `/uploads`；API 持有上传卷，Web 容器不增加共享上传卷。`deploy/nginx.test.mjs` 先复现缺失代理的失败，再验证优先级、完整 URI、404 不回退，以及包内配置与 Web 镜像配置一致。
 - 前端 664 个测试、后端全包、`dialectcheck` 全绿。
 
 ## Alternatives considered
+
+**把上传卷同时挂给 Web 容器由 Nginx 直接读文件**：减少 API 转发成本，但会让 SQLite 和 PostgreSQL 两套部署都暴露额外的存储布局与权限约束，独立 API 部署也不能复用；沿用 API 的公开静态路由只需补齐已有的反代契约。
 
 **在适配器里直接 `await upload()`**：会让 `parse` 变成 async，`registry.run()` 跟着变 async，60 多个导入测试全部要改；而且解析期间会长时间持有网络等待，与「同步解析、让出一帧」的设计冲突。
 
