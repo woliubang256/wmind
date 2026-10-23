@@ -879,7 +879,10 @@
     "SERVICE_UNAVAILABLE": "The service is temporarily unavailable. Try again later.",
     "VALIDATION_FAILED": "Some of the submitted information is invalid.",
     "RESOURCE_NOT_FOUND": "The requested content does not exist.",
-    "unknown": "The request failed."
+    "unknown": "The request failed.",
+    "AUTH_2FA_INVALID": "This code is invalid, expired, or already used.",
+    "AUTH_2FA_EXPIRED": "Verification expired. Please start again.",
+    "AUTH_2FA_STATE": "Two-factor settings changed. Refresh and try again."
   },
   "admin": {
     "overview.title": "Admin overview",
@@ -1111,5 +1114,37 @@
     "system": "Browser default",
     "zh-CN": "中文",
     "en-US": "English"
+  },
+  "twoFactor": {
+    "title": "Two-factor authentication (2FA)",
+    "description": "Add verification from an authenticator app after your password.",
+    "enabled": "Enabled · {{count}} recovery codes remaining",
+    "disabled": "Not enabled",
+    "enable": "Set up two-factor authentication",
+    "disable": "Disable two-factor authentication",
+    "regenerate": "Regenerate recovery codes",
+    "password": "Current password",
+    "code": "Authenticator code",
+    "codeOrRecovery": "Authenticator or recovery code",
+    "manualKey": "Manual setup key",
+    "scanHint": "Scan with Google Authenticator, Microsoft Authenticator, or a compatible app, or enter the key manually. Setup expires in 10 minutes.",
+    "qrAlt": "Authenticator setup QR code",
+    "next": "Generate QR code",
+    "confirmEnable": "Verify and enable",
+    "saveCodes": "Save your recovery codes",
+    "codesHint": "These codes are shown only once. Each works once. Store them somewhere safe to sign in if you lose your authenticator.",
+    "downloadCodes": "Download recovery codes",
+    "codesSaved": "I saved my codes",
+    "disableHint": "Sign-in will only require your password. All old sessions will expire; this device receives a new session.",
+    "regenerateHint": "All old recovery codes will stop working. Enter your password and a valid authenticator or recovery code.",
+    "reuseHint": "Each authenticator code works once. If you just used it, wait for the next code or use a recovery code.",
+    "required": "Enter your current password and the required code.",
+    "codeRequired": "Enter an authenticator or recovery code",
+    "loginHint": "Enter the six-digit code from your authenticator, or a saved recovery code. This step expires in 5 minutes.",
+    "recoveryCode": "Recovery code",
+    "useRecovery": "Use a recovery code",
+    "useAuthenticator": "Use an authenticator code",
+    "verify": "Verify and sign in",
+    "backToPassword": "Back to password sign-in"
   }
 }

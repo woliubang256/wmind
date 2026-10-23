@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/icon';
 import { LocaleSwitcher } from '@/components/locale-switcher';
 import { TextField } from '@/components/ui/input';
 import { api, setAccessToken, type AuthSession } from '@/lib/api/client';
+import type { LoginResponse, TwoFactorChallenge } from '@/lib/api/two-factor';
 import { ApiError, fieldErrorsFrom } from '@/lib/api/errors';
 import { authKeys, useCurrentUser } from '@/app/auth';
 import { useSiteConfig } from '@/features/site/use-site-config';
@@ -18,6 +19,9 @@ export function LoginPage() {
   const { config, isLoading: siteLoading } = useSiteConfig({ fresh: true });
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null);
+  const [code, setCode] = useState('');
+  const [recovery, setRecovery] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const location = useLocation();
   const navigate = useNavigate();
@@ -25,8 +29,13 @@ export function LoginPage() {
   const { data: currentUser, isLoading } = useCurrentUser();
 
   const login = useMutation({
-    mutationFn: () => api.post<AuthSession>('/auth/login', { identifier, password }, { auth: false }),
+    mutationFn: () => challenge
+      ? api.post<AuthSession>('/auth/2fa/verify', { challengeToken: challenge.challengeToken, code }, { auth: false })
+      : api.post<LoginResponse>('/auth/login', { identifier, password }, { auth: false }),
     onSuccess: (session) => {
+      if ('twoFactorRequired' in session) {
+        setChallenge(session); setPassword(''); setCode(''); setRecovery(false); setErrors({}); return;
+      }
       setAccessToken(session.accessToken);
       queryClient.setQueryData(authKeys.currentUser, session.user);
       const state = location.state as { from?: string } | null;
@@ -34,6 +43,11 @@ export function LoginPage() {
     },
     onError: (error) => {
       if (error instanceof ApiError) {
+        if (challenge) {
+          if (error.code === 'AUTH_2FA_EXPIRED') { setChallenge(null); setCode(''); setErrors({ identifier: error.message }); }
+          else setErrors({ code: error.message });
+          return;
+        }
         const backendFields = fieldErrorsFrom(error);
         if (Object.keys(backendFields).length > 0) {
           setErrors(backendFields);
@@ -55,6 +69,10 @@ export function LoginPage() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextErrors: FieldErrors = {};
+    if (challenge) {
+      if (!code.trim()) { setErrors({ code: t('twoFactor.codeRequired') }); return; }
+      setErrors({}); login.mutate(); return;
+    }
     if (!identifier.trim()) nextErrors.identifier = t('auth.identifierRequired');
     if (!password) nextErrors.password = t('auth.passwordRequired');
     setErrors(nextErrors);
@@ -81,33 +99,32 @@ export function LoginPage() {
       </div>
 
       <form onSubmit={submit} className="space-y-5" noValidate>
-        <TextField
-          label={t('common.username')}
-          name="identifier"
-          autoComplete="username"
-          value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
-          error={errors.identifier}
-        />
-        <TextField
-          label={t('common.password')}
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          error={errors.password}
-        />
+        {challenge ? <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t('twoFactor.loginHint')}</p>
+          <TextField key={recovery ? 'recovery' : 'totp'} autoFocus label={t(recovery ? 'twoFactor.recoveryCode' : 'twoFactor.code')}
+            autoComplete="one-time-code" inputMode={recovery ? 'text' : 'numeric'} maxLength={recovery ? 30 : 6}
+            value={code} onChange={(event) => setCode(event.target.value)} error={errors.code} />
+          <Button type="button" variant="ghost" disabled={login.isPending} onClick={() => { setRecovery(!recovery); setCode(''); setErrors({}); }}>
+            {t(recovery ? 'twoFactor.useAuthenticator' : 'twoFactor.useRecovery')}
+          </Button>
+        </div> : <>
+          <TextField label={t('common.username')} name="identifier" autoComplete="username" value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)} error={errors.identifier} />
+          <TextField label={t('common.password')} name="password" type="password" autoComplete="current-password" value={password}
+            onChange={(event) => setPassword(event.target.value)} error={errors.password} />
+        </>}
         <Button type="submit" disabled={login.isPending} className="w-full">
           {login.isPending ? (
             <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" />
           ) : (
             <>
-              {t('common.login')}
+              {t(challenge ? 'twoFactor.verify' : 'common.login')}
               <Icon name="arrow-right" className="size-4" />
             </>
           )}
         </Button>
+        {challenge ? <Button type="button" variant="outline" className="w-full" disabled={login.isPending}
+          onClick={() => { setChallenge(null); setCode(''); setPassword(''); setErrors({}); login.reset(); }}>{t('twoFactor.backToPassword')}</Button> : null}
       </form>
 
       {/* 一期没有自助找回：必须把人工路径说清楚，不能留到以后。 */}

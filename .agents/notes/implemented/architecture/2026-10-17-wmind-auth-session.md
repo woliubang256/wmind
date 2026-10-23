@@ -16,7 +16,7 @@ M1 要实现注册 / 登录 / 刷新 / 登出 / 改密 / 当前用户。表面�
 
 ### 混合：无状态 Access + 有状态 Refresh
 
-Access Token 是 HS256 JWT，15 分钟，claims 只有 `sub`（用户 uid）、`role`、`jti`、`iat`/`nbf`/`exp`、`iss=wmind`。**刻意不放 status**：JWT 一旦签发就收不回来，把状态写进去等于「禁用要等 15 分钟才生效」。
+Access Token 是 HS256 JWT，15 分钟，基础 claims 包含 `sub`（用户 uid）、`role`、`jti`、`iat`/`nbf`/`exp`、`iss=wmind`，并允许 2FA 安全版本 `sv`。**刻意不放 status**：JWT 一旦签发就收不回来，把状态写进去等于「禁用要等 15 分钟才生效」。
 
 Refresh Token 是 32 字节随机串（base64url），**只存 SHA-256**，7 天，落在 `refresh_tokens` 表里，所以可以撤销。刷新时轮换：旧令牌撤销、新令牌签发，两者在同一事务里完成。
 
@@ -53,6 +53,8 @@ Web 端的刷新令牌走 Cookie，`Secure` 在生产为 true，`Path` 收窄到
 ### 迁移 0002：`lower(username)` 唯一索引
 
 0001 只有 `uq_users_email_lower`，用户名是大小写敏感的 `UNIQUE`。但查询走 `lower(username)`，于是「Alice」与「alice」可以并存，而按 `alice` 查询会返回其中任意一个。补一个与邮箱对称的部分唯一索引（`WHERE deleted_at IS NULL`，与软删除改名逻辑一致）。
+
+[双因素认证](../feature/2026-10-23-wmind-two-factor.md)增加密码后的短期挑战及安全版本，启停 2FA 时旧访问令牌也立即失效；部分替代原先访问令牌不可撤销的前提。密码、Cookie、刷新轮换和状态缓存策略保持本篇的决定。
 
 ## Alternatives considered
 

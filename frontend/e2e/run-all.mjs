@@ -1,11 +1,11 @@
 /**
- * 一次跑完十六套界面验收。
+ * 一次跑完十八套界面验收。
  *
  * 逐个**子进程**跑，不 import：每套脚本的计数是模块级单例（见 lib/harness.mjs），
- * 同进程跑会串台；而且一套崩了不该带塌其余十五套。
+ * 同进程跑会串台；而且一套崩了不该带塌其余十七套。
  *
  * 用法：
- *   node e2e/run-all.mjs            # 十六套全跑
+ *   node e2e/run-all.mjs            # 十八套全跑
  *   node e2e/run-all.mjs a11y share # 只跑指定的
  */
 
@@ -21,6 +21,7 @@ const SUITE = [
   ['errors', '错误处理（断网提示）'],
   ['register', '关闭注册'],
   ['locale', '登录页语言切换'],
+  ['two-factor', '账户双因素认证'],
   ['templates', '模板选择与管理'],
   ['canvas', '多画布 / 大纲 / ZEN'],
   ['a11y', '画布无障碍'],

@@ -879,7 +879,10 @@
     "SERVICE_UNAVAILABLE": "服务暂时不可用，请稍后重试。",
     "VALIDATION_FAILED": "提交的信息不符合要求。",
     "RESOURCE_NOT_FOUND": "请求的内容不存在。",
-    "unknown": "请求失败。"
+    "unknown": "请求失败。",
+    "AUTH_2FA_INVALID": "验证码无效、已使用或已过期",
+    "AUTH_2FA_EXPIRED": "验证已过期，请重新开始",
+    "AUTH_2FA_STATE": "双因素认证状态已改变，请刷新后重试"
   },
   "admin": {
     "overview.title": "管理概览",
@@ -1111,5 +1114,37 @@
     "system": "跟随浏览器",
     "zh-CN": "中文",
     "en-US": "English"
+  },
+  "twoFactor": {
+    "title": "双因素认证（2FA）",
+    "description": "使用验证器应用，在密码之外再增加一次验证。",
+    "enabled": "已启用 · 剩余 {{count}} 个恢复码",
+    "disabled": "尚未启用",
+    "enable": "设置双因素认证",
+    "disable": "停用双因素认证",
+    "regenerate": "重新生成恢复码",
+    "password": "当前密码",
+    "code": "验证器验证码",
+    "codeOrRecovery": "验证码或恢复码",
+    "manualKey": "手动输入密钥",
+    "scanHint": "用 Google Authenticator、Microsoft Authenticator 等应用扫描二维码，或手动输入密钥。设置在 10 分钟后过期。",
+    "qrAlt": "验证器设置二维码",
+    "next": "生成二维码",
+    "confirmEnable": "验证并启用",
+    "saveCodes": "请保存恢复码",
+    "codesHint": "恢复码仅显示这一次，每个只能使用一次。验证器丢失时可用于登录，请保存在安全的地方。",
+    "downloadCodes": "下载恢复码",
+    "codesSaved": "已保存恢复码",
+    "disableHint": "停用后登录只需密码。所有旧会话将失效，当前设备会获得新会话。",
+    "regenerateHint": "生成后所有旧恢复码立即失效。请输入当前密码和一个有效验证码或恢复码。",
+    "reuseHint": "每个验证码只能使用一次；刚使用过时请等待下一组验证码，或使用恢复码。",
+    "required": "请填写当前密码和所需的验证码。",
+    "codeRequired": "请输入验证码或恢复码",
+    "loginHint": "请输入验证器中的六位验证码，或使用已保存的恢复码。此验证步骤在 5 分钟后过期。",
+    "recoveryCode": "恢复码",
+    "useRecovery": "使用恢复码",
+    "useAuthenticator": "使用验证器验证码",
+    "verify": "验证并登录",
+    "backToPassword": "返回密码登录"
   }
 }

@@ -1,3 +1,4 @@
+import { TwoFactorCard } from './two-factor-card';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -48,6 +49,7 @@ export function AccountPage() {
       <AvatarCard user={user} />
       <ProfileCard user={user} />
       <PasswordCard />
+      <TwoFactorCard userUID={user.uid} />
       <AppearanceCard />
       <LanguageCard />
     </div>

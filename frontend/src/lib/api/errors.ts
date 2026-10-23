@@ -11,6 +11,9 @@ import i18n from '@/lib/i18n';
  * 码本身是后端契约（docs/04 §3.2），不翻译；只有给人看的那句话翻译。
  */
 export const errorMessageKeys: Record<string, string> = {
+  AUTH_2FA_INVALID: 'errors.AUTH_2FA_INVALID',
+  AUTH_2FA_EXPIRED: 'errors.AUTH_2FA_EXPIRED',
+  AUTH_2FA_STATE: 'errors.AUTH_2FA_STATE',
   BAD_REQUEST: 'errors.BAD_REQUEST',
   AUTH_INVALID_CREDENTIALS: 'errors.AUTH_INVALID_CREDENTIALS',
   AUTH_TOKEN_EXPIRED: 'errors.AUTH_TOKEN_EXPIRED',
