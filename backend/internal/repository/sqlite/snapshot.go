@@ -163,6 +163,9 @@ func (r *BackupRepository) Restore(ctx context.Context, dir string, install doma
 	if _, err = tx.ExecContext(ctx, "DELETE FROM user_tokens"); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM login_challenges"); err != nil {
+		return err
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT u.id, COALESCE(f.state,'{}') FROM users u LEFT JOIN user_two_factor f ON f.user_id=u.id`)
 	if err != nil {
 		return err
