@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { createInstance } from 'i18next';
 import enUS from './locales/en-US.json';
 import zhCN from './locales/zh-CN.json';
 
@@ -173,6 +174,21 @@ function literalKeys(source: string): string[] {
 }
 
 describe('语言包', () => {
+  it('回收站剩余天数按英文单复数渲染，中文保持相同量词', async () => {
+    const instance = createInstance();
+    await instance.init({
+      resources: { 'zh-CN': { translation: zhCN }, 'en-US': { translation: enUS } },
+      lng: 'zh-CN',
+      fallbackLng: 'zh-CN',
+      interpolation: { escapeValue: false },
+      returnNull: false,
+    });
+    for (const count of [0, 1, 2, 30]) {
+      expect(instance.t('trash.daysUntilDeletion', { lng: 'zh-CN', count })).toBe(`${count} 天后删除`);
+      expect(instance.t('trash.daysUntilDeletion', { lng: 'en-US', count })).toBe(`Deletes in ${count} ${count === 1 ? 'day' : 'days'}`);
+    }
+  });
+
   it('两种语言的键完全一致', () => {
     const zhKeys = [...ZH.keys()];
     const enKeys = [...EN.keys()];

@@ -704,6 +704,8 @@
     "emptyConfirm.confirm": "清空",
     "emptied": "回收站已清空",
     "daysUntilDeletion": "{{count}} 天后删除",
+    "daysUntilDeletion_one": "{{count}} 天后删除",
+    "daysUntilDeletion_other": "{{count}} 天后删除",
     "deletingSoon": "即将删除",
     "expiryUnavailable": "删除时间暂不可用"
   },

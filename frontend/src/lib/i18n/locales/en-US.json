@@ -705,6 +705,7 @@
     "emptied": "Recycle bin emptied",
     "deletingSoon": "Deleting soon",
     "expiryUnavailable": "Deletion time unavailable",
+    "daysUntilDeletion": "Deletes in {{count}} days",
     "daysUntilDeletion_one": "Deletes in {{count}} day",
     "daysUntilDeletion_other": "Deletes in {{count}} days"
   },
