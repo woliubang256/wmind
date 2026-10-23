@@ -32,6 +32,13 @@ type File struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type LoginChallenge struct {
+	Hash           string
+	IdentifierHash string
+	SealedKey      string
+	ExpiresAt      int64
+}
+
 type Map struct {
 	ID           int64
 	Uid          string

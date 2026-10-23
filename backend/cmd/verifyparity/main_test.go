@@ -265,7 +265,7 @@ func TestRealSQLiteMigrationProducesExpectedTables(t *testing.T) {
 	}
 
 	want := []string{
-		"audit_logs", "files", "map_revisions", "maps", "refresh_tokens",
+		"audit_logs", "files", "login_challenges", "map_revisions", "maps", "refresh_tokens",
 		"settings", "share_links", "templates", "themes", "user_devices",
 		"user_tokens", "user_two_factor", "users",
 	}
