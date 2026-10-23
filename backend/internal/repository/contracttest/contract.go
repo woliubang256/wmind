@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,7 +181,16 @@ func Run(t *testing.T, r Repos) {
 			t.Fatalf("get owner: %v", err)
 		}
 		mapUID := ulid.Make().String()
-		doc := []byte(`{"formatVersion":1,"sheets":[]}`)
+		doc := []byte(`{"formatVersion":1,"sheets":[],"extensions":{"revision":9007199254740993,"enabled":true,"title":"季度","values":[null,1e2,0.1250]}}`)
+		assertMap := func(stage string, got *domain.Map, document []byte, version, nodeCount int) {
+			t.Helper()
+			if got == nil || got.UID != mapUID || got.OwnerID != owner.ID || got.Version != version || got.NodeCount != nodeCount || got.SizeBytes != int64(len(document)) {
+				t.Fatalf("%s map metadata mismatch: %#v; want version=%d nodes=%d original bytes=%d", stage, got, version, nodeCount, len(document))
+			}
+			if !sameJSON(t, string(got.Document), string(document)) {
+				t.Fatalf("%s map document mismatch: got %s; want %s", stage, got.Document, document)
+			}
+		}
 		created, err := maps.Create(ctx, domain.CreateMapInput{
 			UID: mapUID, OwnerID: owner.ID, Title: "Quarterly Plan", Document: doc,
 			NodeCount: 7, SizeBytes: int64(len(doc)), Now: now,
@@ -186,9 +198,12 @@ func Run(t *testing.T, r Repos) {
 		if err != nil {
 			t.Fatalf("Create map: %v", err)
 		}
-		if created.Version != 1 || string(created.Document) != string(doc) || created.SizeBytes != int64(len(doc)) {
-			t.Fatalf("created map mismatch: %#v", created)
+		assertMap("created", created, doc, 1, 7)
+		persisted, err := maps.GetByUID(ctx, mapUID, owner.ID)
+		if err != nil {
+			t.Fatalf("read created map: %v", err)
 		}
+		assertMap("read created", persisted, doc, 1, 7)
 		if _, err := maps.GetByUID(ctx, mapUID, owner.ID+999); !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("cross-owner read = %v; want domain.ErrNotFound", err)
 		}
@@ -202,6 +217,7 @@ func Run(t *testing.T, r Repos) {
 		if err != nil || len(listed) != 1 || listed[0].UID != mapUID {
 			t.Fatalf("ListByOwner = %#v, %v", listed, err)
 		}
+		assertMap("listed created", listed[0], doc, 1, 7)
 		searched, err := maps.SearchByTitle(ctx, owner.ID, "%plan%", domain.MapSortUpdated, domain.Page{Limit: 5})
 		if err != nil || len(searched) != 1 || searched[0].UID != mapUID {
 			t.Fatalf("SearchByTitle = %#v, %v", searched, err)
@@ -210,14 +226,26 @@ func Run(t *testing.T, r Repos) {
 			t.Fatalf("CountByTitle = %d, %v; want 1", count, err)
 		}
 
+		nextDoc := []byte(`{"sheets":[{"id":9007199254740995,"title":"已更新","values":[false,null,1e-3]}],"formatVersion":1}`)
 		updated, err := maps.UpdateWithVersion(ctx, domain.UpdateMapInput{
-			UID: mapUID, OwnerID: owner.ID, Title: "Quarterly Plan v2", Document: doc,
-			NodeCount: 8, SizeBytes: int64(len(doc)),
+			UID: mapUID, OwnerID: owner.ID, Title: "Quarterly Plan v2", Document: nextDoc,
+			NodeCount: 8, SizeBytes: int64(len(nextDoc)),
 			ExpectedVersion: 1, Now: now.Add(time.Minute),
 		})
 		if err != nil || updated.Version != 2 || updated.Title != "Quarterly Plan v2" {
 			t.Fatalf("UpdateWithVersion = %#v, %v", updated, err)
 		}
+		assertMap("updated", updated, nextDoc, 2, 8)
+		persisted, err = maps.GetByUID(ctx, mapUID, owner.ID)
+		if err != nil {
+			t.Fatalf("read updated map: %v", err)
+		}
+		assertMap("read updated", persisted, nextDoc, 2, 8)
+		listed, err = maps.ListByOwner(ctx, owner.ID, domain.MapSortUpdated, domain.Page{Limit: 5})
+		if err != nil || len(listed) != 1 {
+			t.Fatalf("list updated map: %#v, %v", listed, err)
+		}
+		assertMap("listed updated", listed[0], nextDoc, 2, 8)
 		_, err = maps.UpdateWithVersion(ctx, domain.UpdateMapInput{
 			UID: mapUID, OwnerID: owner.ID, Title: "stale", Document: doc,
 			ExpectedVersion: 1, Now: now.Add(2 * time.Minute),
@@ -1066,15 +1094,59 @@ func mustCreateUser(t *testing.T, ctx context.Context, users domain.UserRepo, no
 	return user
 }
 
-// sameJSON 比较两个 JSON 文档的语义相等，忽略键序与空白。
+// sameJSON 忽略键序、空白与等值数字表示，不经过 float64 丢失大整数精度。
 func sameJSON(t *testing.T, got, want string) bool {
 	t.Helper()
-	var gotValue, wantValue any
-	if err := json.Unmarshal([]byte(got), &gotValue); err != nil {
-		t.Fatalf("decode %q: %v", got, err)
+	decode := func(raw string) any {
+		t.Helper()
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.UseNumber()
+		var value, trailing any
+		if err := decoder.Decode(&value); err != nil {
+			t.Fatalf("decode %q: %v", raw, err)
+		}
+		if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+			t.Fatalf("trailing content in JSON %q: %v", raw, err)
+		}
+		return value
 	}
-	if err := json.Unmarshal([]byte(want), &wantValue); err != nil {
-		t.Fatalf("decode %q: %v", want, err)
+	return sameJSONValue(decode(got), decode(want))
+}
+
+func sameJSONValue(got, want any) bool {
+	switch got := got.(type) {
+	case json.Number:
+		other, ok := want.(json.Number)
+		if !ok {
+			return false
+		}
+		left, leftOK := new(big.Rat).SetString(got.String())
+		right, rightOK := new(big.Rat).SetString(other.String())
+		return leftOK && rightOK && left.Cmp(right) == 0
+	case map[string]any:
+		other, ok := want.(map[string]any)
+		if !ok || len(got) != len(other) {
+			return false
+		}
+		for key, value := range got {
+			otherValue, exists := other[key]
+			if !exists || !sameJSONValue(value, otherValue) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		other, ok := want.([]any)
+		if !ok || len(got) != len(other) {
+			return false
+		}
+		for i, value := range got {
+			if !sameJSONValue(value, other[i]) {
+				return false
+			}
+		}
+		return true
+	default:
+		return reflect.DeepEqual(got, want)
 	}
-	return reflect.DeepEqual(gotValue, wantValue)
 }
