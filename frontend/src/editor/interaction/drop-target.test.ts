@@ -123,6 +123,41 @@ describe('resolveDrop', () => {
     expect(drop?.valid).toBe(true);
   });
 
+  it('拖出后回到原主题内部，取消脱离且不产生移动', () => {
+    expect(resolveDrop(boxes(), sheet(), ['a1'], { x: 900, y: 900 })?.mode).toBe('detach');
+    expect(resolveDrop(boxes(), sheet(), ['a1'], center('a1'))).toMatchObject({
+      mode: 'restore', targetId: 'a1', valid: true, noop: true,
+    });
+  });
+
+  it.each([
+    { x: 176, y: -75 }, { x: 284, y: -75 },
+    { x: 230, y: -114 }, { x: 230, y: -36 },
+  ])('原主题四周 24px 内可回归：%j', (point) => {
+    expect(resolveDrop(boxes(), sheet(), ['a1'], point)?.mode).toBe('restore');
+  });
+
+  it.each([0.25, 0.5, 1, 2])('回归范围在 %s 倍缩放下保持 24 屏幕像素', (zoom) => {
+    const source = boxes().get('a1')!;
+    const point = (screenDistance: number) => ({ x: source.x + source.width + screenDistance / zoom, y: -75 });
+    expect(resolveDrop(boxes(), sheet(), ['a1'], point(24), { zoom })?.mode).toBe('restore');
+    expect(resolveDrop(boxes(), sheet(), ['a1'], point(25), { zoom })?.mode).toBe('detach');
+  });
+
+  it('多选以实际抓取的主题为回归锚点，整组选区均不移动', () => {
+    expect(resolveDrop(boxes(), sheet(), ['a1', 'b1'], center('b1'), { anchorId: 'b1' })).toMatchObject({
+      mode: 'restore', targetId: 'b1', noop: true,
+    });
+  });
+
+  it('回归范围与其他主题重叠时，直接命中其他主题仍可建立父子关系', () => {
+    const nearby = boxes();
+    nearby.set('b', box('b', 270, -90));
+    expect(resolveDrop(nearby, sheet(), ['a1'], { x: 272, y: -75 })).toMatchObject({
+      mode: 'child', parentId: 'b', valid: true, noop: false,
+    });
+  });
+
   it('自由主题拖到空白什么都不发生', () => {
     expect(resolveDrop(boxes(), sheet(), ['f1'], { x: 900, y: 900 })).toBeNull();
   });

@@ -382,6 +382,7 @@
     "drag.floatingTarget": "自由主题不能作为父节点",
     "drag.invalid": "不可放置",
     "drag.toFloating": "松开转为自由主题",
+    "drag.restore": "松开保持原位置",
     "drag.selectedCount": "{{count}} 个主题",
     "font.sans": "思源黑体",
     "font.system": "跟随系统",

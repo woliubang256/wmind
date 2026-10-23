@@ -382,6 +382,7 @@
     "drag.floatingTarget": "A floating topic cannot be a parent",
     "drag.invalid": "Cannot drop here",
     "drag.toFloating": "Release to make it a floating topic",
+    "drag.restore": "Release to keep the original position",
     "drag.selectedCount": "{{count}} topics",
     "font.sans": "Source Han Sans",
     "font.system": "System default",

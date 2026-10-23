@@ -12,6 +12,7 @@
  *   指针落在目标节点的上 25%  → 插到它前面（同级）
  *   指针落在中间 50%          → 成为它的子节点
  *   指针落在下 25%            → 插到它后面（同级）
+ *   回到原主题外框及附近 24px → 保持原位置（无需提交）
  *   指针离所有节点都很远      → 脱离树，变成自由主题
  * ```
  */
@@ -22,10 +23,12 @@ import { findTopicInSheet, isDescendant } from '../model/traverse';
 
 /** 指针离盒子多远仍算「瞄准了它」。太小的值会让空白处几乎无法脱离。 */
 const DROP_MARGIN = 28;
+/** 原主题附近的回归范围按屏幕像素算，缩放后仍容易拖回。 */
+const RETURN_MARGIN = 24;
 /** 上下边缘判定为「同级插入」的比例。 */
 const EDGE_RATIO = 0.25;
 
-export type DropMode = 'child' | 'before' | 'after' | 'detach';
+export type DropMode = 'child' | 'before' | 'after' | 'detach' | 'restore';
 
 export type DropRejection = 'self' | 'descendant' | 'root' | 'floating-target';
 
@@ -33,9 +36,9 @@ export interface DropCandidate {
   mode: DropMode;
   /** 目标节点；`detach` 时为 null。 */
   targetId: string | null;
-  /** 落定后的父节点；`detach` 时为 null。 */
+  /** 落定后的父节点；`detach` / `restore` 时为 null。 */
   parentId: string | null;
-  /** 落定后的插入下标；`detach` 与 `child`（追加到末尾）时为 null。 */
+  /** 插入下标；`detach` / `restore` / `child`（追加到末尾）时为 null。 */
   index: number | null;
   valid: boolean;
   reason: DropRejection | null;
@@ -76,11 +79,28 @@ export function resolveDrop(
   sheet: Sheet,
   dragIds: readonly string[],
   point: Point,
+  { anchorId = dragIds[0], zoom = 1 }: { anchorId?: string; zoom?: number } = {},
 ): DropCandidate | null {
   const excluded = new Set(dragIds);
   const dragSet = dragIds.map((id) => findTopicInSheet(sheet, id)).filter((f) => f !== null);
 
   const nearest = nearestBox(boxes, point, excluded);
+
+  // 被拖主题不能作为新父级，但它的原位置必须能取消拖拽。真实命中其他
+  // 主题时让目标优先，避免紧密布局中回归范围遮住相邻主题。
+  const source = anchorId && excluded.has(anchorId) ? boxes.get(anchorId) : undefined;
+  const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  if (source && distanceToBox(source, point) <= RETURN_MARGIN / scale && (!nearest || nearest.distance > 0)) {
+    return {
+      mode: 'restore',
+      targetId: source.id,
+      parentId: null,
+      index: null,
+      valid: true,
+      reason: null,
+      noop: true,
+    };
+  }
 
   // 空白处：脱离树。自由主题与根已经在树外，没有可脱离的东西。
   if (!nearest || nearest.distance > DROP_MARGIN) {

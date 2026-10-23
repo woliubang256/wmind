@@ -95,12 +95,12 @@ export function DragPlugin() {
       const pointer = latestPoint.current;
       const current = session.current;
       if (!pointer || !current) return;
-      const { layout: currentLayout, sheet } = latest.current;
+      const { layout: currentLayout, sheet, viewport } = latest.current;
       setView({
         ids: current.ids,
         pointer,
         offset: { x: pointer.x - current.startWorld.x, y: pointer.y - current.startWorld.y },
-        candidate: resolveDrop(currentLayout.boxes, sheet, current.ids, pointer),
+        candidate: resolveDrop(currentLayout.boxes, sheet, current.ids, pointer, { anchorId: current.anchorId, zoom: viewport.zoom }),
       });
     };
 
@@ -169,7 +169,7 @@ export function DragPlugin() {
 
       if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
 
-      const { layout: currentLayout, sheet, toWorld, setSelection, moveTopics, detachTopics } =
+      const { layout: currentLayout, sheet, viewport, toWorld, setSelection, moveTopics, detachTopics } =
         latest.current;
 
       // 没越过阈值 = 一次普通点击。多选状态下点其中一个节点，收敛到它。
@@ -184,6 +184,7 @@ export function DragPlugin() {
         sheet,
         current.ids,
         toWorld(event.clientX, event.clientY),
+        { anchorId: current.anchorId, zoom: viewport.zoom },
       );
       if (!candidate || !candidate.valid || candidate.noop) return;
 
@@ -225,7 +226,7 @@ export function DragPlugin() {
   return (
     <g className="wmind-drag-layer" pointerEvents="none">
       {/* 幽灵：跟着指针走的半透明轮廓，让人知道「我正拿着它」。 */}
-      {union ? (
+      {union && candidate?.mode !== 'restore' ? (
         <rect
           x={union.x + view.offset.x}
           y={union.y + view.offset.y}
@@ -241,9 +242,9 @@ export function DragPlugin() {
         />
       ) : null}
 
-      {/* 落点提示：成为子节点画外框，同级插入画一条线。 */}
+      {/* 成为子节点或回归原位画外框，同级插入画一条线。 */}
       {candidate && candidate.valid && target ? (
-        candidate.mode === 'child' ? (
+        candidate.mode === 'child' || candidate.mode === 'restore' ? (
           <rect
             x={target.x - 5}
             y={target.y - 5}
@@ -298,8 +299,8 @@ export function DragPlugin() {
         </>
       ) : null}
 
-      {/* 拖到空白：明确告诉用户「会变成自由主题」，而不是静默发生。 */}
-      {candidate?.mode === 'detach' ? (
+      {/* 脱离与回归都明确显示松手结果，预览和实际提交使用同一落点。 */}
+      {candidate?.mode === 'detach' || candidate?.mode === 'restore' ? (
         <text
           x={view.pointer.x + 14}
           y={view.pointer.y - 10}
@@ -308,7 +309,7 @@ export function DragPlugin() {
           strokeWidth={3}
           paintOrder="stroke"
         >
-          {t('editor.drag.toFloating')}
+          {t(candidate.mode === 'restore' ? 'editor.drag.restore' : 'editor.drag.toFloating')}
         </text>
       ) : null}
 

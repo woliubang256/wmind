@@ -17,10 +17,10 @@ M2.5 要做「拖着节点改结构」。docs/05 §4.6.3 给了语义，但落�
 ### 落点判定是纯函数，语义按「上 25% / 中 50% / 下 25%」
 
 ```ts
-resolveDrop(boxes, sheet, dragIds, point): DropCandidate | null
+resolveDrop(boxes, sheet, dragIds, point, { anchorId?, zoom? }?): DropCandidate | null
 ```
 
-`DropCandidate` 带 `mode`（child / before / after / detach）、`parentId`、`index`、`valid`、`reason`、`noop`。
+`DropCandidate` 带 `mode`（child / before / after / detach / restore）、`parentId`、`index`、`valid`、`reason`、`noop`。
 
 抽成纯函数的理由和键位表一样：拖拽是「肉眼判断」最容易飘的地方。同一个落点，今天觉得「应该成为子节点」，明天觉得「应该插到后面」——写成测试之后这个标准就固定了。而且下标修正这种 off-by-one 在多选场景下几乎无法靠手测发现。
 
@@ -32,7 +32,7 @@ index = (before ? target.index : target.index + 1) - 同父且在被插位置之
 
 不扣这一位的话，把下标 2 的节点拖到下标 3 的节点前面，会插到下标 3——正好越过目标一位，用户看到的是「拖到前面结果跑到后面去了」。
 
-`noop` 单独标出来：拖回原位是合法的，但派发命令会产生一条「什么都没变」的撤销记录。判定条件是单节点拖拽且修正后的下标等于它自己当前的下标。
+`noop` 单独标出来：拖回原位是合法的，但派发命令会产生一条「什么都没变」的撤销记录。同级插入的判定条件是单节点拖拽且修正后的下标等于它自己当前的下标。原主题附近回归使用 restore 候选，整组保留原关系，不提交历史；屏幕距离、抓取锚点和目标优先级见[拖拽回归修复](../../implemented/bug-fix/2026-10-23-wmind-drag-return.md)。
 
 **根节点的上/下沿退化成「成为子节点」**：根没有兄弟，不退化的结果是「拖到根的上方什么都不会发生」，用户会以为拖拽坏了。
 
