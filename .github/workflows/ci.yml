@@ -1,16 +1,25 @@
-name: CI
+name: Release
 
 on:
   push:
-  pull_request:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
-    name: Verify backend, dialects, and notes
+    name: Verify and publish release
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
     services:
       postgres:
         image: postgres:16-alpine
@@ -27,9 +36,12 @@ jobs:
           --health-retries 10
     env:
       WMIND_TEST_DATABASE_URL: postgres://wmind:wmind_ci_password@localhost:5432/wmind_test?sslmode=disable
+      WMIND_VERSION: ${{ github.ref_name }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -49,6 +61,12 @@ jobs:
           node-version: 22.22.2
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Verify release tag and version
+        run: node scripts/release.mjs check "$GITHUB_REF_NAME"
+
+      - name: Test release tooling
+        run: npm run test:release
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -107,11 +125,68 @@ jobs:
           docker compose -f deploy/docker-compose.yml config --quiet
           docker compose -f deploy/docker-compose.postgres.yml config --quiet
 
-      - name: Build container images
+      - name: Generate changelog and deployment archives
         run: |
-          docker build --file deploy/Dockerfile.backend --tag wmind/api:ci .
-          docker build --file deploy/Dockerfile.frontend --tag wmind/web:ci .
+          node scripts/release.mjs changelog "$GITHUB_REF_NAME" release/CHANGELOG.md
+          node scripts/release.mjs package "$GITHUB_REF_NAME" release
 
-      - name: Build static server
-        working-directory: backend
-        run: CGO_ENABLED=0 go build -trimpath -o /tmp/wmind-server ./cmd/server
+      - name: Set up target platform emulation
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.backend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: |
+            ghcr.io/woliubang256/wmind-api:${{ github.ref_name }}
+            ghcr.io/woliubang256/wmind-api:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          cache-from: type=gha,scope=wmind-api
+          cache-to: type=gha,mode=max,scope=wmind-api
+
+      - name: Build and publish Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.frontend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/woliubang256/wmind-web:${{ github.ref_name }}
+            ghcr.io/woliubang256/wmind-web:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          cache-from: type=gha,scope=wmind-web
+          cache-to: type=gha,mode=max,scope=wmind-web
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: wmind ${{ github.ref_name }}
+          body_path: release/CHANGELOG.md
+          files: |
+            release/*.tar.gz
+            release/SHA256SUMS
+            release/CHANGELOG.md
+          fail_on_unmatched_files: true
+          draft: false

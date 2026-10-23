@@ -12,3 +12,7 @@
 **/*.db-wal
 **/*.db-shm
 backups
+release
+backend/bin
+**/data
+**/uploads

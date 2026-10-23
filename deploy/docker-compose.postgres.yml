@@ -26,7 +26,9 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.backend
-    image: wmind/api:${WMIND_VERSION:-latest}
+      args:
+        VERSION: ${WMIND_VERSION:-dev}
+    image: ghcr.io/woliubang256/wmind-api:${WMIND_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       db:
@@ -57,7 +59,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.frontend
-    image: wmind/web:${WMIND_VERSION:-latest}
+    image: ghcr.io/woliubang256/wmind-web:${WMIND_VERSION:-latest}
     restart: unless-stopped
     depends_on: [api]
     ports:

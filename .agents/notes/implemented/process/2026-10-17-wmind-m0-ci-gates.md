@@ -14,6 +14,10 @@ M0 收尾要把「代码能跑」变成「每次提交都能证明代码还能�
 
 ## Decision
 
+触发与发布规则由[版本标签发布](2026-10-24-wmind-tag-release.md)部分取代；本篇保留本机与 CI 的验证边界及原有质量闸门理由。
+
+PostgreSQL 迁移连接的释放边界见[迁移连接占用修复](../bug-fix/2026-10-24-wmind-parity-migration-connection.md)，防止单连接验证池在结构内省前等待自己持有的迁移连接。
+
 ### 本机必须过的四件事
 
 1. `cd backend && go test ./... && go vet ./...`——SQLite 分支的集成测试在本机全跑，不需要任何外部服务。
@@ -39,7 +43,7 @@ CI 里 PostgreSQL 由 service container 提供，`WMIND_TEST_DATABASE_URL` 显�
 
 ### 部署模板的两个硬约束
 
-- 两套 Compose 的 `build.context` 都是仓库根（`..`），Dockerfile 在 `deploy/` 下，靠 `deploy/.dockerignore` 排除 `node_modules`、`dist`、`.env`、`*.db`。镜像构建与本地目录布局解耦。
+- 两套 Compose 的 `build.context` 都是仓库根（`..`），Dockerfile 在 `deploy/` 下，靠仓库根 `.dockerignore` 排除 `node_modules`、`dist`、`.env`、`*.db`。镜像构建与本地目录布局解耦。
 - `WMIND_JWT_SECRET` 与 `POSTGRES_PASSWORD` 用 `${VAR:?}` 语法**强制**外部注入：缺变量时 `docker compose config` 直接失败，而不是起一个用默认密钥的服务。CI 里对应两个假值，仅为让 `config` 通过。
 
 ## Alternatives considered
