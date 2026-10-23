@@ -8,7 +8,8 @@ import { Icon } from '@/components/ui/icon';
 import { LocaleSwitcher } from '@/components/locale-switcher';
 import { TextField } from '@/components/ui/input';
 import { api, setAccessToken, type AuthSession } from '@/lib/api/client';
-import type { LoginResponse, TwoFactorChallenge } from '@/lib/api/two-factor';
+import type { TwoFactorChallenge } from '@/lib/api/two-factor';
+import { loginWithPassword } from '@/lib/api/login';
 import { ApiError, fieldErrorsFrom } from '@/lib/api/errors';
 import { authKeys, useCurrentUser } from '@/app/auth';
 import { useSiteConfig } from '@/features/site/use-site-config';
@@ -31,7 +32,7 @@ export function LoginPage() {
   const login = useMutation({
     mutationFn: () => challenge
       ? api.post<AuthSession>('/auth/2fa/verify', { challengeToken: challenge.challengeToken, code }, { auth: false })
-      : api.post<LoginResponse>('/auth/login', { identifier, password }, { auth: false }),
+      : loginWithPassword(identifier, password),
     onSuccess: (session) => {
       if ('twoFactorRequired' in session) {
         setChallenge(session); setPassword(''); setCode(''); setRecovery(false); setErrors({}); return;

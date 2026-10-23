@@ -54,7 +54,9 @@
     "loginFailed": "Sign-in failed. Please try again.",
     "identifierRequired": "Enter your username or email",
     "passwordRequired": "Enter your password",
-    "logoAlt": "Site logo"
+    "logoAlt": "Site logo",
+    "secureLoginUnavailable": "Use HTTPS to sign in. This browser cannot securely submit your password.",
+    "loginEncryptionFailed": "Could not encrypt the login. Refresh the page and try again."
   },
   "register": {
     "title": "Join {{site}}",
@@ -908,7 +910,8 @@
     "BACKUP_CONFIG_INVALID": "Check the Cron expression, time zone, and storage configuration.",
     "BACKUP_REMOTE_FAILED": "Connection test failed. Check the endpoint, credentials, and write/delete permissions.",
     "BACKUP_ARCHIVE_INVALID": "The archive is damaged or its format, database version, or encryption key is incompatible.",
-    "BACKUP_STAGE_INVALID": "This restore upload has expired or is unavailable. Upload it again."
+    "BACKUP_STAGE_INVALID": "This restore upload has expired or is unavailable. Upload it again.",
+    "AUTH_LOGIN_CHALLENGE_INVALID": "Login verification expired or was already used. Please try again."
   },
   "admin": {
     "overview.title": "Admin overview",

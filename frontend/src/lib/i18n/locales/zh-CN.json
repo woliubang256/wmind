@@ -54,7 +54,9 @@
     "loginFailed": "登录失败，请稍后重试。",
     "identifierRequired": "请填写用户名或邮箱",
     "passwordRequired": "请填写密码",
-    "logoAlt": "站点标志"
+    "logoAlt": "站点标志",
+    "secureLoginUnavailable": "请使用 HTTPS 访问本站，当前浏览器无法安全提交登录密码。",
+    "loginEncryptionFailed": "登录加密失败，请刷新页面后重试。"
   },
   "register": {
     "title": "注册 {{site}}",
@@ -908,7 +910,8 @@
     "BACKUP_CONFIG_INVALID": "请检查 Cron、时区及存储配置",
     "BACKUP_REMOTE_FAILED": "连接测试失败，请检查地址、凭据和写入/删除权限",
     "BACKUP_ARCHIVE_INVALID": "备份包损坏，或格式、数据库版本、加密密钥不兼容",
-    "BACKUP_STAGE_INVALID": "恢复文件已过期或不可用，请重新上传"
+    "BACKUP_STAGE_INVALID": "恢复文件已过期或不可用，请重新上传",
+    "AUTH_LOGIN_CHALLENGE_INVALID": "登录验证已失效，请重试。"
   },
   "admin": {
     "overview.title": "管理概览",
