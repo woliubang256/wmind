@@ -28,7 +28,7 @@ export type ImportFormatId = 'xmind' | 'markdown' | 'opml';
  * 露出 `import.warning.palette-fallback` 这种原始 key。
  */
 export const IMPORT_WARNING_CODES = [
-  /** 主题调色板对不上 10 套内置配色，回退到默认。 */
+  /** 主题调色板对不上内置及兼容配色，回退到默认。 */
   'palette-fallback',
   /** 原始字体名归一成了 `sans` / `serif` / `mono`。 */
   'font-normalized',

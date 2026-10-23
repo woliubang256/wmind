@@ -376,7 +376,7 @@ describe('主题', () => {
 
   it('没有主题时用默认主题，不崩', () => {
     const { doc } = parse([{ title: '画布', rootTopic: { title: '根' } }]);
-    expect(doc.theme.id).toBe('classic-rainbow');
+    expect(doc.theme.id).toBe('vivid-dawn');
   });
 });
 

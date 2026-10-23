@@ -15,10 +15,10 @@ import { useTranslation } from 'react-i18next';
 import type { Theme, ThemeLayout } from '@/editor/model/types';
 import { themeFromCustomConfig, themeSwatchColors } from '@/editor/theme/custom';
 import { FONT_DEFINITIONS, FONT_IDS } from '@/editor/theme/fonts';
-import { BUILTIN_PALETTES, applyPalette, paletteById } from '@/editor/theme/palettes';
 import { cn } from '@/lib/utils';
 import { ColorField, Field, Section, SelectField, ToggleField } from './controls';
 import { useCustomThemes } from './use-custom-themes';
+import { PalettePicker, PaletteSwatch } from './palette-picker';
 
 const LAYOUT_KEYS: (keyof ThemeLayout)[] = ['autoBalance', 'compact', 'alignSiblings'];
 
@@ -53,11 +53,6 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
     // 成功后清空输入框：留着上次的名字，用户再点一次会存出两条同名主题。
     if (await custom.save(name, theme)) setThemeName('');
   };
-
-  const groups = [
-    { id: 'vivid', label: t('editor.panel.canvas.vivid') },
-    { id: 'classic', label: t('editor.panel.canvas.classic') },
-  ] as const;
 
   return (
     <div className="flex flex-col gap-3">
@@ -129,15 +124,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
                         onClick={() => onChange(saved)}
                         className="flex min-w-0 flex-1 flex-col gap-1 p-1.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        <span className="flex gap-0.5">
-                          {themeSwatchColors(saved).map((color, index) => (
-                            <span
-                              key={`${index}-${color}`}
-                              style={{ backgroundColor: color }}
-                              className="h-3 flex-1 rounded-sm border border-black/10"
-                            />
-                          ))}
-                        </span>
+                        <PaletteSwatch colors={themeSwatchColors(saved)} />
                         {/* leading-4 显式给出行高：截断（overflow-hidden）配上继承来的
                             紧凑行高，中文字形的上下缘会被切掉一截。 */}
                         <span className="truncate text-[11px] leading-4 text-foreground">
@@ -168,46 +155,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
       </Section>
 
       <Section title={t('editor.panel.canvas.paletteSection')}>
-        {groups.map((group) => (
-          <div key={group.id} className="flex flex-col gap-1">
-            <span className="text-[11px] text-muted-foreground">{group.label}</span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {BUILTIN_PALETTES.filter((palette) => palette.category === group.id).map((palette) => {
-                const active = theme.id === palette.id;
-                return (
-                  <button
-                    key={palette.id}
-                    type="button"
-                    aria-pressed={active}
-                    aria-label={palette.name}
-                    onClick={() => {
-                      const source = paletteById(palette.id);
-                      if (source) onChange(applyPalette(theme, source));
-                    }}
-                    className={[
-                      'flex flex-col gap-1 rounded-lg border p-1.5 text-left transition-colors',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      active
-                        ? 'border-primary bg-primary/10'
-                        : 'border-input bg-background hover:bg-accent',
-                    ].join(' ')}
-                  >
-                    <span className="flex gap-0.5">
-                      {palette.colors.map((color) => (
-                        <span
-                          key={color}
-                          style={{ backgroundColor: color }}
-                          className="h-3 flex-1 rounded-sm border border-black/10"
-                        />
-                      ))}
-                    </span>
-                    <span className="text-[11px] text-foreground">{palette.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <PalettePicker theme={theme} onChange={onChange} />
       </Section>
 
       <Section title={t('editor.panel.canvas.globalSection')}>

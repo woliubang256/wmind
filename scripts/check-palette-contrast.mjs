@@ -2,7 +2,7 @@
 /**
  * 配色对比度校验（docs/06 §5.4 第 3 步、docs/08 §5 验收标准 5）。
  *
- * 读取 `frontend/src/editor/theme/palettes.json`，对每套配色的 6 个分支色与
+ * 读取 `frontend/src/editor/theme/palettes.json`，对每套配色的分支色与
  * 中心主题填充色，按「深灰 / 白字二选一」的规则算出实际会用的文字色，
  * 要求对比度 ≥ 4.5:1（WCAG AA 正文）。不达标就退出码 1，CI 会拦下来。
  *
@@ -51,8 +51,14 @@ function pickTextColor(fill) {
 const palettes = JSON.parse(readFileSync(DATA, 'utf8'));
 const problems = [];
 
-if (!Array.isArray(palettes) || palettes.length !== 10) {
-  problems.push(`配色数量应为 10，实际 ${Array.isArray(palettes) ? palettes.length : '非数组'}`);
+if (!Array.isArray(palettes)) {
+  console.error('配色数据应为数组');
+  process.exit(1);
+}
+
+const visible = palettes.filter((palette) => !palette.legacy);
+if (visible.length !== 19) {
+  problems.push(`可见配色数量应为 19，实际 ${visible.length}`);
 }
 
 const seen = new Set();
@@ -64,12 +70,19 @@ for (const palette of palettes) {
   if (seen.has(palette.id)) problems.push(`${where}: id 重复`);
   seen.add(palette.id);
 
-  if (!Array.isArray(palette.colors) || palette.colors.length !== 6) {
-    problems.push(`${where}: colors 应为 6 个，实际 ${palette.colors?.length ?? 0}`);
+  if (!Array.isArray(palette.colors) || palette.colors.length === 0) {
+    problems.push(`${where}: colors 不能为空`);
     continue;
   }
   if (palette.lineColors?.length !== palette.colors.length) {
     problems.push(`${where}: lineColors 与 colors 长度不一致`);
+  }
+  for (const color of palette.lineColors ?? []) {
+    const luminance = typeof color === 'string' ? relativeLuminance(color) : null;
+    if (luminance === null) problems.push(`${where}: 非法线条颜色 ${color}`);
+    else if (!palette.legacy && contrastRatio(luminance, 1) < 1.5) {
+      problems.push(`${where}: 线条 ${color} 在白色画布上过淡`);
+    }
   }
 
   const fills = [
@@ -93,9 +106,10 @@ for (const palette of palettes) {
   }
 }
 
-const vivid = palettes.filter((p) => p.category === 'vivid').length;
-const classic = palettes.filter((p) => p.category === 'classic').length;
-console.log(`配色 ${palettes.length} 套（缤纷 ${vivid} / 经典 ${classic}），最低对比度 ${worstOverall.toFixed(2)}:1`);
+const vivid = visible.filter((p) => p.category === 'vivid').length;
+const classic = visible.filter((p) => p.category === 'classic').length;
+if (vivid !== 10 || classic !== 9) problems.push(`分组应为缤纷 10 / 经典 9，实际 ${vivid} / ${classic}`);
+console.log(`配色 ${visible.length} 套（缤纷 ${vivid} / 经典 ${classic}），兼容 ${palettes.length - visible.length} 套，最低对比度 ${worstOverall.toFixed(2)}:1`);
 
 if (problems.length > 0) {
   console.error(`\n对比度校验未通过（${problems.length} 项）：`);

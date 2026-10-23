@@ -26,6 +26,11 @@ function skeletonKeys(node: { key: string; children?: { key: string; children?: 
 }
 
 describe('内置模板', () => {
+  it('默认思维导图模板使用黎明配色和白底中心主题', () => {
+    const document = buildTemplateDocument(BUILTIN_TEMPLATES[0]!, i18n.t.bind(i18n));
+    expect(document.theme.id).toBe('vivid-dawn');
+    expect(document.theme.centralTopic?.fill).toBe('#FFFFFF');
+  });
   it('恰好 8 个，且 uid 不重复', () => {
     expect(BUILTIN_TEMPLATES).toHaveLength(8);
     expect(new Set(BUILTIN_TEMPLATES.map((item) => item.uid)).size).toBe(8);

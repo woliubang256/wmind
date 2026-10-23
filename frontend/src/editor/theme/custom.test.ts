@@ -82,16 +82,16 @@ describe('themeFromCustomConfig', () => {
     expect(() => themeFromCustomConfig(entry(config))).not.toThrow();
   });
 
-  it('themeSwatchColors 最多给 6 段', () => {
+  it('themeSwatchColors 可显示 7 色参考色板，最多给 8 段', () => {
     const theme = themeFromCustomConfig(
       entry({
         palette: {
-          colors: ['#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8'],
+          colors: ['#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8', '#9'],
           lineColors: [],
           backgroundColor: '#FFFFFF',
         },
       }),
     );
-    expect(themeSwatchColors(theme)).toHaveLength(6);
+    expect(themeSwatchColors(theme)).toHaveLength(8);
   });
 });

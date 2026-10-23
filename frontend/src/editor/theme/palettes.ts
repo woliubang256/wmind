@@ -1,14 +1,14 @@
 /**
- * 10 套内置配色方案。
+ * 19 套参考配色，以及旧版本的隐藏兼容项。
  *
  * 数据在 `palettes.json`（docs/06 §5.4 要求的「落库为内嵌 JSON」），本文件只做
  * 类型标注与「配色 → 完整 Theme」的装配。分开的理由：色值是**校准产物**，
  * 会被脚本读写（`scripts/check-palette-contrast.mjs`），放在 `.ts` 里脚本就得
  * 解析 TypeScript；放在 `.json` 里两边都能直接读。
  *
- * 每套配色只声明**差异**：6 个分支色 + 中心主题的主色 + 三个角色样式。其余
+ * 每套配色只声明**差异**：分支色 + 中心主题的主色 + 三个角色样式。其余
  * 角色（自由主题、概要、边界、关系线）与布局开关由 `themeFromPalette` 用一份
- * 共享底稿补齐——10 套配色如果各写一遍这些，改一个默认值要改十处。
+ * 共享底稿补齐，避免每套配色重复维护同一份默认值。
  */
 
 import type { Style, Theme, ThemePalette } from '../model/types';
@@ -17,7 +17,10 @@ import data from './palettes.json';
 export interface PaletteDefinition {
   id: string;
   name: string;
+  nameEn: string;
   category: 'vivid' | 'classic';
+  /** 旧版本兼容项：仍可查找和导入，不出现在色板选择器。 */
+  legacy?: boolean;
   /** 分支填充色，按 `branchIndex` 循环。 */
   colors: string[];
   /** 分支线条色，通常与 `colors` 一致。 */
@@ -28,15 +31,18 @@ export interface PaletteDefinition {
   subTopic: Partial<Style>;
 }
 
-export const BUILTIN_PALETTES = data as PaletteDefinition[];
+const ALL_PALETTES = data as PaletteDefinition[];
+
+export const BUILTIN_PALETTES = ALL_PALETTES.filter((palette) => !palette.legacy);
+export const LEGACY_PALETTES = ALL_PALETTES.filter((palette) => palette.legacy);
 
 export const PALETTE_IDS = BUILTIN_PALETTES.map((palette) => palette.id);
 
 /** 默认配色（新建导图用）。 */
-export const DEFAULT_PALETTE_ID = 'classic-rainbow';
+export const DEFAULT_PALETTE_ID = 'vivid-dawn';
 
 export function paletteById(id: string): PaletteDefinition | undefined {
-  return BUILTIN_PALETTES.find((palette) => palette.id === id);
+  return ALL_PALETTES.find((palette) => palette.id === id);
 }
 
 export function paletteOrDefault(id: string | null | undefined): PaletteDefinition {

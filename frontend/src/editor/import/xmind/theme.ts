@@ -2,22 +2,23 @@
  * XMind 主题 → 本项目 Theme。
  *
  * XMind 的主题是「一堆 SVG/CSS 属性的分组」（`map` / `centralTopic` /
- * `mainTopic` / … 每组一个 `properties`），本项目是「10 套校准过的配色方案 +
+ * `mainTopic` / … 每组一个 `properties`），本项目是「校准过的配色方案 +
  * 角色样式」。两者不是同一个模型，所以走两步：
  *
- * 1. **认领一套内置配色**：拿 XMind 主题里的分支色去和 10 套配色比对，
+ * 1. **认领一套内置配色**：拿 XMind 主题里的分支色去和可见及兼容配色比对，
  *    命中率够高就用那一套（这样线条色、背景、角色样式的默认值都是校准过的）；
  * 2. **再叠加显式样式**：XMind 明写的属性覆盖到角色样式上——「保留能映射的
  *    显式样式，调色板回退」是 docs/06 §2.1.3 的原话。
  *
- * 为什么不直接把 XMind 的颜色当调色板：那 10 套配色的对比度是算过的
- * （`npm run check:palette`，最低 4.56:1），随手塞进去的一组颜色大概率不达标，
+ * 为什么不直接把 XMind 的颜色当调色板：内置配色的对比度是算过的
+ * （`npm run check:palette`，至少 4.5:1），随手塞进去的一组颜色可能不达标，
  * 而用户看不出「为什么这张图在某些显示器上字看不清」。
  */
 
 import type { Style, Theme } from '../../model/types';
 import {
   BUILTIN_PALETTES,
+  LEGACY_PALETTES,
   DEFAULT_PALETTE_ID,
   paletteById,
   themeById,
@@ -70,7 +71,7 @@ const MATCH_THRESHOLD = 0.5;
 /**
  * 用分支色去认领一套内置配色。
  *
- * 评分只看**颜色集合的重合度**，不看背景：10 套内置配色背景都是白的，把
+ * 评分只看**颜色集合的重合度**，不看背景：内置配色背景都是白的，把
  * 背景算进去等于所有非白底主题都匹配不上，而背景本来就会在第二步被显式
  * 覆盖掉。
  */
@@ -87,7 +88,7 @@ export function matchPalette(colors: readonly string[]): PaletteMatch {
   let best = fallback;
   let bestScore = 0;
 
-  for (const palette of BUILTIN_PALETTES) {
+  for (const palette of [...BUILTIN_PALETTES, ...LEGACY_PALETTES]) {
     const own = new Set(
       palette.colors.map(normalizeColor).filter((value): value is string => value !== null),
     );

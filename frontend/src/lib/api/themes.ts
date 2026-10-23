@@ -2,7 +2,7 @@
  * 自定义主题接口。
  *
  * 与后端 `handler/themes.go` 的 DTO 一一对应。**只有用户主题走这里**：
- * 10 套内置配色是包内静态资源（`editor/theme/palettes.json`），编辑器首帧
+ * 内置配色是包内静态资源（`editor/theme/palettes.json`），编辑器首帧
  * 就要解析样式，等不了一个请求。见 docs/04 §5.5。
  *
  * `config` 是一整份 `Theme` 对象，不是 `Palette`：用户存的是「现在这个样子」，

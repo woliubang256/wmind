@@ -16,7 +16,7 @@ M3 的最后一项交付是「用户保存 / 复用自定义主题」。开工�
 
 ### 内置配色不进表（ADR-017）
 
-10 套配色只存在于 `frontend/src/editor/theme/palettes.json`。编辑器首帧就要用 `resolveStyle` 给每个节点算填充与字色，等一个请求回来意味着「先白一帧再上色」，离线打开则完全不可用。若表里再种一份，服务端的 `config` 还得用 Go 重写 `themeFromPalette` 的装配逻辑——那是把前端样式体系抄进后端，此后每加一个样式字段都要两边同步，还要额外维护一道一致性闸门。
+内置配色（当前 19 套可见及 2 套隐藏兼容项）只存在于 `frontend/src/editor/theme/palettes.json`。编辑器首帧就要用 `resolveStyle` 给每个节点算填充与字色，等一个请求回来意味着「先白一帧再上色」，离线打开则完全不可用。若表里再种一份，服务端的 `config` 还得用 Go 重写 `themeFromPalette` 的装配逻辑——那是把前端样式体系抄进后端，此后每加一个样式字段都要两边同步，还要额外维护一道一致性闸门。
 
 `themes` 表因此只放用户主题：`owner_id` 恒非空、`is_builtin` 恒为 false。字段与 `THEME_BUILTIN_READONLY` 错误码保留，作为二期「管理员维护内置主题」的口子。
 

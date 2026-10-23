@@ -18,6 +18,8 @@ M3 要交付「样式面板 + 配色面板」，对标截图 3 与截图 4。开
 
 两个 Tab 的边界就是数据边界：样式 Tab 写 `topic.style`（是内容，进撤销栈、进自动保存），画布 Tab 写 `doc.theme`（不碰任何节点）。这样「换配色不丢内容」不需要额外机制，它是两个字段本来就不相交的结果。
 
+配色页内的「缤纷 / 经典」分类 Tab 只切换浏览状态，点击某个色板才写 `doc.theme`。19 套目录、连续色条、分类键盘和旧主题兼容见[参考色板目录](2026-10-23-wmind-reference-palettes.md)。
+
 ### 回显解析后的样式
 
 `StyleTab` 的 `style` 取自 `layout.styles`（布局阶段已经算好的 `ComputedStyle`），不是 `topic.style`。一级分支的填充色是渲染期按 `branchIndex` 从调色板算出来的，`topic.style.fill` 通常是 `undefined`——拿它当显示值，面板会写「继承」而画布上明明是红色。

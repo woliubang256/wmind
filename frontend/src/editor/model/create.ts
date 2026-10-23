@@ -19,7 +19,7 @@ import { newDocumentId, newSheetId, newTopicId } from './ids';
 import { DEFAULT_PALETTE_ID, themeById } from '../theme/palettes';
 
 /**
- * 新建文档用的默认主题（「经典 · 彩虹」）。
+ * 新建文档用的默认主题（「缤纷 · 黎明」）。
  *
  * 主题数据本身在 `theme/palettes.json`——这里是唯一入口，避免「新建文档」和
  * 「配色面板切换」两条路径各自维护一份默认值。

@@ -188,7 +188,13 @@ function branchColor(ctx: StyleContext, theme: Theme, key: 'colors' | 'lineColor
   if (!theme.rainbowBranch) return base[0] ?? null;
   const list = theme.rainbowColors.length > 0 ? theme.rainbowColors : base;
   if (list.length === 0) return null;
-  return list[ctx.branchIndex % list.length] ?? null;
+  const index = ctx.branchIndex % list.length;
+  const color = list[index] ?? null;
+  // 色板里的浅色填充可配更清楚的线条；用户另外指定的彩虹颜色仍直接使用。
+  if (key === 'lineColors' && theme.rainbowColors.length > 0 && color === theme.palette.colors[index]) {
+    return theme.palette.lineColors[index % theme.palette.lineColors.length] ?? color;
+  }
+  return color;
 }
 
 export function computeStyle(topic: Topic, ctx: StyleContext, theme: Theme): ComputedStyle {

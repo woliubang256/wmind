@@ -90,7 +90,7 @@ export function themeFromCustomConfig(entry: CustomThemeSource): Theme {
   return theme;
 }
 
-/** 主题卡片的色带：最多 6 段，与内置配色的缩略图对齐。 */
+/** 主题卡片的色带：最多 8 段，完整显示含 7 色的参考色板。 */
 export function themeSwatchColors(theme: Theme): string[] {
-  return theme.palette.colors.slice(0, 6);
+  return theme.palette.colors.slice(0, 8);
 }

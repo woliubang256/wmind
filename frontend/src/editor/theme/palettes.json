@@ -1,5 +1,921 @@
 [
   {
+    "id": "vivid-dawn",
+    "name": "黎明",
+    "nameEn": "Dawn",
+    "category": "vivid",
+    "colors": [
+      "#FF636B",
+      "#FFA06B",
+      "#95D2B6",
+      "#86DED7",
+      "#7CCEF4",
+      "#DC89E8"
+    ],
+    "lineColors": [
+      "#FF636B",
+      "#FFA06B",
+      "#95D2B6",
+      "#86DED7",
+      "#7CCEF4",
+      "#DC89E8"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-rainbow",
+    "name": "彩虹",
+    "nameEn": "Rainbow",
+    "category": "vivid",
+    "colors": [
+      "#E8545A",
+      "#F5A45E",
+      "#E5D564",
+      "#8AC2A4",
+      "#6BB9CD",
+      "#5B6EC8"
+    ],
+    "lineColors": [
+      "#E8545A",
+      "#F5A45E",
+      "#DDC732",
+      "#8AC2A4",
+      "#6BB9CD",
+      "#5B6EC8"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "vivid-vitality",
+    "name": "活力",
+    "nameEn": "Energy",
+    "category": "vivid",
+    "colors": [
+      "#FFFFFF",
+      "#F3F3F3",
+      "#FF362D",
+      "#FFBF00",
+      "#273ADF",
+      "#0A0C37"
+    ],
+    "lineColors": [
+      "#C6C6C6",
+      "#C6C6C6",
+      "#FF362D",
+      "#FFBF00",
+      "#273ADF",
+      "#0A0C37"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-dance",
+    "name": "舞动",
+    "nameEn": "Dancing",
+    "category": "vivid",
+    "colors": [
+      "#5B50FF",
+      "#F2485E",
+      "#FFF4E8",
+      "#FFFADD",
+      "#AE0021",
+      "#34312A"
+    ],
+    "lineColors": [
+      "#5B50FF",
+      "#F2485E",
+      "#FFB86B",
+      "#E5C300",
+      "#AE0021",
+      "#34312A"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "vivid-code",
+    "name": "代码",
+    "nameEn": "Code",
+    "category": "vivid",
+    "colors": [
+      "#FFF5B6",
+      "#C9FFAE",
+      "#FFFFFF",
+      "#E292FA",
+      "#82B9F7",
+      "#292D33"
+    ],
+    "lineColors": [
+      "#E4C500",
+      "#4BE100",
+      "#C6C6C6",
+      "#E292FA",
+      "#82B9F7",
+      "#292D33"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "vivid-kimono",
+    "name": "和服",
+    "nameEn": "Kimono",
+    "category": "vivid",
+    "colors": [
+      "#FFFFFF",
+      "#FFA4AB",
+      "#FF764C",
+      "#FFAE60",
+      "#84AFFF",
+      "#4D4BEA",
+      "#1E1D59"
+    ],
+    "lineColors": [
+      "#C6C6C6",
+      "#FFA4AB",
+      "#FF764C",
+      "#FFAE60",
+      "#84AFFF",
+      "#4D4BEA",
+      "#1E1D59"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "vivid-island",
+    "name": "岛屿",
+    "nameEn": "Islands",
+    "category": "vivid",
+    "colors": [
+      "#EAC4AA",
+      "#D7AA95",
+      "#B49D84",
+      "#AAAF99",
+      "#858B76",
+      "#646B56"
+    ],
+    "lineColors": [
+      "#EAC4AA",
+      "#D7AA95",
+      "#B49D84",
+      "#AAAF99",
+      "#858B76",
+      "#646B56"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-rose",
+    "name": "玫瑰",
+    "nameEn": "Roses",
+    "category": "vivid",
+    "colors": [
+      "#FFDADE",
+      "#FFB7C4",
+      "#FF8BA9",
+      "#F9618C",
+      "#E74F80",
+      "#A51B49"
+    ],
+    "lineColors": [
+      "#FFB1BA",
+      "#FFB7C4",
+      "#FF8BA9",
+      "#F9618C",
+      "#E74F80",
+      "#A51B49"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "vivid-mint",
+    "name": "薄荷",
+    "nameEn": "Mint",
+    "category": "vivid",
+    "colors": [
+      "#FFFFFF",
+      "#CAFFF9",
+      "#93EBE6",
+      "#5DD2D1",
+      "#06B2B3",
+      "#009799"
+    ],
+    "lineColors": [
+      "#C6C6C6",
+      "#00DEC5",
+      "#3FDBD3",
+      "#5DD2D1",
+      "#06B2B3",
+      "#009799"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-greentea",
+    "name": "绿茶",
+    "nameEn": "Green Tea",
+    "category": "vivid",
+    "colors": [
+      "#D7DBC0",
+      "#B8C29B",
+      "#8B9C68",
+      "#60764B",
+      "#374D31",
+      "#182F20"
+    ],
+    "lineColors": [
+      "#C4CAA3",
+      "#B8C29B",
+      "#8B9C68",
+      "#60764B",
+      "#374D31",
+      "#182F20"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-constancy",
+    "name": "恒久",
+    "nameEn": "Constancy",
+    "category": "classic",
+    "colors": [
+      "#3E4BA9",
+      "#DD323C",
+      "#B8D525",
+      "#00978E",
+      "#238FDB",
+      "#8A22A8"
+    ],
+    "lineColors": [
+      "#3E4BA9",
+      "#DD323C",
+      "#B8D525",
+      "#00978E",
+      "#238FDB",
+      "#8A22A8"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-cream",
+    "name": "奶油",
+    "nameEn": "Cream",
+    "category": "classic",
+    "colors": [
+      "#2497E9",
+      "#414DB1",
+      "#FF4237",
+      "#FF9F00",
+      "#F4CE00",
+      "#009B8F"
+    ],
+    "lineColors": [
+      "#2497E9",
+      "#414DB1",
+      "#FF4237",
+      "#FF9F00",
+      "#F4CE00",
+      "#009B8F"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-flowers",
+    "name": "繁花",
+    "nameEn": "Flowers",
+    "category": "classic",
+    "colors": [
+      "#982D40",
+      "#A3AA30",
+      "#47764F",
+      "#245571",
+      "#204678",
+      "#602A62"
+    ],
+    "lineColors": [
+      "#982D40",
+      "#A3AA30",
+      "#47764F",
+      "#245571",
+      "#204678",
+      "#602A62"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-coral",
+    "name": "珊瑚",
+    "nameEn": "Coral",
+    "category": "classic",
+    "colors": [
+      "#DD767B",
+      "#F3D765",
+      "#B7C348",
+      "#4F91A5",
+      "#A25D9D",
+      "#BB799C"
+    ],
+    "lineColors": [
+      "#DD767B",
+      "#EDC215",
+      "#B7C348",
+      "#4F91A5",
+      "#A25D9D",
+      "#BB799C"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-gorgeous",
+    "name": "华丽",
+    "nameEn": "Gorgeous",
+    "category": "classic",
+    "colors": [
+      "#B83B50",
+      "#EBC846",
+      "#B4BE3E",
+      "#285B99",
+      "#5750A0",
+      "#6F3F8C"
+    ],
+    "lineColors": [
+      "#B83B50",
+      "#EBC846",
+      "#B4BE3E",
+      "#285B99",
+      "#5750A0",
+      "#6F3F8C"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-champagne",
+    "name": "香槟",
+    "nameEn": "Champagne",
+    "category": "classic",
+    "colors": [
+      "#B8A9A2",
+      "#C8C0A5",
+      "#A3B7A9",
+      "#A7B9BE",
+      "#B4B6C1",
+      "#B4A8AF"
+    ],
+    "lineColors": [
+      "#B8A9A2",
+      "#C8C0A5",
+      "#A3B7A9",
+      "#A7B9BE",
+      "#B4B6C1",
+      "#B4A8AF"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-perfume",
+    "name": "香水",
+    "nameEn": "Perfume",
+    "category": "classic",
+    "colors": [
+      "#A29A55",
+      "#679271",
+      "#376B78",
+      "#55577D",
+      "#6E4F73",
+      "#80556A"
+    ],
+    "lineColors": [
+      "#A29A55",
+      "#679271",
+      "#376B78",
+      "#55577D",
+      "#6E4F73",
+      "#80556A"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-zen",
+    "name": "禅意",
+    "nameEn": "Zen",
+    "category": "classic",
+    "colors": [
+      "#FFFFFF",
+      "#EEEEEE",
+      "#D2D2D2",
+      "#8A8A8A",
+      "#414141",
+      "#080808"
+    ],
+    "lineColors": [
+      "#C6C6C6",
+      "#C6C6C6",
+      "#D2D2D2",
+      "#8A8A8A",
+      "#414141",
+      "#080808"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
+    "id": "classic-groove",
+    "name": "律动",
+    "nameEn": "Groove",
+    "category": "classic",
+    "colors": [
+      "#E75745",
+      "#F3973E",
+      "#99B44D",
+      "#45AD98",
+      "#498FDF",
+      "#4859B4",
+      "#CD396F"
+    ],
+    "lineColors": [
+      "#E75745",
+      "#F3973E",
+      "#99B44D",
+      "#45AD98",
+      "#498FDF",
+      "#4859B4",
+      "#CD396F"
+    ],
+    "backgroundColor": "#FFFFFF",
+    "centralTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 24,
+      "fontWeight": 700,
+      "fill": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderWidth": 0,
+      "lineWidth": 3
+    },
+    "mainTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 16,
+      "fontWeight": 500,
+      "borderWidth": 0,
+      "lineWidth": 2
+    },
+    "subTopic": {
+      "shape": "rounded-rect",
+      "fontSize": 14,
+      "fontWeight": 400,
+      "fill": "#FFFFFF",
+      "borderColor": "#BDBDBD",
+      "borderWidth": 1,
+      "lineWidth": 2
+    }
+  },
+  {
     "id": "vivid-entropy",
     "name": "高熵",
     "category": "vivid",
@@ -44,289 +960,9 @@
       "borderColor": "#BDBDBD",
       "borderWidth": 1,
       "lineWidth": 2
-    }
-  },
-  {
-    "id": "vivid-vitality",
-    "name": "活力",
-    "category": "vivid",
-    "colors": [
-      "#FF6B6B",
-      "#FFA94D",
-      "#FFD43B",
-      "#51CF66",
-      "#22B8CF",
-      "#7E57F7"
-    ],
-    "lineColors": [
-      "#FF6B6B",
-      "#FFA94D",
-      "#FFD43B",
-      "#51CF66",
-      "#22B8CF",
-      "#7E57F7"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#7E57F7",
-      "borderColor": "#7E57F7",
-      "borderWidth": 0,
-      "lineWidth": 3
     },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
-  },
-  {
-    "id": "vivid-code",
-    "name": "代码",
-    "category": "vivid",
-    "colors": [
-      "#00B894",
-      "#00CEC9",
-      "#0877CD",
-      "#6C5CE7",
-      "#E17055",
-      "#FDCB6E"
-    ],
-    "lineColors": [
-      "#00B894",
-      "#00CEC9",
-      "#0877CD",
-      "#6C5CE7",
-      "#E17055",
-      "#FDCB6E"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#0877CD",
-      "borderColor": "#0877CD",
-      "borderWidth": 0,
-      "lineWidth": 3
-    },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
-  },
-  {
-    "id": "vivid-island",
-    "name": "岛屿",
-    "category": "vivid",
-    "colors": [
-      "#F4A261",
-      "#E76F51",
-      "#2A9D8F",
-      "#264653",
-      "#E9C46A",
-      "#8AB17D"
-    ],
-    "lineColors": [
-      "#F4A261",
-      "#E76F51",
-      "#2A9D8F",
-      "#264653",
-      "#E9C46A",
-      "#8AB17D"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#264653",
-      "borderColor": "#264653",
-      "borderWidth": 0,
-      "lineWidth": 3
-    },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
-  },
-  {
-    "id": "vivid-mint",
-    "name": "薄荷",
-    "category": "vivid",
-    "colors": [
-      "#2EC4B6",
-      "#A0E7E5",
-      "#B4F8C8",
-      "#FFBF69",
-      "#FF9F1C",
-      "#CBF3F0"
-    ],
-    "lineColors": [
-      "#2EC4B6",
-      "#A0E7E5",
-      "#B4F8C8",
-      "#FFBF69",
-      "#FF9F1C",
-      "#CBF3F0"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#2EC4B6",
-      "borderColor": "#2EC4B6",
-      "borderWidth": 0,
-      "lineWidth": 3
-    },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
-  },
-  {
-    "id": "classic-rainbow",
-    "name": "彩虹",
-    "category": "classic",
-    "colors": [
-      "#EB8589",
-      "#E9B07E",
-      "#DCCD8C",
-      "#96BFA7",
-      "#8BB9CE",
-      "#B5A0CB"
-    ],
-    "lineColors": [
-      "#EB8589",
-      "#E9B07E",
-      "#DCCD8C",
-      "#96BFA7",
-      "#8BB9CE",
-      "#B5A0CB"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#7EA9C0",
-      "borderColor": "#7EA9C0",
-      "borderWidth": 0,
-      "lineWidth": 3
-    },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
-  },
-  {
-    "id": "classic-dance",
-    "name": "舞动",
-    "category": "classic",
-    "colors": [
-      "#FF70A6",
-      "#FF9770",
-      "#FFD670",
-      "#70D6FF",
-      "#B197FC",
-      "#63E6BE"
-    ],
-    "lineColors": [
-      "#FF70A6",
-      "#FF9770",
-      "#FFD670",
-      "#70D6FF",
-      "#B197FC",
-      "#63E6BE"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#B197FC",
-      "borderColor": "#B197FC",
-      "borderWidth": 0,
-      "lineWidth": 3
-    },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
+    "nameEn": "Entropy",
+    "legacy": true
   },
   {
     "id": "classic-breeze",
@@ -373,100 +1009,8 @@
       "borderColor": "#BDBDBD",
       "borderWidth": 1,
       "lineWidth": 2
-    }
-  },
-  {
-    "id": "classic-rose",
-    "name": "玫瑰",
-    "category": "classic",
-    "colors": [
-      "#E75480",
-      "#F06292",
-      "#BA68C8",
-      "#E5175C",
-      "#AD1457",
-      "#F8BBD0"
-    ],
-    "lineColors": [
-      "#E75480",
-      "#F06292",
-      "#BA68C8",
-      "#E5175C",
-      "#AD1457",
-      "#F8BBD0"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#AD1457",
-      "borderColor": "#AD1457",
-      "borderWidth": 0,
-      "lineWidth": 3
     },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
-  },
-  {
-    "id": "classic-greentea",
-    "name": "绿茶",
-    "category": "classic",
-    "colors": [
-      "#7CB342",
-      "#9CCC65",
-      "#AED581",
-      "#C5E1A5",
-      "#4F812C",
-      "#8BC34A"
-    ],
-    "lineColors": [
-      "#7CB342",
-      "#9CCC65",
-      "#AED581",
-      "#C5E1A5",
-      "#4F812C",
-      "#8BC34A"
-    ],
-    "backgroundColor": "#FFFFFF",
-    "centralTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 24,
-      "fontWeight": 700,
-      "fill": "#4F812C",
-      "borderColor": "#4F812C",
-      "borderWidth": 0,
-      "lineWidth": 3
-    },
-    "mainTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 16,
-      "fontWeight": 600,
-      "borderWidth": 0,
-      "lineWidth": 2
-    },
-    "subTopic": {
-      "shape": "rounded-rect",
-      "fontSize": 14,
-      "fontWeight": 400,
-      "fill": "#FFFFFF",
-      "borderColor": "#BDBDBD",
-      "borderWidth": 1,
-      "lineWidth": 2
-    }
+    "nameEn": "Breeze",
+    "legacy": true
   }
 ]

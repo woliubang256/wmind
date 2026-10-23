@@ -1,7 +1,7 @@
 /**
  * 八个内置模板。
  *
- * 它们是**前端静态资源**，不经过服务端，与十套内置配色同一个理由
+ * 它们是**前端静态资源**，不经过服务端，与内置配色同一个理由
  * （见 `db/queries/shared/themes.sql` 的文件头与 ADR-019）：
  *
  * 1. 选择对话框要渲染实时预览，预览需要文档，所以文档必须在请求回来之前就存在；
@@ -55,7 +55,7 @@ export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
     uid: 'mindmap',
     nameKey: 'templates.builtin.mindmap',
     structure: 'mindmap',
-    paletteId: 'classic-rainbow',
+    paletteId: 'vivid-dawn',
     skeleton: { key: 'topic', children: branches(4, 2) },
   },
   {
@@ -76,7 +76,7 @@ export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
     uid: 'brace',
     nameKey: 'templates.builtin.brace',
     structure: 'brace',
-    paletteId: 'classic-breeze',
+    paletteId: 'classic-champagne',
     skeleton: {
       key: 'topic',
       children: Array.from({ length: 4 }, (_, index) => ({

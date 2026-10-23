@@ -54,14 +54,14 @@ describe('matchPalette', () => {
   it('几乎不重合时回退到默认配色', () => {
     const match = matchPalette(['#111111', '#222222']);
     expect(match.matched).toBe(false);
-    expect(match.palette.id).toBe('classic-rainbow');
+    expect(match.palette.id).toBe('vivid-dawn');
   });
 
   it('没有颜色时回退', () => {
     const match = matchPalette([]);
     expect(match.matched).toBe(false);
     expect(match.score).toBe(0);
-    expect(match.palette.id).toBe('classic-rainbow');
+    expect(match.palette.id).toBe('vivid-dawn');
   });
 });
 
@@ -82,7 +82,7 @@ describe('toTheme', () => {
   it('对不上配色时回退并提示', () => {
     const handle = ctxOf();
     const theme = toTheme({ map: { properties: { 'multi-line-colors': '#111111 #222222' } } }, handle.context);
-    expect(theme?.id).toBe('classic-rainbow');
+    expect(theme?.id).toBe('vivid-dawn');
     expect(handle.warnings).toEqual([{ code: 'palette-fallback' }]);
   });
 
