@@ -418,7 +418,10 @@
     "insert": "插入主题",
     "addSibling": "新建同级主题",
     "hint.insert": "选择创建同级主题或子主题",
-    "hint.rootSibling": "根主题没有同级，请创建子主题"
+    "hint.rootSibling": "根主题没有同级，请创建子主题",
+    "annotation.resetRouting": "恢复自动走向",
+    "annotation.routingControl": "联系线控制点 {{index}}",
+    "annotation.routingHint": "拖动调整走向；方向键移动，Shift 精细调整；Esc 取消拖动"
   },
   "import": {
     "title": "导入",

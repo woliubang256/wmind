@@ -18,7 +18,7 @@
  */
 
 import { collectBoundaries, collectSummaries } from '../model/traverse';
-import type { Boundary, LineEnd, LineStyle, Relationship, Sheet, Style, Summary, Theme } from '../model/types';
+import type { Boundary, LineEnd, LineStyle, Relationship, RelationshipRouting, Sheet, Style, Summary, Theme } from '../model/types';
 import { measureText } from './measure';
 import type { ComputedStyle } from '../model/types';
 import type { LayoutResult, Point, Rect } from './types';
@@ -81,6 +81,8 @@ export interface RelationshipAnnotation {
   from: Point;
   to: Point;
   control: Point;
+  controls: Point[];
+  lineStyle: LineStyle;
   label: Point;
   color: string;
   width: number;
@@ -263,7 +265,7 @@ function onRectEdge(rect: Rect, toward: Point): Point {
   return { x: center.x + dx * factor, y: center.y + dy * factor };
 }
 
-function relationshipGeometry(fromBox: Rect, toBox: Rect, lineStyle: LineStyle) {
+function automaticRelationshipGeometry(fromBox: Rect, toBox: Rect, lineStyle: LineStyle) {
   const arc = relationshipArc(fromBox, toBox);
   const startToward = lineStyle === 'straight' ? arc.to : lineStyle === 'elbow' ? { x: arc.control.x, y: arc.from.y } : arc.control;
   const endToward = lineStyle === 'straight' ? arc.from : lineStyle === 'elbow' ? { x: arc.control.x, y: arc.to.y } : arc.control;
@@ -289,6 +291,35 @@ function relationshipGeometry(fromBox: Rect, toBox: Rect, lineStyle: LineStyle) 
       ? ` L ${arc.control.x} ${from.y} L ${arc.control.x} ${to.y} L ${to.x} ${to.y}`
       : ` L ${to.x} ${to.y}`);
   return { from, to, control: arc.control, label, path, startAngle: angle(from, startToward), endAngle: angle(to, endToward) };
+}
+
+/** 手动走向与自动走向共享端点裁剪、标题、包围盒和导出。 */
+function relationshipGeometry(fromBox: Rect, toBox: Rect, lineStyle: LineStyle, routing?: RelationshipRouting) {
+  const automatic = automaticRelationshipGeometry(fromBox, toBox, lineStyle);
+  const center = (box: Rect) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  const a = center(fromBox), b = center(toBox);
+  const interpolate = (from: Point, to: Point, t: number) => ({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+  if (!routing || lineStyle === 'straight') {
+    const controls = lineStyle === 'elbow' ? [automatic.label] : lineStyle === 'straight'
+      ? [interpolate(automatic.from, automatic.to, 1 / 3), interpolate(automatic.from, automatic.to, 2 / 3)]
+      : [interpolate(automatic.from, automatic.control, 2 / 3), interpolate(automatic.to, automatic.control, 2 / 3)];
+    return { ...automatic, controls, lineStyle };
+  }
+  const c1 = { x: a.x + routing.start.x, y: a.y + routing.start.y };
+  const c2 = { x: b.x + routing.end.x, y: b.y + routing.end.y };
+  const elbow = lineStyle === 'elbow';
+  let startToward = elbow ? (Math.abs(c1.x - a.x) < 0.001 ? { x: a.x, y: c1.y } : { x: c1.x, y: a.y }) : c1;
+  let endToward = elbow ? (Math.abs(c1.y - b.y) < 0.001 ? { x: c1.x, y: b.y } : { x: b.x, y: c1.y }) : c2;
+  if (Math.hypot(startToward.x - a.x, startToward.y - a.y) < 0.001) startToward = b;
+  if (Math.hypot(endToward.x - b.x, endToward.y - b.y) < 0.001) endToward = a;
+  const from = onRectEdge(fromBox, startToward), to = onRectEdge(toBox, endToward);
+  const label = elbow ? c1 : { x: (from.x + 3 * c1.x + 3 * c2.x + to.x) / 8, y: (from.y + 3 * c1.y + 3 * c2.y + to.y) / 8 };
+  const path = `M ${from.x} ${from.y}` + (elbow
+    ? ` L ${c1.x} ${from.y} L ${c1.x} ${c1.y} L ${to.x} ${c1.y} L ${to.x} ${to.y}`
+    : ` C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${to.x} ${to.y}`);
+  const angle = (point: Point, toward: Point) => Math.atan2(point.y - toward.y, point.x - toward.x) * 180 / Math.PI;
+  return { from, to, control: c1, controls: elbow ? [c1] : [c1, c2], label, path, lineStyle,
+    startAngle: angle(from, startToward), endAngle: angle(to, endToward) };
 }
 
 /** 范围里能对上盒子的那些（折叠的、被删掉的 id 直接忽略）。 */
@@ -354,12 +385,14 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
     if (from === undefined || to === undefined) continue;
     const style = relationshipStyle(theme, relationship.style);
     if (style.lineStyle === 'none') continue;
-    const arc = relationshipGeometry(from, to, style.lineStyle);
+    const arc = relationshipGeometry(from, to, style.lineStyle, relationship.routing);
     const measured = measureText(relationship.title, { family: 'sans', size: 12, weight: 400, italic: false }, Infinity);
-    const minX = Math.min(arc.from.x, arc.to.x, arc.control.x);
-    const minY = Math.min(arc.from.y, arc.to.y, arc.control.y);
+    const xs = [arc.from.x, arc.to.x, arc.control.x, ...arc.controls.map((point) => point.x)];
+    const ys = [arc.from.y, arc.to.y, arc.control.y, ...arc.controls.map((point) => point.y)];
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
     const bounds = unionRect([
-      { x: minX, y: minY, width: Math.max(arc.from.x, arc.to.x, arc.control.x) - minX, height: Math.max(arc.from.y, arc.to.y, arc.control.y) - minY },
+      { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY },
       { x: arc.label.x - measured.width / 2, y: arc.label.y - 18, width: measured.width, height: measured.height },
     ], Math.max(8, style.lineWidth * 4))!;
     relationships.push({

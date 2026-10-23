@@ -41,6 +41,7 @@ export interface StructureTabProps {
   onRename: (kind: AnnotationKind, id: string, title: string) => void;
   onRemove: (kind: AnnotationKind, id: string) => void;
   onPatchRelationship: (id: string, patch: Partial<Style>) => void;
+  onResetRelationshipRouting: (id: string) => void;
 }
 
 /** 标题 → 显示用的一行摘要（最多三个名字）。 */
@@ -63,6 +64,7 @@ export function StructureTab({
   onRename,
   onRemove,
   onPatchRelationship,
+  onResetRelationshipRouting,
 }: StructureTabProps) {
   const { t } = useTranslation();
 
@@ -152,7 +154,7 @@ export function StructureTab({
         empty={t('editor.annotation.relationshipEmpty')}
         renderDetails={(row) => {
           const relationship = sheet.relationships.find((item) => item.id === row.id);
-          return relationship ? <RelationshipStyleFields relationship={relationship} theme={theme} onPatch={(patch) => onPatchRelationship(row.id, patch)} /> : null;
+          return relationship ? <RelationshipStyleFields onResetRouting={() => onResetRelationshipRouting(row.id)} relationship={relationship} theme={theme} onPatch={(patch) => onPatchRelationship(row.id, patch)} /> : null;
         }}
       />
     </div>

@@ -88,6 +88,38 @@ describe('relationshipArc', () => {
 });
 
 describe('layoutAnnotations', () => {
+  it('控制柄落在主题中心时端点仍在边缘，箭头不藏进主题', () => {
+    const { sheet, theme } = sheetWith({ relationships: [{ id: 'r', end1Id: 'a1', end2Id: 'b1', title: '', style: { lineStyle: 'curve' },
+      routing: { start: { x: 0, y: 0 }, end: { x: 0, y: 0 } } }] });
+    const layout = layoutMindmap({ sheet, theme });
+    const item = layoutAnnotations(sheet, layout, theme).relationships[0]!;
+    for (const [point, box] of [[item.from, layout.boxes.get('a1')!], [item.to, layout.boxes.get('b1')!]] as const) {
+      expect(Math.min(Math.abs(point!.x - box!.x), Math.abs(point!.x - box!.x - box!.width), Math.abs(point!.y - box!.y), Math.abs(point!.y - box!.y - box!.height))).toBeLessThan(0.001);
+    }
+  });
+  it('手动曲线双控制点随各自端点移动，并纳入导出范围', () => {
+    const { sheet, theme } = sheetWith({ relationships: [{ id: 'r', end1Id: 'a1', end2Id: 'b1', title: '', style: { lineStyle: 'curve' },
+      routing: { start: { x: 500, y: -400 }, end: { x: -100, y: 300 } } }] });
+    const layout = layoutMindmap({ sheet, theme });
+    const first = layoutAnnotations(sheet, layout, theme).relationships[0]!;
+    expect(first.path).toContain(' C ');
+    expect(first.controls).toHaveLength(2);
+    expect(first.bounds.y).toBeLessThan(first.controls[0]!.y);
+    const a = layout.boxes.get('a1')!;
+    layout.boxes.set('a1', { ...a, x: a.x + 70, y: a.y + 30 });
+    const moved = layoutAnnotations(sheet, layout, theme).relationships[0]!;
+    expect(moved.controls[0]).toEqual({ x: first.controls[0]!.x + 70, y: first.controls[0]!.y + 30 });
+    expect(moved.controls[1]).toEqual(first.controls[1]);
+  });
+
+  it('手动折线用控制点改变转折，端点仍沿实际线段裁剪', () => {
+    const { sheet, theme } = sheetWith({ relationships: [{ id: 'r', end1Id: 'a1', end2Id: 'b1', title: '', style: { lineStyle: 'elbow' },
+      routing: { start: { x: 100, y: -200 }, end: { x: 0, y: 0 } } }] });
+    const item = layoutAnnotations(sheet, layoutMindmap({ sheet, theme }), theme).relationships[0]!;
+    expect(item.controls).toHaveLength(1);
+    expect(item.path.match(/ L /g)).toHaveLength(4);
+    expect(item.path).not.toContain('NaN');
+  });
   it.each(['straight', 'curve', 'elbow'] as const)('联系 %s 线支持样式、双端箭头且端点在主题边缘', (lineStyle) => {
     const { sheet, theme } = sheetWith({ relationships: [{
       id: 'r', end1Id: 'a1', end2Id: 'b1', title: '依赖',

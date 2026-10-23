@@ -80,6 +80,12 @@ describe('XMind 包结构', () => {
 });
 
 describe('往返：内容与层级', () => {
+  it('联系走向通过 wmindRouting 扩展往返保留', () => {
+    const doc = fixture();
+    const routing = { start: { x: 100, y: -120 }, end: { x: -100, y: 80 } };
+    doc.sheets[0]!.relationships = [{ id: 'r', end1Id: 'a', end2Id: 'b', title: '', style: null, routing }];
+    expect(exportThenImport(doc).sheet.relationships[0]!.routing).toEqual(routing);
+  });
   it('标题与层级一字不差', () => {
     const { sheet } = exportThenImport(fixture());
     expect(sheet.rootTopic.title).toBe('中心主题');

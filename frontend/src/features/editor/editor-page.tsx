@@ -72,6 +72,7 @@ import {
   summaryTarget as getSummaryTarget,
   summaryForRange,
   updateRelationshipStyleCommand,
+  updateRelationshipRoutingCommand,
   removeAnnotationCommand,
   renameAnnotationCommand,
   type AnnotationKind,
@@ -1061,6 +1062,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                   setPanelOpen(true);
                   setPanelTab('structure');
                 }}
+                onCommitRelationshipRouting={(id, routing, curve) => store.getState().dispatch(updateRelationshipRoutingCommand(id, routing, curve))}
                 onCommitRelationshipTitle={(id, title, restoreFocus) => {
                   if (title !== null) store.getState().dispatch(renameAnnotationCommand('relationship', id, title));
                   if (restoreFocus) canvasRef.current?.focus({ preventScroll: true });
@@ -1125,7 +1127,8 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                     onAddSummary={addSummary}
                     onAddBoundary={addBoundary}
                     onAddRelationship={addRelationship}
-                    onPatchRelationship={(id, patch) => store.getState().dispatch(updateRelationshipStyleCommand(id, patch))}
+                    onResetRelationshipRouting={(id) => store.getState().dispatch(updateRelationshipRoutingCommand(id, null))}
+                  onPatchRelationship={(id, patch) => store.getState().dispatch(updateRelationshipStyleCommand(id, patch))}
                     onRename={(kind, id, title) =>
                       store.getState().dispatch(renameAnnotationCommand(kind, id, title))
                     }

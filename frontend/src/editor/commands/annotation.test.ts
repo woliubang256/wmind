@@ -11,6 +11,7 @@ import {
   renameAnnotationCommand,
   summaryTarget,
   updateRelationshipStyleCommand,
+  updateRelationshipRoutingCommand,
 } from './annotation';
 
 function makeStore() {
@@ -22,6 +23,27 @@ function makeStore() {
 }
 
 const sheetOf = (store: ReturnType<typeof makeStore>) => store.getState().doc.sheets[0]!;
+
+describe('联系手动走向', () => {
+  it('一条调整命令支持撤销重做，恢复自动与非法坐标拒绝', () => {
+    const store = makeStore();
+    store.getState().dispatch(addRelationshipCommand({ fromId: 'a1', toId: 'b1' }));
+    const id = sheetOf(store).relationships[0]!.id;
+    const routing = { start: { x: 100, y: -80 }, end: { x: -100, y: 60 } };
+    const before = store.getState().past.length;
+    store.getState().dispatch(updateRelationshipRoutingCommand(id, routing, true));
+    expect(store.getState().past).toHaveLength(before + 1);
+    expect(sheetOf(store).relationships[0]).toMatchObject({ routing, style: { lineStyle: 'curve' } });
+    store.getState().undo();
+    expect(sheetOf(store).relationships[0]!.routing).toBeUndefined();
+    store.getState().redo();
+    expect(sheetOf(store).relationships[0]!.routing).toEqual(routing);
+    store.getState().dispatch(updateRelationshipRoutingCommand(id, { ...routing, start: { x: Infinity, y: 0 } }));
+    expect(sheetOf(store).relationships[0]!.routing).toEqual(routing);
+    store.getState().dispatch(updateRelationshipRoutingCommand(id, null));
+    expect(sheetOf(store).relationships[0]!.routing).toBeUndefined();
+  });
+});
 
 describe('addSummaryCommand', () => {
   it('跨父级选择完整保留，以最近共同祖先挂载', () => {

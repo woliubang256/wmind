@@ -1,3 +1,4 @@
+import type { AnnotationLayout } from '../layout/annotations';
 /**
  * 查看器（`MindMapViewer`）的对外契约。
  *
@@ -12,7 +13,7 @@
  */
 
 import type { ComponentType, RefObject } from 'react';
-import type { Sheet, Theme } from '../model/types';
+import type { Sheet, Theme, RelationshipRouting } from '../model/types';
 import type { LayoutResult, Point } from '../layout/types';
 
 export interface Viewport {
@@ -58,6 +59,10 @@ export interface ViewerContextValue {
   beginEdit(id: string): void;
   cancelEdit(): void;
   commitTitle(id: string, title: string, options?: CommitTitleOptions): void;
+  annotations: AnnotationLayout;
+  selectedAnnotationId: string | null;
+  previewRelationshipRouting(id: string, routing: RelationshipRouting | null, curve?: boolean): void;
+  commitRelationshipRouting(id: string, routing: RelationshipRouting, curve?: boolean): void;
   selectRelationship(id: string): void;
   beginRelationshipEdit(id: string): void;
   /** 拖拽落定：把一组节点移到新父节点下（`index` 省略表示追加到末尾）。 */

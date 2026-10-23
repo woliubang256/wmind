@@ -3,7 +3,8 @@ import type { Relationship, Style, Theme } from '@/editor/model/types';
 import { relationshipStyle } from '@/editor/layout/annotations';
 import { ColorField, Field, SelectField } from './controls';
 
-export function RelationshipStyleFields({ relationship, theme, onPatch }: {
+export function RelationshipStyleFields({ relationship, theme, onPatch, onResetRouting }: {
+  onResetRouting(): void;
   relationship: Relationship; theme: Theme; onPatch(patch: Partial<Style>): void;
 }) {
   const { t } = useTranslation();
@@ -38,6 +39,8 @@ export function RelationshipStyleFields({ relationship, theme, onPatch }: {
           options={(['none', 'forward', 'reverse', 'both'] as const).map((value) => ({ value, label: t(`editor.annotation.direction.${value}`) }))}
           onChange={(value) => onPatch({ lineStart: value === 'reverse' || value === 'both' ? 'arrow' : 'none', lineEnd: value === 'forward' || value === 'both' ? 'arrow' : 'none' })} />
       </Field>
+      <button type="button" onClick={onResetRouting} disabled={!relationship.routing}
+        className="rounded border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50">{t('editor.annotation.resetRouting')}</button>
       <button type="button" className="self-end rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
         onClick={() => onPatch({ lineColor: undefined, lineWidth: undefined, lineStyle: undefined, borderStyle: undefined, lineStart: undefined, lineEnd: undefined })}>
         {t('editor.panel.style.reset')}

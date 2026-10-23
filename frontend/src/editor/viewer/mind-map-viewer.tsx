@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { layoutMindmap } from '../layout/mindmap';
 import { layoutAnnotations } from '../layout/annotations';
 import type { LayoutResult, NodeBox, Rect } from '../layout/types';
-import type { ComputedStyle, Sheet, Theme } from '../model/types';
+import type { ComputedStyle, Sheet, Theme, RelationshipRouting } from '../model/types';
 import { walkSheet } from '../model/traverse';
 import { fontStack } from '../theme/fonts';
 import { ViewerContext } from './viewer-context';
@@ -55,6 +55,7 @@ export interface MindMapViewerProps {
   onBeginEdit?(id: string): void;
   onCommitTitle?(id: string, title: string, options?: CommitTitleOptions): void;
   onSelectRelationship?(id: string): void;
+  onCommitRelationshipRouting?(id: string, routing: RelationshipRouting, curve: boolean): void;
   onCommitRelationshipTitle?(id: string, title: string | null, restoreFocus: boolean): void;
   onCancelEdit?(): void;
   onMoveTopics?(ids: string[], parentId: string, index?: number): void;
@@ -82,6 +83,7 @@ export function MindMapViewer({
   onCommitTitle,
   onSelectRelationship,
   onCommitRelationshipTitle,
+  onCommitRelationshipRouting,
   onCancelEdit,
   onMoveTopics,
   onDetachTopics,
@@ -92,6 +94,8 @@ export function MindMapViewer({
   ariaLabel,
 }: MindMapViewerProps) {
   const { t } = useTranslation();
+  const [routingDraft, setRoutingDraft] = useState<{ id: string; routing: RelationshipRouting; curve: boolean } | null>(null);
+  useEffect(() => setRoutingDraft(null), [sheet, readOnly]);
   const [editingRelationshipId, setEditingRelationshipId] = useState<string | null>(null);
   useEffect(() => setEditingRelationshipId(null), [sheet.id, readOnly]);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -126,8 +130,9 @@ export function MindMapViewer({
     但位置不变——重算一次是 O(附属结构数量)，与节点数无关。
   */
   const annotations = useMemo(
-    () => layoutAnnotations(sheet, layout, effectiveTheme),
-    [sheet, layout, effectiveTheme],
+    () => layoutAnnotations(routingDraft ? { ...sheet, relationships: sheet.relationships.map((item) => item.id === routingDraft.id
+      ? { ...item, routing: routingDraft.routing, style: routingDraft.curve ? { ...item.style, lineStyle: 'curve' } : item.style } : item) } : sheet, layout, effectiveTheme),
+    [sheet, layout, effectiveTheme, routingDraft],
   );
 
   /*
@@ -236,6 +241,14 @@ export function MindMapViewer({
     setEditingRelationshipId(id);
   }, [readOnly, onSelectRelationship]);
 
+  const previewRelationshipRouting = useCallback((id: string, routing: RelationshipRouting | null, curve = false) => {
+    setRoutingDraft(routing ? { id, routing, curve } : null);
+  }, []);
+  const commitRelationshipRouting = useCallback((id: string, routing: RelationshipRouting, curve = false) => {
+    setRoutingDraft(null);
+    if (!readOnly) onCommitRelationshipRouting?.(id, routing, curve);
+  }, [readOnly, onCommitRelationshipRouting]);
+
   const moveTopics = useCallback(
     (ids: string[], parentId: string, index?: number) => onMoveTopics?.(ids, parentId, index),
     [onMoveTopics],
@@ -265,6 +278,10 @@ export function MindMapViewer({
       beginEdit,
       cancelEdit,
       commitTitle,
+      annotations,
+      selectedAnnotationId,
+      previewRelationshipRouting,
+      commitRelationshipRouting,
       selectRelationship,
       beginRelationshipEdit,
       moveTopics,
@@ -287,6 +304,10 @@ export function MindMapViewer({
       beginEdit,
       cancelEdit,
       commitTitle,
+      annotations,
+      selectedAnnotationId,
+      previewRelationshipRouting,
+      commitRelationshipRouting,
       selectRelationship,
       beginRelationshipEdit,
       moveTopics,

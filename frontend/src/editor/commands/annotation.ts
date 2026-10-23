@@ -1,3 +1,4 @@
+import { parseRelationshipRouting } from '../model/relationship-routing';
 /**
  * 概要 / 边界 / 关系线的新增、改名、删除。
  *
@@ -14,7 +15,7 @@
  */
 
 import { collectSummaries, findTopicInSheet } from '../model/traverse';
-import type { Boundary, Relationship, Sheet, Style, Summary } from '../model/types';
+import type { Boundary, Relationship, Sheet, Style, Summary, RelationshipRouting } from '../model/types';
 import { defineCommand, type EditorCommand } from './types';
 
 export type AnnotationKind = 'summary' | 'boundary' | 'relationship';
@@ -290,6 +291,22 @@ export function updateRelationshipStyleCommand(id: string, patch: Partial<Style>
         else next[key] = patch[key];
       }
       item.style = next as Partial<Style>;
+    },
+  });
+}
+
+/** 拖动仅在松手后落入历史；null 恢复自动走向。 */
+export function updateRelationshipRoutingCommand(id: string, routing: RelationshipRouting | null, curve = false): EditorCommand {
+  return defineCommand({
+    type: 'annotation.routing.relationship', label: '调整联系走向',
+    apply(draft, ctx) {
+      const item = sheetOf(draft, ctx.sheetId)?.relationships.find((entry) => entry.id === id);
+      if (!item) return;
+      if (routing === null) { delete item.routing; return; }
+      const parsed = parseRelationshipRouting(routing);
+      if (!parsed) return;
+      item.routing = parsed;
+      if (curve) item.style = { ...item.style, lineStyle: 'curve' };
     },
   });
 }

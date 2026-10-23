@@ -1,3 +1,4 @@
+import { parseRelationshipRouting } from '../../model/relationship-routing';
 /**
  * XMind 2020+ / 2021+ / 2022+ 的 `content.json` 解析。
  *
@@ -247,6 +248,7 @@ function convertRelationship(raw: unknown, state: SheetState, ctx: ImportContext
     end2Id: end2,
     title: ctx.title(textOf(node.title)),
     style: isRecord(node.style) ? toPartialStyle(node.style.properties, ctx) : null,
+    ...(parseRelationshipRouting(node.wmindRouting) ? { routing: parseRelationshipRouting(node.wmindRouting) } : {}),
   };
 }
 

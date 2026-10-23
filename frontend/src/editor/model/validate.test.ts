@@ -45,6 +45,14 @@ describe('parseDocument 硬失败', () => {
 });
 
 describe('parseDocument 归一化', () => {
+  it('联系走向原生往返保留，非有限控制点退回自动', () => {
+    const doc = createDocument();
+    const routing = { start: { x: 20, y: -50 }, end: { x: -20, y: 50 } };
+    doc.sheets[0]!.relationships = [{ id: 'r', end1Id: 'a', end2Id: 'b', title: '', style: null, routing }];
+    expect(parseDocument(JSON.parse(JSON.stringify(doc))).document.sheets[0]!.relationships[0]!.routing).toEqual(routing);
+    doc.sheets[0]!.relationships[0]!.routing!.start.x = NaN;
+    expect(parseDocument(doc).document.sheets[0]!.relationships[0]!.routing).toBeUndefined();
+  });
   it('补齐缺失的字段', () => {
     const { document } = parseDocument({
       format: 'wmind',

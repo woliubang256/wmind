@@ -159,6 +159,13 @@ export interface Relationship {
   end2Id: string;
   title: string;
   style: Partial<Style> | null;
+  /** 相对起点 / 终点主题中心的控制柄偏移。缺省为自动走向。 */
+  routing?: RelationshipRouting;
+}
+
+export interface RelationshipRouting {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
 }
 
 export interface Boundary {

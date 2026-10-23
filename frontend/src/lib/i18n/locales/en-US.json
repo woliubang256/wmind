@@ -418,7 +418,10 @@
     "insert": "Insert topic",
     "addSibling": "Add sibling topic",
     "hint.insert": "Choose a sibling topic or a subtopic",
-    "hint.rootSibling": "The root has no siblings. Add a subtopic instead."
+    "hint.rootSibling": "The root has no siblings. Add a subtopic instead.",
+    "annotation.resetRouting": "Reset routing",
+    "annotation.routingControl": "Relationship control point {{index}}",
+    "annotation.routingHint": "Drag to adjust; arrow keys to move, Shift for fine adjustments; Esc to cancel dragging"
   },
   "import": {
     "title": "Import",

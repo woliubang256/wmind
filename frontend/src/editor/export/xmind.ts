@@ -372,6 +372,7 @@ function sheetToXmind(
       return {
         id: relationship.id,
         class: 'relationship',
+        ...(relationship.routing ? { wmindRouting: relationship.routing } : {}),
         end1Id: relationship.end1Id,
         end2Id: relationship.end2Id,
         ...(relationship.title === '' ? {} : { title: relationship.title }),

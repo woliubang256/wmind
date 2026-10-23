@@ -1,3 +1,4 @@
+import { parseRelationshipRouting } from './relationship-routing';
 /**
  * 文档解析与归一化。
  *
@@ -348,6 +349,7 @@ function parseRelationship(input: unknown, index: number, warnings: string[]): R
     end2Id: end2,
     title: asString(input.title),
     style: parsePartialStyle(input.style, `relationships[${index}].style`, warnings),
+    ...(parseRelationshipRouting(input.routing) ? { routing: parseRelationshipRouting(input.routing) } : {}),
   };
 }
 
