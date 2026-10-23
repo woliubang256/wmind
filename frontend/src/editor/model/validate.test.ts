@@ -145,6 +145,13 @@ describe('parseDocument 归一化', () => {
     expect(document.sheets[0]!.relationships.map((r) => r.id)).toEqual(['r3']);
   });
 
+  it('联系的起终点箭头样式经原生文档解析仍保留', () => {
+    const input = minimal();
+    (input.sheets as Record<string, unknown>[])[0]!.relationships = [{ id: 'r', end1Id: 'a', end2Id: 'b', style: { lineStart: 'arrow', lineEnd: 'none', lineColor: '#123456' } }];
+    const { document } = parseDocument(JSON.parse(JSON.stringify(input)));
+    expect(document.sheets[0]!.relationships[0]!.style).toEqual({ lineStart: 'arrow', lineEnd: 'none', lineColor: '#123456' });
+  });
+
   it('空范围 / 空挂载点的 boundary 与 summary 被丢弃', () => {
     const input = minimal();
     (input.sheets as Record<string, unknown>[])[0]!.boundaries = [{ id: 'b1', range: [] }];

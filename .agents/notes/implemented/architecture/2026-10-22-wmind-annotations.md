@@ -29,6 +29,8 @@ XMind 里最常用的三种注释手段，wmind 一个都没有：
 
 概要选区、左右方向和避让由[概要完整选区修复](../../implemented/bug-fix/2026-10-23-wmind-summary-selection-placement.md)部分替代；下文固定右侧的尺寸表描述原设计，其余分层和读写契约保留。
 
+联系的画布编辑、样式、箭头和包围盒由[联系线编辑](../../implemented/feature/2026-10-23-wmind-relationship-editing.md)部分替代；下文联系不计包围盒、没有箭头的描述属于原设计。
+
 **几何单独一层，不进 `layoutMindmap`。**
 
 新增 `editor/layout/annotations.ts`，输入是「算好的主题布局 + 文档」，输出一份

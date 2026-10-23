@@ -68,6 +68,7 @@ import {
   addSummaryCommand,
   summaryTarget as getSummaryTarget,
   summaryForRange,
+  updateRelationshipStyleCommand,
   removeAnnotationCommand,
   renameAnnotationCommand,
   type AnnotationKind,
@@ -455,6 +456,9 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     store.getState().dispatch(
       addRelationshipCommand({ fromId: selection[0] ?? '', toId: selection[1] ?? '' }),
     );
+    const state = store.getState();
+    const item = sheetById(state.doc, state.sheetId).relationships.at(-1);
+    if (item) setActiveAnnotation({ kind: 'relationship', id: item.id });
     setPanelOpen(true);
     setPanelTab('structure');
   }, [selection, store]);
@@ -1046,9 +1050,20 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                 onViewportChange={setViewport}
                 selection={selectionSet}
                 editingId={preview ? null : editingId}
-                selectedAnnotationId={activeAnnotation?.id ?? null}
+                selectedAnnotationId={preview ? null : activeAnnotation?.id ?? null}
                 ariaLabel={doc.title}
-                onSelectionChange={(ids) => store.getState().select(ids)}
+                onSelectionChange={(ids) => { store.getState().select(ids); setActiveAnnotation(null); }}
+                onSelectRelationship={(id) => {
+                  store.getState().select([]);
+                  store.getState().setEditing(null);
+                  setActiveAnnotation({ kind: 'relationship', id });
+                  setPanelOpen(true);
+                  setPanelTab('structure');
+                }}
+                onCommitRelationshipTitle={(id, title, restoreFocus) => {
+                  if (title !== null) store.getState().dispatch(renameAnnotationCommand('relationship', id, title));
+                  if (restoreFocus) canvasRef.current?.focus({ preventScroll: true });
+                }}
                 onToggleCollapse={(id) => store.getState().dispatch(toggleCollapseCommand(id))}
                 onBeginEdit={(id) => store.getState().setEditing(id)}
                 onCancelEdit={() => {
@@ -1102,12 +1117,14 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                 {panelTab === 'structure' ? (
                   <StructureTab
                     sheet={sheet}
+                    theme={sheet.themeOverride ?? doc.theme}
                     selection={selection}
                     activeId={activeAnnotation?.id ?? null}
                     onActivate={(kind, id) => setActiveAnnotation(id === null ? null : { kind, id })}
                     onAddSummary={addSummary}
                     onAddBoundary={addBoundary}
                     onAddRelationship={addRelationship}
+                    onPatchRelationship={(id, patch) => store.getState().dispatch(updateRelationshipStyleCommand(id, patch))}
                     onRename={(kind, id, title) =>
                       store.getState().dispatch(renameAnnotationCommand(kind, id, title))
                     }

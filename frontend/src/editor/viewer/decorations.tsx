@@ -5,8 +5,8 @@
  *
  * - 边界要在连线**下面**（它是一块背景区域）；
  * - 关系线在连线**上面**（否则会被密集的分支线盖住）；
- * - 概要贴着被概要范围的右缘，跟主题同一层，但要画在主题**之前**——
- *   概要节点永远在范围右侧，不重叠，但括号的横臂会伸进节点之间。
+ * - 概要按分支方向向外避让，跟主题同一层，但要画在主题**之前**——
+ *   括号的横臂会伸进节点之间。
  *
  * 几何全部来自 `layout/annotations.ts`，这里只把坐标画出来：不测量、不算并集、
  * 不猜样式。导出与缩略图走的是同一份 `AnnotationLayout`，所以「导出的图与
@@ -14,6 +14,8 @@
  */
 
 import type { AnnotationLayout, SummaryAnnotation } from '../layout/annotations';
+import type { LineEnd } from '../model/types';
+import type { Point } from '../layout/types';
 
 /** 选中态的高亮色。用 `currentColor` 拿不到主题变量，这里取一个中性蓝。 */
 const SELECTED = '#2563EB';
@@ -67,24 +69,44 @@ export function BoundariesLayer({
 export function RelationshipsLayer({
   annotations,
   selectedId = null,
+  interactive = false,
+  interactiveLabel = 'Relationship',
 }: {
   annotations: AnnotationLayout;
   selectedId?: string | null;
+  interactive?: boolean;
+  interactiveLabel?: string;
 }) {
   return (
     <g className="layer-relationships">
       {annotations.relationships.map((relationship) => {
         const selected = selectedId === relationship.id;
-        const color = selected ? SELECTED : relationship.color;
+        const color = relationship.color;
         return (
-          <g key={relationship.id} data-relationship-id={relationship.id}>
+          <g
+            key={relationship.id}
+            data-relationship-id={relationship.id}
+            role={interactive ? 'button' : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            aria-label={interactive ? relationship.title || interactiveLabel : undefined}
+            aria-pressed={interactive ? selected : undefined}
+            className={interactive ? 'cursor-pointer outline-none focus-visible:opacity-70' : undefined}
+          >
+            {interactive ? (
+              <path data-relationship-hit="" d={relationship.path} fill="none" stroke="transparent"
+                strokeWidth={Math.max(14, relationship.width + 8)} vectorEffect="non-scaling-stroke" pointerEvents="stroke" />
+            ) : null}
+            {selected ? <path d={relationship.path} fill="none" stroke={SELECTED} strokeWidth={relationship.width + 6} opacity={0.22} pointerEvents="none" /> : null}
             <path
-              d={`M ${relationship.from.x} ${relationship.from.y} Q ${relationship.control.x} ${relationship.control.y} ${relationship.to.x} ${relationship.to.y}`}
+              data-relationship-path=""
+              d={relationship.path}
               fill="none"
               stroke={color}
-              strokeWidth={selected ? relationship.width + 1 : relationship.width}
+              strokeWidth={relationship.width}
               strokeDasharray={relationship.dash}
             />
+            <RelationshipEnd kind={relationship.lineStart} point={relationship.from} angle={relationship.startAngle} color={color} width={relationship.width} end="start" />
+            <RelationshipEnd kind={relationship.lineEnd} point={relationship.to} angle={relationship.endAngle} color={color} width={relationship.width} end="end" />
             {relationship.title ? (
               <text
                 x={relationship.label.x}
@@ -104,6 +126,16 @@ export function RelationshipsLayer({
       })}
     </g>
   );
+}
+
+function RelationshipEnd({ kind, point, angle, color, width, end }: {
+  kind: LineEnd; point: Point; angle: number; color: string; width: number; end: 'start' | 'end';
+}) {
+  if (kind === 'none') return null;
+  if (kind === 'dot') return <circle data-relationship-end={end} cx={point.x} cy={point.y} r={Math.max(2, width * 1.4)} fill={color} />;
+  const size = Math.max(7, width * 3);
+  return <polygon data-relationship-end={end} points={`0,0 ${-size},${-size / 2} ${-size},${size / 2}`}
+    transform={`translate(${point.x} ${point.y}) rotate(${angle})`} fill={color} />;
 }
 
 export function SummariesLayer({

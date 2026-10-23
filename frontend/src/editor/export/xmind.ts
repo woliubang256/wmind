@@ -33,10 +33,12 @@ import type {
   Sheet,
   StructureClass,
   Summary,
+  Theme,
   Topic,
   WmindDocument,
 } from '../model/types';
 import { collectBoundaries, collectSummaries } from '../model/traverse';
+import { relationshipStyle } from '../layout/annotations';
 import type { ExportContext } from './context';
 
 // ---------------------------------------------------------------------------
@@ -331,6 +333,7 @@ function groupSummaries(sheet: Sheet): Map<string, Summary[]> {
 
 function sheetToXmind(
   sheet: Sheet,
+  theme: Theme,
   styles: ReadonlyMap<string, ComputedStyle>,
   images: ReadonlyMap<string, string>,
   bag: ResourceBag,
@@ -364,13 +367,24 @@ function sheetToXmind(
     class: 'sheet',
     title: sheet.title,
     rootTopic: root,
-    relationships: sheet.relationships.map((relationship) => ({
-      id: relationship.id,
-      class: 'relationship',
-      end1Id: relationship.end1Id,
-      end2Id: relationship.end2Id,
-      ...(relationship.title === '' ? {} : { title: relationship.title }),
-    })),
+    relationships: sheet.relationships.map((relationship) => {
+      const style = relationshipStyle(theme, relationship.style);
+      return {
+        id: relationship.id,
+        class: 'relationship',
+        end1Id: relationship.end1Id,
+        end2Id: relationship.end2Id,
+        ...(relationship.title === '' ? {} : { title: relationship.title }),
+        style: { properties: {
+          'border-line-color': style.lineColor,
+          'border-line-width': String(style.lineWidth),
+          'border-line-pattern': LINE_PATTERN[style.lineStyle],
+          'line-pattern': style.borderStyle,
+          'line-start-marker': style.lineStart,
+          'line-end-marker': style.lineEnd,
+        } },
+      };
+    }),
   };
 }
 
@@ -434,7 +448,7 @@ export function buildXmind(
   const bag: ResourceBag = { files: {}, refs: new Map(), skipped: 0 };
 
   const sheets = ctx.sheets.map((item) =>
-    sheetToXmind(item.sheet, item.layout.styles, images, bag),
+    sheetToXmind(item.sheet, item.theme, item.layout.styles, images, bag),
   );
 
   const topics = countTopics(ctx);

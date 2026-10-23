@@ -179,6 +179,7 @@ function parsePartialStyle(
   if ('autoWidth' in input) out.autoWidth = asBoolean(input.autoWidth, true);
   if ('lineStyle' in input) out.lineStyle = pickEnum(input.lineStyle, LINE_STYLES, 'curve', `${path}.lineStyle`, warnings);
   if ('lineEnd' in input) out.lineEnd = pickEnum(input.lineEnd, LINE_ENDS, 'none', `${path}.lineEnd`, warnings);
+  if ('lineStart' in input) out.lineStart = pickEnum(input.lineStart, LINE_ENDS, 'none', `${path}.lineStart`, warnings);
   if ('lineWidth' in input) out.lineWidth = clamp(asFiniteNumber(input.lineWidth, 2), 0, 24);
   if ('lineColor' in input) out.lineColor = pickColor(input.lineColor, '#000000', `${path}.lineColor`, warnings) ?? '#000000';
   if ('rainbowBranch' in input) out.rainbowBranch = asBoolean(input.rainbowBranch, false);

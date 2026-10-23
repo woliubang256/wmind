@@ -11,11 +11,12 @@
  *
  * 边界在最下是因为它是一块底色；关系线在父子连线之上是因为它通常是
  * 跨分支的细线，被密集的分支线盖住就看不见了。概要在主题之前、关系线之后：
- * 概要节点挂在范围的右侧，正常情况下不与主题重叠，但它的括号横臂会伸进
+ * 概要节点在范围外侧避让主题，但它的括号横臂会伸进
  * 兄弟节点之间的空隙，画在主题之前才不会被节点挡住起点。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { layoutMindmap } from '../layout/mindmap';
 import { layoutAnnotations } from '../layout/annotations';
@@ -28,6 +29,7 @@ import type { CommitTitleOptions, ViewerContextValue, ViewerPlugin, Viewport } f
 import { EdgesLayer, TopicsLayer } from './layers';
 import { BoundariesLayer, RelationshipsLayer, SummariesLayer } from './decorations';
 import { CULL_THRESHOLD } from './cull';
+import { RelationshipEditor } from './relationship-editor';
 
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
 
@@ -52,6 +54,8 @@ export interface MindMapViewerProps {
   onToggleCollapse?(id: string): void;
   onBeginEdit?(id: string): void;
   onCommitTitle?(id: string, title: string, options?: CommitTitleOptions): void;
+  onSelectRelationship?(id: string): void;
+  onCommitRelationshipTitle?(id: string, title: string | null, restoreFocus: boolean): void;
   onCancelEdit?(): void;
   onMoveTopics?(ids: string[], parentId: string, index?: number): void;
   onDetachTopics?(ids: string[]): void;
@@ -76,6 +80,8 @@ export function MindMapViewer({
   onToggleCollapse,
   onBeginEdit,
   onCommitTitle,
+  onSelectRelationship,
+  onCommitRelationshipTitle,
   onCancelEdit,
   onMoveTopics,
   onDetachTopics,
@@ -85,6 +91,9 @@ export function MindMapViewer({
   className,
   ariaLabel,
 }: MindMapViewerProps) {
+  const { t } = useTranslation();
+  const [editingRelationshipId, setEditingRelationshipId] = useState<string | null>(null);
+  useEffect(() => setEditingRelationshipId(null), [sheet.id, readOnly]);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [innerViewport, setInnerViewport] = useState<Viewport>(
     initialViewport ?? { x: 0, y: 0, zoom: 1 },
@@ -207,7 +216,7 @@ export function MindMapViewer({
   );
 
   const beginEdit = useCallback(
-    (id: string) => onBeginEdit?.(id),
+    (id: string) => { setEditingRelationshipId(null); onBeginEdit?.(id); },
     [onBeginEdit],
   );
 
@@ -217,6 +226,15 @@ export function MindMapViewer({
       onCommitTitle?.(id, title, options),
     [onCommitTitle],
   );
+
+  const selectRelationship = useCallback((id: string) => {
+    if (!readOnly) onSelectRelationship?.(id);
+  }, [readOnly, onSelectRelationship]);
+  const beginRelationshipEdit = useCallback((id: string) => {
+    if (readOnly) return;
+    onSelectRelationship?.(id);
+    setEditingRelationshipId(id);
+  }, [readOnly, onSelectRelationship]);
 
   const moveTopics = useCallback(
     (ids: string[], parentId: string, index?: number) => onMoveTopics?.(ids, parentId, index),
@@ -247,6 +265,8 @@ export function MindMapViewer({
       beginEdit,
       cancelEdit,
       commitTitle,
+      selectRelationship,
+      beginRelationshipEdit,
       moveTopics,
       detachTopics,
     }),
@@ -267,6 +287,8 @@ export function MindMapViewer({
       beginEdit,
       cancelEdit,
       commitTitle,
+      selectRelationship,
+      beginRelationshipEdit,
       moveTopics,
       detachTopics,
     ],
@@ -275,6 +297,7 @@ export function MindMapViewer({
   const editingBox = editingId ? layout.boxes.get(editingId) : undefined;
   const editingStyle = editingId ? layout.styles.get(editingId) : undefined;
   const editingSize = editingId ? layout.sizes.get(editingId) : undefined;
+  const editingRelationship = annotations.relationships.find((item) => item.id === editingRelationshipId);
 
   /*
     裁剪矩形（世界坐标）。`null` 表示不裁剪：小图不裁剪更快（多一次全量遍历
@@ -331,7 +354,7 @@ export function MindMapViewer({
 
             <EdgesLayer edges={layout.edges} cullRect={cullRect} />
 
-            <RelationshipsLayer annotations={annotations} selectedId={selectedAnnotationId} />
+            <RelationshipsLayer annotations={annotations} selectedId={selectedAnnotationId} interactive={!readOnly && Boolean(onSelectRelationship)} interactiveLabel={t('editor.annotation.relationship')} />
 
             <SummariesLayer annotations={annotations} selectedId={selectedAnnotationId} />
 
@@ -352,6 +375,14 @@ export function MindMapViewer({
             </g>
           </g>
         </svg>
+
+        {!readOnly && editingRelationship && onCommitRelationshipTitle ? (
+          <RelationshipEditor key={editingRelationship.id} title={editingRelationship.title} label={editingRelationship.label} viewport={viewport}
+            onFinish={(value, restoreFocus) => {
+              onCommitRelationshipTitle(editingRelationship.id, value, restoreFocus);
+              setEditingRelationshipId(null);
+            }} />
+        ) : null}
 
         {!readOnly && editingBox && editingStyle && onCommitTitle ? (
           <EditingOverlay

@@ -14,6 +14,7 @@ import { SelectionPlugin } from './selection';
 import { EditingPlugin } from './editing';
 import { DragPlugin } from './drag';
 import { MarqueePlugin } from './marquee';
+import { RelationshipsPlugin } from './relationships';
 
 /** 分享页：只能看、只能缩放折叠。 */
 export const READ_ONLY_PLUGINS: ViewerPlugin[] = [
@@ -31,6 +32,7 @@ export const EDITOR_PLUGINS: ViewerPlugin[] = [
   { key: 'pan-zoom', Overlay: PanZoomPlugin },
   { key: 'collapse', Overlay: CollapsePlugin },
   { key: 'selection', Overlay: SelectionPlugin },
+  { key: 'relationships', Overlay: RelationshipsPlugin },
   { key: 'editing', Overlay: EditingPlugin },
   { key: 'drag', Overlay: DragPlugin },
   { key: 'marquee', Overlay: MarqueePlugin },

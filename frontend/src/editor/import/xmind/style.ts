@@ -140,5 +140,10 @@ export function toPartialStyle(input: unknown, ctx: ImportContext): Partial<Styl
     if (mapped !== undefined) out.lineStyle = mapped;
   }
 
+  const starts = readEnum(properties, 'line-start-marker', ['none', 'arrow', 'dot'] as const);
+  if (starts !== undefined) out.lineStart = starts;
+  const ends = readEnum(properties, 'line-end-marker', ['none', 'arrow', 'dot'] as const);
+  if (ends !== undefined) out.lineEnd = ends;
+
   return out;
 }

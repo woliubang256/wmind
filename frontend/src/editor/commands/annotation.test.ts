@@ -10,6 +10,7 @@ import {
   removeAnnotationCommand,
   renameAnnotationCommand,
   summaryTarget,
+  updateRelationshipStyleCommand,
 } from './annotation';
 
 function makeStore() {
@@ -116,6 +117,13 @@ describe('addRelationshipCommand', () => {
 });
 
 describe('renameAnnotationCommand', () => {
+  it('联系可以清空标题，仍能通过线条重新编辑', () => {
+    const store = makeStore();
+    store.getState().dispatch(addRelationshipCommand({ fromId: 'a1', toId: 'b1', title: '旧' }));
+    const id = sheetOf(store).relationships[0]!.id;
+    store.getState().dispatch(renameAnnotationCommand('relationship', id, ''));
+    expect(sheetOf(store).relationships[0]!.title).toBe('');
+  });
   it('概要两处都改名，读取侧不会看到旧标题', () => {
     const store = makeStore();
     store.getState().dispatch(addSummaryCommand({ topicId: 'a', range: ['a1'], title: '旧' }));
@@ -144,6 +152,35 @@ describe('renameAnnotationCommand', () => {
     const id = collectBoundaries(sheetOf(store))[0]!.id;
     store.getState().dispatch(renameAnnotationCommand('boundary', id, '   '));
     expect(annotationTitle(sheetOf(store), 'boundary', id)).toBe('保留');
+  });
+});
+
+describe('updateRelationshipStyleCommand', () => {
+  it('只改联系样式并可撤销重做，端点身份不变', () => {
+    const store = makeStore();
+    store.getState().dispatch(addRelationshipCommand({ fromId: 'a1', toId: 'b1' }));
+    const id = sheetOf(store).relationships[0]!.id;
+    const patch = { lineColor: '#E32925', lineWidth: 4, lineStart: 'arrow', lineEnd: 'arrow', lineStyle: 'elbow', borderStyle: 'solid' } as const;
+    const topicStyle = findTopic(store.getState().doc, 'a1')!.topic.style;
+    store.getState().dispatch(updateRelationshipStyleCommand(id, patch));
+    expect(sheetOf(store).relationships[0]!.style).toEqual(patch);
+    expect(findTopic(store.getState().doc, 'a1')!.topic.style).toBe(topicStyle);
+    store.getState().undo();
+    expect(sheetOf(store).relationships[0]!.style).toBeNull();
+    store.getState().redo();
+    expect(sheetOf(store).relationships[0]).toMatchObject({ end1Id: 'a1', end2Id: 'b1', style: patch });
+  });
+
+  it('重复补丁不产生历史，undefined 恢复继承', () => {
+    const store = makeStore();
+    store.getState().dispatch(addRelationshipCommand({ fromId: 'a1', toId: 'b1' }));
+    const id = sheetOf(store).relationships[0]!.id;
+    store.getState().dispatch(updateRelationshipStyleCommand(id, { lineWidth: 4 }));
+    const before = store.getState().doc;
+    store.getState().dispatch(updateRelationshipStyleCommand(id, { lineWidth: 4 }));
+    expect(store.getState().doc).toBe(before);
+    store.getState().dispatch(updateRelationshipStyleCommand(id, { lineWidth: undefined }));
+    expect(sheetOf(store).relationships[0]!.style).toEqual({});
   });
 });
 

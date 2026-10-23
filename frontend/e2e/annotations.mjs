@@ -117,6 +117,24 @@ async function selectOnly(page, ids) {
   }
 }
 
+async function doubleClickRelationship(page) {
+  const point = await page.locator('[data-relationship-path]').first().evaluate((path) => {
+    for (const fraction of [0.5, 0.25, 0.75, 0.1, 0.9]) {
+      const local = path.getPointAtLength(path.getTotalLength() * fraction);
+      const screen = new DOMPoint(local.x, local.y).matrixTransform(path.getScreenCTM());
+      if (document.elementFromPoint(screen.x, screen.y)?.closest('[data-relationship-id]')) return { x: screen.x, y: screen.y };
+    }
+    throw new Error('没有可点击的联系线段');
+  });
+  await page.mouse.dblclick(point.x, point.y);
+  await page.getByRole('textbox', { name: '联系文字', exact: true }).waitFor();
+}
+
+async function choose(page, label, option) {
+  await page.getByRole('combobox', { name: label, exact: true }).click();
+  await page.getByRole('option', { name: option, exact: true }).click();
+}
+
 async function main() {
   const token = await ensureUser(USER);
   const mapTitle = `附属结构验收 ${stamp}`;
@@ -193,8 +211,50 @@ async function main() {
     check('IE-ANN-07 点「联系」后画布上出现一条跨分支的线', (await page.locator('[data-relationship-id]').count()) === 1);
 
     // ── 三条都进了面板列表 ───────────────────────────────────────────
-    const rowCount = await panel.getByRole('textbox').count();
+    const rowCount = await panel.locator('[data-annotation-title]').count();
     check('IE-ANN-08 面板「结构」页列出三条附属结构', rowCount === 3, `输入框 ${rowCount} 个`);
+
+    const relationship = page.locator('[data-relationship-id]').first();
+    await doubleClickRelationship(page);
+    const editor = page.getByRole('textbox', { name: '联系文字', exact: true });
+    await editor.fill('需要依赖');
+    await editor.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true, bubbles: true });
+    check('IE-REL-10 输入法组合期间 Enter 不提前提交', await editor.count() === 1 && await relationship.locator('text').count() === 0);
+    await editor.press('Enter');
+    check('IE-REL-01 空标题联系可双击线条编辑文字', await relationship.locator('text').textContent() === '需要依赖');
+    await relationship.locator('text').dblclick();
+    await editor.fill('取消这次修改');
+    await editor.press('Escape');
+    check('IE-REL-02 双击文字可编辑，Esc 保留原文字', await relationship.locator('text').textContent() === '需要依赖');
+    await relationship.focus();
+    await page.keyboard.press('F2');
+    await editor.fill('');
+    await editor.press('Enter');
+    check('IE-REL-11 F2 可编辑且允许清空标题', await relationship.locator('text').count() === 0);
+    await doubleClickRelationship(page);
+    await editor.fill('失焦保存');
+    await page.getByRole('tab', { name: '结构', exact: true }).click();
+    check('IE-REL-03 失焦提交联系文字', await relationship.locator('text').textContent() === '失焦保存');
+
+    await choose(page, '线宽', '4 px');
+    await choose(page, '线条样式', '折线');
+    await choose(page, '实虚线', '点线');
+    const styleFields = page.locator('[data-relationship-style]');
+    await styleFields.getByRole('button', { name: '#E32925', exact: true }).click();
+    const path = relationship.locator('[data-relationship-path]');
+    check('IE-REL-04 联系颜色、粗细、折线与点线即时生效',
+      await path.getAttribute('stroke') === '#E32925' && await path.getAttribute('stroke-width') === '4' &&
+      await path.getAttribute('stroke-dasharray') === '4 8' && (await path.getAttribute('d')).includes(' L '));
+
+    for (const [option, starts, ends] of [['无箭头', 0, 0], ['正向 →', 0, 1], ['反向 ←', 1, 0], ['双向 ↔', 1, 1]]) {
+      await choose(page, '箭头方向', option);
+      check(`IE-REL-05 ${option}生效`, await relationship.locator('[data-relationship-end="start"]').count() === starts &&
+        await relationship.locator('[data-relationship-end="end"]').count() === ends);
+    }
+    await toolbar(page, '撤销').click();
+    check('IE-REL-06 箭头方向支持撤销', await relationship.locator('[data-relationship-end="end"]').count() === 0);
+    await toolbar(page, '重做').click();
+    check('IE-REL-07 箭头方向支持重做', await relationship.locator('[data-relationship-end]').count() === 2);
 
     // ── 刷新后仍在（自动保存落盘） ───────────────────────────────────
     await page.waitForTimeout(1500);
@@ -207,6 +267,14 @@ async function main() {
         (await page.locator('[data-summary-id]').count()) === 1 &&
         (await page.locator('[data-relationship-id]').count()) === 1,
     );
+    check('IE-REL-08 刷新后联系文字、颜色与双向箭头保留',
+      await relationship.locator('text').textContent() === '失焦保存' && await path.getAttribute('stroke') === '#E32925' &&
+      await relationship.locator('[data-relationship-end]').count() === 2);
+
+    await toolbar(page, '只读预览').click();
+    check('IE-REL-09 只读预览没有联系编辑命中区和输入框', await page.locator('[data-relationship-hit]').count() === 0 &&
+      await page.getByRole('textbox', { name: '联系文字', exact: true }).count() === 0);
+    await page.getByRole('button', { name: '退出预览', exact: true }).click();
 
     // ── 删除：面板里删边界 ──────────────────────────────────────────
     await page.getByRole('tab', { name: '结构' }).click();
@@ -249,6 +317,11 @@ async function main() {
     await page.reload();
     await waitForCanvas(page);
     check('IE-SUM-05 刷新后跨分支概要仍存在', await page.locator('[data-summary-id]').count() === 2);
+    if (process.env.SCREENSHOT_PATH) {
+      await page.getByRole('tab', { name: '结构', exact: true }).click();
+      await relationship.locator('text').click();
+      await page.screenshot({ path: process.env.SCREENSHOT_PATH });
+    }
     check('IE-ANN-11 全程没有页面级 JS 异常', errors.length === 0, errors.slice(0, 2).join(' | '));
   } finally {
     await browser.close();

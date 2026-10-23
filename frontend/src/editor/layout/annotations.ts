@@ -18,7 +18,7 @@
  */
 
 import { collectBoundaries, collectSummaries } from '../model/traverse';
-import type { Boundary, Relationship, Sheet, Summary, Theme } from '../model/types';
+import type { Boundary, LineEnd, LineStyle, Relationship, Sheet, Style, Summary, Theme } from '../model/types';
 import { measureText } from './measure';
 import type { ComputedStyle } from '../model/types';
 import type { LayoutResult, Point, Rect } from './types';
@@ -46,7 +46,7 @@ export interface SummaryAnnotation {
   title: string;
   lines: string[];
   rect: Rect;
-  /** 括号的 SVG `d`：贴着被概要范围的右缘，开口朝左。 */
+  /** 括号的 SVG `d`：贴着范围外缘，开口朝向被概要的主题。 */
   brace: string;
   /** 从括号中点连到概要节点的横线。 */
   connector: { from: Point; to: Point };
@@ -85,6 +85,12 @@ export interface RelationshipAnnotation {
   color: string;
   width: number;
   dash: string | undefined;
+  path: string;
+  lineStart: LineEnd;
+  lineEnd: LineEnd;
+  startAngle: number;
+  endAngle: number;
+  bounds: Rect;
 }
 
 export interface AnnotationLayout {
@@ -154,6 +160,18 @@ export function summaryStyle(theme: Theme): SummaryStyle {
     fontSize: style.fontSize ?? Math.max(12, theme.global.fontSize - 2),
     fontFamily: style.fontFamily ?? theme.global.fontFamily,
     fontWeight: style.fontWeight ?? 500,
+  };
+}
+
+/** 画布、面板与 XMind 导出使用相同的联系样式继承规则。 */
+export function relationshipStyle(theme: Theme, style: Partial<Style> | null) {
+  return {
+    lineStyle: style?.lineStyle ?? theme.relationship?.lineStyle ?? 'curve',
+    lineColor: style?.lineColor ?? theme.relationship?.lineColor ?? theme.palette.lineColors[0] ?? '#999999',
+    lineWidth: style?.lineWidth ?? theme.relationship?.lineWidth ?? 1.5,
+    borderStyle: style?.borderStyle ?? theme.relationship?.borderStyle ?? 'dash',
+    lineStart: style?.lineStart ?? theme.relationship?.lineStart ?? 'none',
+    lineEnd: style?.lineEnd ?? theme.relationship?.lineEnd ?? 'none',
   };
 }
 
@@ -236,6 +254,43 @@ export function relationshipArc(from: Rect, to: Rect): { from: Point; to: Point;
   };
 }
 
+/** 从矩形中心沿切线裁到外缘，端点装饰不会被主题盖住。 */
+function onRectEdge(rect: Rect, toward: Point): Point {
+  const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  const dx = toward.x - center.x;
+  const dy = toward.y - center.y;
+  const factor = 1 / (Math.max(Math.abs(dx) / (rect.width / 2), Math.abs(dy) / (rect.height / 2)) || 1);
+  return { x: center.x + dx * factor, y: center.y + dy * factor };
+}
+
+function relationshipGeometry(fromBox: Rect, toBox: Rect, lineStyle: LineStyle) {
+  const arc = relationshipArc(fromBox, toBox);
+  const startToward = lineStyle === 'straight' ? arc.to : lineStyle === 'elbow' ? { x: arc.control.x, y: arc.from.y } : arc.control;
+  const endToward = lineStyle === 'straight' ? arc.from : lineStyle === 'elbow' ? { x: arc.control.x, y: arc.to.y } : arc.control;
+  // 垂直折线没有横向首尾段，沿实际的垂直段裁剪。
+  if (lineStyle === 'elbow' && Math.abs(arc.from.x - arc.to.x) < 0.001) {
+    arc.control.x = arc.from.x;
+    startToward.x = arc.from.x;
+    startToward.y = arc.to.y;
+    endToward.x = arc.to.x;
+    endToward.y = arc.from.y;
+  }
+  const from = onRectEdge(fromBox, startToward);
+  const to = onRectEdge(toBox, endToward);
+  const angle = (point: Point, toward: Point) => Math.atan2(point.y - toward.y, point.x - toward.x) * 180 / Math.PI;
+  const label = lineStyle === 'curve'
+    ? { x: (from.x + 2 * arc.control.x + to.x) / 4, y: (from.y + 2 * arc.control.y + to.y) / 4 }
+    : lineStyle === 'elbow'
+      ? { x: arc.control.x, y: (from.y + to.y) / 2 }
+      : { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  const path = `M ${from.x} ${from.y}` + (lineStyle === 'curve'
+    ? ` Q ${arc.control.x} ${arc.control.y} ${to.x} ${to.y}`
+    : lineStyle === 'elbow'
+      ? ` L ${arc.control.x} ${from.y} L ${arc.control.x} ${to.y} L ${to.x} ${to.y}`
+      : ` L ${to.x} ${to.y}`);
+  return { from, to, control: arc.control, label, path, startAngle: angle(from, startToward), endAngle: angle(to, endToward) };
+}
+
 /** 范围里能对上盒子的那些（折叠的、被删掉的 id 直接忽略）。 */
 function rectsOf(layout: LayoutResult, range: readonly string[]): Rect[] {
   const rects: Rect[] = [];
@@ -297,26 +352,34 @@ export function layoutAnnotations(sheet: Sheet, layout: LayoutResult, theme: The
     const from = layout.boxes.get(relationship.end1Id);
     const to = layout.boxes.get(relationship.end2Id);
     if (from === undefined || to === undefined) continue;
-    const arc = relationshipArc(from, to);
-    const style = relationship.style ?? {};
+    const style = relationshipStyle(theme, relationship.style);
+    if (style.lineStyle === 'none') continue;
+    const arc = relationshipGeometry(from, to, style.lineStyle);
+    const measured = measureText(relationship.title, { family: 'sans', size: 12, weight: 400, italic: false }, Infinity);
+    const minX = Math.min(arc.from.x, arc.to.x, arc.control.x);
+    const minY = Math.min(arc.from.y, arc.to.y, arc.control.y);
+    const bounds = unionRect([
+      { x: minX, y: minY, width: Math.max(arc.from.x, arc.to.x, arc.control.x) - minX, height: Math.max(arc.from.y, arc.to.y, arc.control.y) - minY },
+      { x: arc.label.x - measured.width / 2, y: arc.label.y - 18, width: measured.width, height: measured.height },
+    ], Math.max(8, style.lineWidth * 4))!;
     relationships.push({
       id: relationship.id,
       title: relationship.title,
-      from: arc.from,
-      to: arc.to,
-      control: arc.control,
-      label: arc.label,
-      color: style.lineColor ?? theme.relationship?.lineColor ?? theme.palette.lineColors[0] ?? '#999999',
-      width: style.lineWidth ?? theme.relationship?.lineWidth ?? 1.5,
-      dash: ANNOTATION_METRICS.relationshipDash,
+      ...arc,
+      color: style.lineColor,
+      width: style.lineWidth,
+      dash: dashFor(style.borderStyle, style.lineWidth),
+      lineStart: style.lineStart,
+      lineEnd: style.lineEnd,
+      bounds,
     });
   }
 
-  // 关系线不参与包围盒：两端都在节点中心，弧顶最多外推 60px，撑不开画布。
-  // 概要节点与边界框会，所以它们要算进来。
+  // 联系的曲线、箭头与标题也可能越过主题范围，导出和适应视野必须计算它们。
   const bounds = unionRect([
     ...boundaries.map((item) => item.rect),
     ...summaries.map((item) => item.rect),
+    ...relationships.map((item) => item.bounds),
   ]);
 
   return { summaries, boundaries, relationships, bounds };

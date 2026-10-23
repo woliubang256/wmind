@@ -132,6 +132,13 @@ describe('往返：内容与层级', () => {
 });
 
 describe('往返：附属结构', () => {
+  it('联系颜色、线宽、线型、虚线和起终点箭头完整往返', () => {
+    const doc = fixture();
+    const style = { lineColor: '#123456', lineWidth: 4, borderStyle: 'dot', lineStyle: 'elbow', lineStart: 'arrow', lineEnd: 'none' } as const;
+    doc.sheets[0]!.relationships.push({ id: 'r', end1Id: 'a', end2Id: 'b', title: '依赖', style });
+    const { sheet } = exportThenImport(doc);
+    expect(sheet.relationships[0]!.style).toMatchObject(style);
+  });
   function annotated(): WmindDocument {
     const doc = fixture();
     const sheet = doc.sheets[0]!;

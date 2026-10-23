@@ -14,7 +14,7 @@
  */
 
 import { collectSummaries, findTopicInSheet } from '../model/traverse';
-import type { Boundary, Relationship, Sheet, Summary } from '../model/types';
+import type { Boundary, Relationship, Sheet, Style, Summary } from '../model/types';
 import { defineCommand, type EditorCommand } from './types';
 
 export type AnnotationKind = 'summary' | 'boundary' | 'relationship';
@@ -214,7 +214,7 @@ export function renameAnnotationCommand(kind: AnnotationKind, id: string, title:
     coalesceKey: `annotation:${kind}:${id}`,
     apply(draft, ctx) {
       const sheet = sheetOf(draft, ctx.sheetId);
-      if (sheet === undefined || next === '') return;
+      if (sheet === undefined || (next === '' && kind !== 'relationship')) return;
       // 两个落点都要改：只改一处的话，读取侧合并时先命中的那一份还是旧标题。
       if (kind === 'relationship') {
         const item = sheet.relationships.find((entry) => entry.id === id);
@@ -271,4 +271,25 @@ export function removeAnnotationCommand(kind: AnnotationKind, id: string): Edito
 /** 读一条附属结构的标题；找不到返回空串（面板据此显示占位）。 */
 export function annotationTitle(sheet: Sheet, kind: AnnotationKind, id: string): string {
   return findAnnotation(sheet, kind, id)?.title ?? '';
+}
+
+/** 联系样式补丁只写显式改动；undefined 删除覆盖值、恢复主题继承。 */
+export function updateRelationshipStyleCommand(id: string, patch: Partial<Style>): EditorCommand {
+  return defineCommand({
+    type: 'annotation.style.relationship',
+    label: '修改联系样式',
+    apply(draft, ctx) {
+      const item = sheetOf(draft, ctx.sheetId)?.relationships.find((entry) => entry.id === id);
+      if (!item) return;
+      const current = item.style ?? {};
+      const keys = Object.keys(patch) as (keyof Style)[];
+      if (!keys.some((key) => patch[key] === undefined ? key in current : patch[key] !== current[key])) return;
+      const next = { ...current } as Record<string, unknown>;
+      for (const key of keys) {
+        if (patch[key] === undefined) delete next[key];
+        else next[key] = patch[key];
+      }
+      item.style = next as Partial<Style>;
+    },
+  });
 }

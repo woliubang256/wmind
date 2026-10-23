@@ -15,9 +15,10 @@ import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { collectBoundaries, collectSummaries, walkSheet } from '@/editor/model/traverse';
-import type { Sheet } from '@/editor/model/types';
+import type { Sheet, Style, Theme } from '@/editor/model/types';
 import type { AnnotationKind } from '@/editor/commands/annotation';
 import { cn } from '@/lib/utils';
+import { RelationshipStyleFields } from './relationship-style-fields';
 
 export interface AnnotationRow {
   id: string;
@@ -28,6 +29,7 @@ export interface AnnotationRow {
 
 export interface StructureTabProps {
   sheet: Sheet;
+  theme: Theme;
   /** 当前选中的主题 id。按钮的可用性由它决定。 */
   selection: readonly string[];
   /** 面板里正在编辑的那一条，画布上会高亮。 */
@@ -38,6 +40,7 @@ export interface StructureTabProps {
   onAddRelationship: () => void;
   onRename: (kind: AnnotationKind, id: string, title: string) => void;
   onRemove: (kind: AnnotationKind, id: string) => void;
+  onPatchRelationship: (id: string, patch: Partial<Style>) => void;
 }
 
 /** 标题 → 显示用的一行摘要（最多三个名字）。 */
@@ -50,6 +53,7 @@ function describe(names: readonly string[]): string {
 
 export function StructureTab({
   sheet,
+  theme,
   selection,
   activeId,
   onActivate,
@@ -58,6 +62,7 @@ export function StructureTab({
   onAddRelationship,
   onRename,
   onRemove,
+  onPatchRelationship,
 }: StructureTabProps) {
   const { t } = useTranslation();
 
@@ -145,6 +150,10 @@ export function StructureTab({
         onRename={onRename}
         onRemove={onRemove}
         empty={t('editor.annotation.relationshipEmpty')}
+        renderDetails={(row) => {
+          const relationship = sheet.relationships.find((item) => item.id === row.id);
+          return relationship ? <RelationshipStyleFields relationship={relationship} theme={theme} onPatch={(patch) => onPatchRelationship(row.id, patch)} /> : null;
+        }}
       />
     </div>
   );
@@ -162,6 +171,7 @@ function Section({
   onRename,
   onRemove,
   empty,
+  renderDetails,
 }: {
   icon: IconName;
   title: string;
@@ -174,6 +184,7 @@ function Section({
   onRename: (kind: AnnotationKind, id: string, title: string) => void;
   onRemove: (kind: AnnotationKind, id: string) => void;
   empty: string;
+  renderDetails?: (row: AnnotationRow) => ReactNode;
 }) {
   const { t } = useTranslation();
   return (
@@ -198,12 +209,13 @@ function Section({
                   'rounded-lg border px-2 py-1.5 transition-colors',
                   activeId === row.id ? 'border-primary bg-primary/5' : 'border-border/70',
                 )}
-                onPointerEnter={() => onActivate(kind, row.id)}
-                onPointerLeave={() => onActivate(kind, null)}
+                onClick={() => onActivate(kind, row.id)}
+                onFocusCapture={() => onActivate(kind, row.id)}
               >
                 <div className="flex items-center gap-1">
                   <RenameField
                     value={row.title}
+                    allowEmpty={kind === 'relationship'}
                     placeholder={row.detail}
                     onCommit={(next) => onRename(kind, row.id, next)}
                   />
@@ -212,12 +224,13 @@ function Section({
                     variant="ghost"
                     className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
                     aria-label={t('editor.annotation.remove')}
-                    onClick={() => onRemove(kind, row.id)}
+                    onClick={(event) => { event.stopPropagation(); onRemove(kind, row.id); }}
                   >
                     <Icon name="trash" className="size-3.5" />
                   </Button>
                 </div>
                 <p className="truncate text-[10px] text-muted-foreground">{row.detail}</p>
+                {activeId === row.id ? renderDetails?.(row) : null}
               </div>
             </li>
           ))}
@@ -230,18 +243,20 @@ function Section({
 /**
  * 行内改名。
  *
- * 用本地 state 而不是直接受控于文档：改名命令会**拒绝空标题**（空标题的
- * 附属结构在画布上是一块点不中的空白），如果输入框的值直接读文档，用户把
+ * 用本地 state 而不是直接受控于文档：概要和边界仍然**拒绝空标题**，如果输入框的值直接读文档，用户把
  * 内容全删掉的那一瞬间文字会自己跳回来，看起来像输入法在捣乱。
+ * 联系允许清空标题，宽命中区使空标题线条仍能再次编辑。
  */
 function RenameField({
   value,
   placeholder,
   onCommit,
+  allowEmpty = false,
 }: {
   value: string;
   placeholder: string;
   onCommit: (next: string) => void;
+  allowEmpty?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
 
@@ -250,16 +265,17 @@ function RenameField({
 
   return (
     <Input
+      data-annotation-title=""
       value={draft}
       placeholder={placeholder}
       aria-label={placeholder}
       className="h-6 min-w-0 flex-1 border-transparent bg-transparent px-1 text-xs"
       onChange={(event) => {
         setDraft(event.target.value);
-        if (event.target.value.trim() !== '') onCommit(event.target.value);
+        if (allowEmpty || event.target.value.trim() !== '') onCommit(event.target.value);
       }}
       onBlur={() => {
-        if (draft.trim() === '') setDraft(value);
+        if (!allowEmpty && draft.trim() === '') setDraft(value);
       }}
     />
   );

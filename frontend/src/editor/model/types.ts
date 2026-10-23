@@ -68,6 +68,8 @@ export interface Style {
   autoWidth: boolean;
   lineStyle: LineStyle;
   lineEnd: LineEnd;
+  /** 联系起点装饰；缺省继承主题，无起点装饰的旧文档仍可读取。 */
+  lineStart?: LineEnd;
   lineWidth: number;
   lineColor: string;
   rainbowBranch: boolean;

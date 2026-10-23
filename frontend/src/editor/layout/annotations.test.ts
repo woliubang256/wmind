@@ -88,6 +88,28 @@ describe('relationshipArc', () => {
 });
 
 describe('layoutAnnotations', () => {
+  it.each(['straight', 'curve', 'elbow'] as const)('联系 %s 线支持样式、双端箭头且端点在主题边缘', (lineStyle) => {
+    const { sheet, theme } = sheetWith({ relationships: [{
+      id: 'r', end1Id: 'a1', end2Id: 'b1', title: '依赖',
+      style: { lineColor: '#E32925', lineWidth: 4, borderStyle: 'solid', lineStyle, lineStart: 'arrow', lineEnd: 'arrow' },
+    }] });
+    const layout = layoutMindmap({ sheet, theme });
+    const item = layoutAnnotations(sheet, layout, theme).relationships[0]!;
+    expect(item).toMatchObject({ color: '#E32925', width: 4, dash: undefined, lineStart: 'arrow', lineEnd: 'arrow' });
+    expect(item.path).toContain(lineStyle === 'curve' ? ' Q ' : ' L ');
+    for (const [point, box] of [[item.from, layout.boxes.get('a1')!], [item.to, layout.boxes.get('b1')!]] as const) {
+      const edgeDistance = Math.min(Math.abs(point.x - box.x), Math.abs(point.x - box.x - box.width), Math.abs(point.y - box.y), Math.abs(point.y - box.y - box.height));
+      expect(edgeDistance).toBeLessThan(0.001);
+    }
+  });
+
+  it('很长的联系标题与弧线都计入包围盒，导出不会截断', () => {
+    const { sheet, theme } = sheetWith({ relationships: [{ id: 'r', end1Id: 'a1', end2Id: 'b1', title: '很长的联系说明'.repeat(20), style: null }] });
+    const layout = layoutMindmap({ sheet, theme });
+    const annotations = layoutAnnotations(sheet, layout, theme);
+    expect(annotations.bounds).not.toBeNull();
+    expect(annotations.bounds!.width).toBeGreaterThan(layout.bounds.width);
+  });
   const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
     a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 
