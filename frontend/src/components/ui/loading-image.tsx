@@ -35,6 +35,6 @@ function SvgImageSource({ onLoad, onError, ...props }: Omit<SvgImageProps, 'load
   const markHeight = markWidth * 606 / 888;
   return <g>
     <image {...props} opacity={pending ? 0 : props.opacity} onLoad={(event) => { setPending(false); onLoad?.(event); }} onError={(event) => { setPending(false); onError?.(event); }} />
-    {pending ? <LoadingMark tone="soft" x={props.x + (props.width - markWidth) / 2} y={props.y + (props.height - markHeight) / 2} style={{ width: markWidth, height: markHeight }} pointerEvents="none" /> : null}
+    {pending ? <LoadingMark tone="soft" x={props.x + (props.width - markWidth) / 2} y={props.y + (props.height - markHeight) / 2} width={markWidth} height={markHeight} style={{ width: markWidth, height: markHeight }} pointerEvents="none" /> : null}
   </g>;
 }

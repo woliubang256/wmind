@@ -12,9 +12,11 @@ Status: implemented
 
 LoadingImage 按 src 隔离就绪状态，兼容浏览器缓存、懒加载、地址切换和失败回退；加载中显示浅灰 W，成功或失败均停止动画，不新增网络预请求。SVG 图片使用独立的 LoadingSvgImage，仅实时查看器启用，静态导出输出原始 image，不含占位或动画。图片尺寸仍由原有几何决定，不参与文档存储、布局测量和撤销历史。
 
+嵌套 SVG 的 W 同时设置数值 width/height 属性和 CSS 尺寸：浏览器对嵌套视口可能继续使用 DOM 属性，单独设置 CSS 40px 时实际折带仍按 72px 渲染。浏览器验收测量四段折带的真实屏幕包围盒，不只检查计算样式。
+
 ## Historical audit
 
-按 LoadingMark、扫光、loading-mark 搜索活跃笔记无已有归属。字体分片笔记的“字体就绪后再测量”仍成立；图片上传笔记的显示尺寸与来源规则仍成立；头像笔记的手动头像、Gravatar、首字符回退顺序仍成立。本方案只统一等待时的表现。
+按 LoadingMark、扫光、loading-mark 搜索活跃笔记无已有归属。[字体分片](2026-10-20-wmind-font-sharding.md)的“字体就绪后再测量”仍成立；[图片上传](2026-10-20-wmind-file-upload-images.md)的显示尺寸与来源规则仍成立；[头像](2026-10-17-wmind-user-profile.md)的手动头像、Gravatar、首字符回退顺序仍成立。本方案只统一等待时的表现。
 
 ## Alternatives considered
 
@@ -32,3 +34,5 @@ LoadingImage 按 src 隔离就绪状态，兼容浏览器缓存、懒加载、�
 ## Testing
 
 组件单测覆盖轮廓、尺寸、浅灰、多实例 ID、状态文字唯一、原生图片参数和静态 SVG 不含占位；浏览器夹具只模拟接口和图片，不修改开发数据库。
+
+`frontend/e2e/loading-states.mjs` 38 项覆盖 10 个路由、备份页签、慢网、浅灰实际配色、窄屏、SVG 实际尺寸、src 切换、失败、内嵌图片、原生请求数量、头像回退和按钮状态。`loading-mark.mjs` 32 项覆盖中英文、深浅主题、375/1440px、扫光与减少动画。静态截图使用固定整数裁剪区并等待字体，避免子像素重新取整造成误报。加载入口源码守卫阻止混入旧 spinner、骨架与裸图片。

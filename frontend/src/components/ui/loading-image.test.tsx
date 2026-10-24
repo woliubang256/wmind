@@ -24,6 +24,8 @@ describe('图片浅灰加载', () => {
     const live = renderToStaticMarkup(<svg><LoadingSvgImage {...props} loading /></svg>);
     expect(live).toContain('wmind-loading-mark--soft');
     expect(live).toContain('x="40"');
+    // 嵌套 SVG 的实际视口使用 DOM 属性，不能只依赖 CSS width。
+    expect(live).toContain('width="40" height="27.2972972972973"');
     expect(live).toContain('pointer-events="none"');
   });
 });

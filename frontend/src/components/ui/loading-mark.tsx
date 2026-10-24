@@ -10,7 +10,7 @@ const RIBBONS = [
 ] as const;
 
 /** 装饰性加载标志；加载状态的可访问文字由调用方提供。 */
-export function LoadingMark({ size = 'default', tone = 'default', className, ...props }: SVGProps<SVGSVGElement> & {
+export function LoadingMark({ size = 'default', tone = 'default', width = 72, height = 50, className, ...props }: SVGProps<SVGSVGElement> & {
   size?: 'default' | 'small' | 'inline';
   tone?: 'default' | 'soft';
 }) {
@@ -22,7 +22,7 @@ export function LoadingMark({ size = 'default', tone = 'default', className, ...
   const shine = `${id}-shine`;
 
   return (
-    <svg {...props} className={cn('wmind-loading-mark', size !== 'default' && `wmind-loading-mark--${size}`, tone === 'soft' && 'wmind-loading-mark--soft', className)} width="72" height="50" viewBox="180 314 888 606" aria-hidden="true" focusable="false">
+    <svg {...props} className={cn('wmind-loading-mark', size !== 'default' && `wmind-loading-mark--${size}`, tone === 'soft' && 'wmind-loading-mark--soft', className)} width={width} height={height} viewBox="180 314 888 606" aria-hidden="true" focusable="false">
       <defs>
         <clipPath id={clip}>
           {RIBBONS.map((d) => <path key={d} d={d} />)}
