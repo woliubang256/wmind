@@ -1785,6 +1785,8 @@ components:
       required: [enabled, cron, timezone, target, webdav, s3]
       properties:
         enabled: { type: boolean, default: false }
+        retainCount: { type: integer, minimum: 1, maximum: 1000, default: 30, description: 每个目标合计保留的手动和定时成功备份份数 }
+        skipUnchanged: { type: boolean, default: false, description: 开启后业务内容未变化时跳过重复备份 }
         cron: { type: string, example: '0 3 * * *' }
         timezone: { type: string, example: Asia/Shanghai }
         target: { type: string, enum: [webdav, s3] }

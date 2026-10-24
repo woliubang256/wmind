@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -37,16 +38,31 @@ type S3Config struct {
 	PathStyle         bool   `json:"pathStyle"`
 }
 type Configuration struct {
-	Enabled  bool         `json:"enabled"`
-	Cron     string       `json:"cron"`
-	Timezone string       `json:"timezone"`
-	Target   string       `json:"target"`
-	WebDAV   WebDAVConfig `json:"webdav"`
-	S3       S3Config     `json:"s3"`
+	Enabled       bool         `json:"enabled"`
+	RetainCount   int          `json:"retainCount"`
+	SkipUnchanged bool         `json:"skipUnchanged"`
+	Cron          string       `json:"cron"`
+	Timezone      string       `json:"timezone"`
+	Target        string       `json:"target"`
+	WebDAV        WebDAVConfig `json:"webdav"`
+	S3            S3Config     `json:"s3"`
 }
 
 func DefaultConfiguration() Configuration {
-	return Configuration{Cron: "0 3 * * *", Timezone: "Asia/Shanghai", Target: "webdav", S3: S3Config{Region: "us-east-1", Prefix: "wmind", PathStyle: true}}
+	return Configuration{RetainCount: 30, Cron: "0 3 * * *", Timezone: "Asia/Shanghai", Target: "webdav", S3: S3Config{Region: "us-east-1", Prefix: "wmind", PathStyle: true}}
+}
+
+// Default only absent new fields. Explicit zero and unknown fields stay invalid.
+func (c *Configuration) UnmarshalJSON(raw []byte) error {
+	type plain Configuration
+	value := plain{RetainCount: 30}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&value); err != nil {
+		return err
+	}
+	*c = Configuration(value)
+	return nil
 }
 func (c Configuration) Public() Configuration {
 	c.WebDAV.PasswordSet = c.WebDAV.Password != ""
@@ -114,6 +130,9 @@ func validEndpoint(raw string) bool {
 	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == ""
 }
 func (c Configuration) Validate(requireTarget bool) error {
+	if c.RetainCount < 1 || c.RetainCount > 1000 {
+		return errors.New("backup retention must be between 1 and 1000")
+	}
 	if _, err := Schedule(c.Cron, c.Timezone, time.Now()); err != nil {
 		return err
 	}

@@ -1,10 +1,43 @@
 package backup
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRetentionDefaultsAndConfigurationCompatibility(t *testing.T) {
+	c := DefaultConfiguration()
+	if c.RetainCount != 30 || c.SkipUnchanged {
+		t.Fatal("unexpected defaults", c)
+	}
+	legacy := `{"enabled":false,"cron":"0 3 * * *","timezone":"Asia/Shanghai","target":"webdav","webdav":{},"s3":{}}`
+	if err := json.Unmarshal([]byte(legacy), &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.RetainCount != 30 || c.SkipUnchanged || c.Validate(false) != nil {
+		t.Fatal("legacy config not upgraded", c)
+	}
+	for _, count := range []int{-1, 0, 1001} {
+		c.RetainCount = count
+		if c.Validate(false) == nil {
+			t.Fatal("accepted invalid count", count)
+		}
+	}
+	if err := json.Unmarshal([]byte(`{"retainCount":0}`), &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.RetainCount != 0 {
+		t.Fatal("explicit zero silently defaulted")
+	}
+	if err := json.Unmarshal([]byte(`{"retainCount":3,"typo":true}`), &c); err == nil {
+		t.Fatal("unknown setting accepted")
+	}
+	if err := json.Unmarshal([]byte(`{"retainCount":2.5}`), &c); err == nil {
+		t.Fatal("fractional count accepted")
+	}
+}
 
 func TestConfigurationEncryptionAndMasking(t *testing.T) {
 	box, err := NewSecretBox(strings.Repeat("a", 32))
