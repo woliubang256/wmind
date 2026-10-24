@@ -94,6 +94,26 @@ func newService(t *testing.T, repo *fakeRepo) *settings.Service {
 	return svc
 }
 
+func TestShareDefaultsAndExplicitOverrides(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newService(t, repo)
+	if got := svc.ShareDefaultExpireDays(); got != 7 {
+		t.Fatalf("分享默认有效期 = %d，期望 7 天", got)
+	}
+	if svc.ShareDefaultAllowDownload() {
+		t.Fatal("分享默认不应允许下载")
+	}
+	// 已有管理员显式设置不能被默认值变更覆盖。
+	repo.rows["share.default_expire_days"] = "30"
+	repo.rows["share.default_allow_download"] = "true"
+	if err := svc.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if svc.ShareDefaultExpireDays() != 30 || !svc.ShareDefaultAllowDownload() {
+		t.Fatal("分享显式设置未被保留")
+	}
+}
+
 // fieldErrors 取出 SETTINGS_INVALID 的字段级错误。
 func fieldErrors(t *testing.T, err error) map[string]string {
 	t.Helper()

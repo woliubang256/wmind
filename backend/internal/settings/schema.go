@@ -71,8 +71,8 @@ var specs = []Spec{
 	{Key: "feature.user_template_enabled", Kind: KindBool, Default: `true`, Public: true},
 
 	{Key: "share.public_link_enabled", Kind: KindBool, Default: `true`, Public: true},
-	{Key: "share.default_expire_days", Kind: KindInt, Default: `0`, Min: 0, Max: 3650},
-	{Key: "share.default_allow_download", Kind: KindBool, Default: `true`},
+	{Key: "share.default_expire_days", Kind: KindInt, Default: `7`, Min: 0, Max: 3650},
+	{Key: "share.default_allow_download", Kind: KindBool, Default: `false`},
 	{Key: "share.require_password", Kind: KindBool, Default: `false`},
 	{Key: "share.max_links_per_map", Kind: KindInt, Default: `20`, Min: 1, Max: 1000},
 }

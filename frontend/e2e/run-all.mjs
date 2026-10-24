@@ -50,6 +50,7 @@ const SUITE = [
   ['culling', '视口裁剪'],
   ['export', '导出与界面语言'],
   ['share', '分享链接'],
+  ['share-defaults', '分享默认权限 / 期限 / 文案与异步配置'],
 ];
 
 function probe(url) {

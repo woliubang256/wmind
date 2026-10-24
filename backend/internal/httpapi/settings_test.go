@@ -41,6 +41,9 @@ func TestSiteConfigIsPublic(t *testing.T) {
 	if body.Data["version"] != "test-version" {
 		t.Fatalf("version = %#v", body.Data["version"])
 	}
+	if body.Data["shareDefaultExpireDays"] != float64(7) || body.Data["shareDefaultAllowDownload"] != false {
+		t.Fatalf("分享默认应为 7 天且不允许下载: %#v", body.Data)
+	}
 	// 敏感项不能出现在公开响应里。
 	if _, ok := body.Data["loginMaxAttempts"]; ok {
 		t.Fatalf("公开配置泄露了敏感项: %#v", body.Data)

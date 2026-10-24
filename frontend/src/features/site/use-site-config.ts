@@ -19,8 +19,8 @@ const FALLBACK: SiteConfig = {
   exportEnabled: true,
   userTemplateEnabled: true,
   shareEnabled: true,
-  shareDefaultExpireDays: 0,
-  shareDefaultAllowDownload: true,
+  shareDefaultExpireDays: 7,
+  shareDefaultAllowDownload: false,
   version: 'dev',
 };
 

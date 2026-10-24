@@ -11,7 +11,7 @@
  *    否则后台里那两项设置改了等于没改。
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -34,7 +34,7 @@ export interface ShareDialogProps {
   onClose: () => void;
 }
 
-/** 有效期候选。0 放在第一项：它是默认值，也是「不折腾」的那一项。 */
+/** 有效期候选。0 表示永久有效；默认选中站点配置的期限（缺省 7 天）。 */
 const EXPIRY_CHOICES = [0, 1, 7, 30, 90, 365] as const;
 
 /**
@@ -75,23 +75,33 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
   const { config } = useSiteConfig();
 
   const [password, setPassword] = useState('');
-  const [expiresInDays, setExpiresInDays] = useState('0');
-  const [allowDownload, setAllowDownload] = useState(true);
-  const [showNotes, setShowNotes] = useState(true);
+  const [expiresInDays, setExpiresInDays] = useState(String(config.shareDefaultExpireDays ?? 7));
+  const [allowDownload, setAllowDownload] = useState(config.shareDefaultAllowDownload ?? false);
+  const [showNotes, setShowNotes] = useState(false);
   const [created, setCreated] = useState<ShareLink | null>(null);
   const [revoking, setRevoking] = useState<ShareLink | null>(null);
   const [copiedUid, setCopiedUid] = useState<string | null>(null);
+  const opened = useRef(false);
+  const editedDefaults = useRef({ expiry: false, download: false });
 
   // 每次打开都按站点默认值重置：上次留在表单里的密码不该被复用。
   useEffect(() => {
-    if (!open) return;
-    setPassword('');
-    setExpiresInDays(String(config.shareDefaultExpireDays));
-    setAllowDownload(config.shareDefaultAllowDownload);
-    setShowNotes(true);
-    setCreated(null);
-    setRevoking(null);
-    setCopiedUid(null);
+    if (!open) {
+      opened.current = false;
+      editedDefaults.current = { expiry: false, download: false };
+      return;
+    }
+    if (!opened.current) {
+      opened.current = true;
+      setPassword('');
+      setShowNotes(false);
+      setCreated(null);
+      setRevoking(null);
+      setCopiedUid(null);
+    }
+    // 配置可能比弹窗晚返回；只补齐尚未编辑的默认字段，不能重置用户草稿。
+    if (!editedDefaults.current.expiry) setExpiresInDays(String(config.shareDefaultExpireDays ?? 7));
+    if (!editedDefaults.current.download) setAllowDownload(config.shareDefaultAllowDownload ?? false);
   }, [open, config.shareDefaultExpireDays, config.shareDefaultAllowDownload]);
 
   const links = useQuery({
@@ -174,13 +184,13 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
                 value={expiresInDays}
                 options={expiryOptions}
                 error={createError.expiresInDays}
-                onChange={setExpiresInDays}
+                onChange={(value) => { editedDefaults.current.expiry = true; setExpiresInDays(value); }}
               />
             </div>
 
             <div className="space-y-3">
-              <Switch checked={allowDownload} onCheckedChange={setAllowDownload} label={t('share.create.allowDownload')} description={t('share.create.allowDownloadHint')} />
-              <Switch checked={showNotes} onCheckedChange={setShowNotes} label={t('share.create.showNotes')} description={t('share.create.showNotesHint')} />
+              <Switch checked={allowDownload} onCheckedChange={(value) => { editedDefaults.current.download = true; setAllowDownload(value); }} label={t('share.create.allowDownload')} description={t('share.create.allowDownloadHint')} />
+              <Switch checked={showNotes} onCheckedChange={setShowNotes} label={t('share.create.showNotes')} />
             </div>
 
             <div className="flex items-center gap-2">
