@@ -18,6 +18,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /** 顺序有讲究：先快后慢，崩得早的放前面，省得等两分钟才知道环境没起来。 */
 const SUITE = [
+  ['session-bootstrap', '启动会话恢复 / 刷新顺序 / 过期与重试'],
   ['errors', '错误处理（断网提示）'],
   ['register', '关闭注册'],
   ['locale', '登录页语言切换'],

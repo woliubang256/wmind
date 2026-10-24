@@ -18,7 +18,7 @@ M1-6 要把已经做完的后端接口接到界面上：登录/注册、个人�
 
 ### 并发 401 合并成一次刷新（单飞）
 
-`refreshAccessToken` 用一个模块级的 `refreshInFlight: Promise<string|null> | null`：第一个 401 建立 Promise，其余的直接 await 同一个。`finally` 里清空。
+`refreshSession` 用一个模块级的 `refreshInFlight: Promise<AuthSession|null> | null`：首个恢复或刷新建立 Promise，其余的直接 await 同一个。`finally` 里清空。[启动会话恢复](../bug-fix/2026-10-25-wmind-session-bootstrap.md)把无内存令牌时的用户探测改成主动恢复，并复用刷新响应的用户数据；运行中 401 仍用同一操作，迟到的旧 401 优先复用已更新的令牌。
 
 没有这一层，一次页面加载里的并发请求会触发多次刷新；而刷新令牌是轮换式的，后到的请求拿着已经被换掉的令牌去刷新，服务端会按「重放」处理并撤销整条会话——症状是「打开页面莫名被登出」，且只在慢网络下偶发。
 
@@ -96,7 +96,7 @@ M1-6 要把已经做完的后端接口接到界面上：登录/注册、个人�
 - **代价**：没有组件级测试。Vitest 跑在 `node` 环境（无 jsdom），交互行为靠 Playwright 冒烟覆盖；后续要写组件测试需要引入 jsdom 或 happy-dom，并调整 `test.environment`。
 - **代价**：`AdminOverviewPage` 只列最近 8 条审计，没有独立的审计查询页；筛选接口（action / actor_uid / 时间）已就绪，界面留到有真实排障需求时再做。
 - **已知限制**：`GET /admin/stats` 的导图相关字段仍为 0 / 空数组，概览里的「近 14 天新增」在 M2 之前显示「暂无数据」。
-- **已知限制**：匿名访问任何页面都会在控制台留下 401（`/auth/me` 与 `/auth/refresh` 各一次）。这是 cookie 会话的固有代价——浏览器里读不到 httpOnly cookie 是否存在，只能试一次。
+- **已知限制**：需要恢复会话的匿名页面仍可能收到 `/auth/refresh` 401，因为脚本读不到 HttpOnly Cookie；有效会话启动不再先发送无令牌的 `/auth/me`。临时网络或服务错误显示原地重试，不当作会话失效。
 
 ## Verification
 

@@ -31,7 +31,10 @@ try {
       const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
       requests.push(path);
       let data = [];
-      if (path === '/auth/me') data = { uid: 'version-user', username: 'version', nickname: '版本验收', email: '', role: scenario.role, status: 'active' };
+      if (path === '/auth/me' || path === '/auth/refresh') {
+        data = { uid: 'version-user', username: 'version', nickname: '版本验收', email: '', role: scenario.role, status: 'active' };
+        if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user: data };
+      }
       if (path === '/site/config') {
         if (scenario.unavailable) return route.fulfill({ status: 503, json: { error: { code: 'INTERNAL_ERROR', message: '版本界面夹具' } } });
         data = { siteName: 'wmind', brand: 'wmind', passwordMinLength: 8, version: scenario.version };

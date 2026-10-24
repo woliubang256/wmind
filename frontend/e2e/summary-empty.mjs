@@ -24,7 +24,10 @@ try {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
     let data = [];
-    if (path === '/auth/me') data = { uid: 'fixture-user', username: 'tester', nickname: '测试', email: '', role: 'user', status: 'active' };
+    if (path === '/auth/me' || path === '/auth/refresh') {
+      data = { uid: 'fixture-user', username: 'tester', nickname: '测试', email: '', role: 'user', status: 'active' };
+      if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user: data };
+    }
     if (path === '/site/config') data = { siteName: 'wmind', shareEnabled: true };
     if (path === '/maps/summary-empty') {
       if (route.request().method() === 'PUT') {

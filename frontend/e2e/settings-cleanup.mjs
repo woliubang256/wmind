@@ -13,6 +13,7 @@ run(async () => {
       if (path.startsWith('/admin/backup')) return route.fulfill({ status: 503, json: { error: { code: 'INTERNAL_ERROR', message: '界面夹具不启用备份' } } });
       let data = [];
       if (path === '/auth/me') data = user;
+      if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user };
       if (path === '/site/config') data = { siteName: 'wmind', passwordMinLength: 8, shareEnabled: true };
       if (path === '/auth/2fa/status') data = { enabled: false };
       if (path === '/shares') data = [{ ...share, revokedAt: revoked ? new Date().toISOString() : null }];

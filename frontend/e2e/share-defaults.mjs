@@ -17,7 +17,10 @@ try {
   const mockApi = async (route) => {
     const url = route.request().url();
     let data = {};
-    if (url.endsWith('/auth/me')) data = { id: 'share-test', username: '分享测试', email: 'share@example.test', role: 'user', settings: {} };
+    if (url.endsWith('/auth/me') || url.endsWith('/auth/refresh')) {
+      data = { uid: 'share-test', username: '分享测试', email: 'share@example.test', role: 'user', status: 'active', settings: {} };
+      if (url.endsWith('/auth/refresh')) data = { accessToken: 'fixture-token', expiresIn: 900, user: data };
+    }
     else if (url.endsWith('/site/config')) {
       await configGate;
       data = config;

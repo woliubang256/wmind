@@ -13,9 +13,11 @@ run(async () => {
       const auth = new Promise((resolve) => { releaseAuth = resolve; });
       await page.route('**/api/v1/**', async (route) => {
         const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
-        if (path === '/auth/me') {
+        if (path === '/auth/me' || path === '/auth/refresh') {
           await auth;
-          return route.fulfill({ json: { data: { uid: 'loading-user', username: 'loading', email: '', nickname: '', role: 'user', status: 'active', settings: {} } } });
+          const user = { uid: 'loading-user', username: 'loading', email: '', nickname: '', role: 'user', status: 'active', settings: {} };
+          const data = path === '/auth/refresh' ? { accessToken: 'fixture-token', expiresIn: 900, user } : user;
+          return route.fulfill({ json: { data } });
         }
         await route.fulfill({ json: { data: path === '/site/config' ? { siteName: 'wmind', brand: 'wmind', version: '1.0.0', importEnabled: true, exportEnabled: true, shareEnabled: true, userTemplateEnabled: true } : [], pagination: { total: 0, page: 1, pageSize: 20, totalPages: 1 } } });
       });
@@ -69,9 +71,9 @@ run(async () => {
       releaseAuth();
       await logo.waitFor({ state: 'hidden' });
       await page.getByRole('heading', { name: locale === 'zh-CN' ? '最近的导图' : 'Recent maps', exact: true }).waitFor();
-      // 列表和品牌图片也有 W，等它们真正就绪后再检查是否残留。
-      await page.waitForFunction(() => document.querySelectorAll('svg.wmind-loading-mark').length === 0);
-      check(`${locale} 加载完成正常进入页面且没有残留动效`, await page.locator('svg.wmind-loading-mark').count() === 0 && errors.length === 0, errors.join('\n'));
+      // 列表和品牌图片须结束等待；关闭的模板弹窗中未启用的查询不算可见残留。
+      await page.waitForFunction(() => [...document.querySelectorAll('svg.wmind-loading-mark')].every((node) => !node.checkVisibility()));
+      check(`${locale} 加载完成正常进入页面且没有残留动效`, await page.locator('svg.wmind-loading-mark:visible').count() === 0 && errors.length === 0, errors.join('\n'));
       await context.close();
     }
     return summary();

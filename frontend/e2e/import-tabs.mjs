@@ -16,7 +16,7 @@ run(async () => {
       const method = route.request().method();
       let data = [];
       if (path === '/auth/me') data = user;
-      if (path === '/auth/refresh') data = { accessToken: 'fixture-token' };
+      if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user };
       if (path === '/site/config') data = { siteName: 'wmind', passwordMinLength: 8, importEnabled: true, exportEnabled: true, shareEnabled: true };
       if (path === '/maps' && method === 'POST') {
         const input = route.request().postDataJSON();

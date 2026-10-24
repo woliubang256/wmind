@@ -27,8 +27,10 @@ run(async () => {
       const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
       const method = route.request().method();
       let data = [];
-      if (path === '/auth/me') data = { uid: 'batch-user', username: 'batch', nickname: '批量测试', email: '', role: 'user', status: 'active' };
-      if (path === '/auth/refresh') data = { accessToken: 'fixture-token' };
+      if (path === '/auth/me' || path === '/auth/refresh') {
+        data = { uid: 'batch-user', username: 'batch', nickname: '批量测试', email: '', role: 'user', status: 'active' };
+        if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user: data };
+      }
       if (path === '/site/config') data = { siteName: 'wmind', importEnabled: true, exportEnabled: true, shareEnabled: true };
       if (path === '/maps' && method === 'POST') {
         const input = route.request().postDataJSON();

@@ -23,7 +23,10 @@ async function fixture(page) {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
     const request = route.request();
     let data = [];
-    if (path === '/auth/me') data = { uid: 'copy-admin', username: 'admin', nickname: '', email: 'copy@example.test', role: 'admin', status: 'active', settings: {} };
+    if (path === '/auth/me' || path === '/auth/refresh') {
+      data = { uid: 'copy-admin', username: 'admin', nickname: '', email: 'copy@example.test', role: 'admin', status: 'active', settings: {} };
+      if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user: data };
+    }
     if (path === '/site/config') data = { siteName: 'wmind', brand: 'wmind', logoUrl: '', description: '', icp: '', version: '1.0.0', passwordMinLength: 8, registrationEnabled: true, shareEnabled: true, shareDefaultExpireDays: 7, shareDefaultAllowDownload: false, importEnabled: true, exportEnabled: true, userTemplateEnabled: true };
     if (path === '/maps' && request.method() === 'POST') {
       const input = request.postDataJSON();

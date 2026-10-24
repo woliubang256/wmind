@@ -8,9 +8,13 @@ try {
   const page = await browser.contexts()[0].newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.route('**/api/v1/**', (route) => route.fulfill({ json: { data: route.request().url().endsWith('/auth/me')
-    ? { id: 'navigation-test', username: '导航测试', email: 'navigation@example.test', role: 'user', settings: {} }
-    : { siteName: 'wmind', brand: 'wmind', exportEnabled: true, importEnabled: true } } }));
+  await page.route('**/api/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const user = { uid: 'navigation-test', username: '导航测试', email: 'navigation@example.test', role: 'user', status: 'active', settings: {} };
+    const data = path.endsWith('/auth/refresh') ? { accessToken: 'fixture-token', expiresIn: 900, user }
+      : path.endsWith('/auth/me') ? user : { siteName: 'wmind', brand: 'wmind', exportEnabled: true, importEnabled: true };
+    return route.fulfill({ json: { data } });
+  });
   await page.goto(`${BASE}/maps/demo`);
   await page.locator('g.wmind-topic').first().waitFor();
   const footer = page.locator('footer');

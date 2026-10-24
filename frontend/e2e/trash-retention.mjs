@@ -24,7 +24,10 @@ try {
     const path = new URL(request.url()).pathname.replace('/api/v1', '');
     let data = [];
     if (path.startsWith('/admin/backup')) return route.fulfill({ status: 503, json: { error: { code: 'INTERNAL_ERROR', message: 'Backups are not part of this fixture' } } });
-    if (path === '/auth/me') data = { uid: 'trash-admin', username: 'admin', nickname: '管理员', email: '', role: 'admin', status: 'active' };
+    if (path === '/auth/me' || path === '/auth/refresh') {
+      data = { uid: 'trash-admin', username: 'admin', nickname: '管理员', email: '', role: 'admin', status: 'active' };
+      if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user: data };
+    }
     if (path === '/site/config') data = { siteName: 'wmind', shareEnabled: true };
     if (path === '/auth/2fa/status') data = { enabled: false };
     if (path === '/admin/settings') {

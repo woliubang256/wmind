@@ -30,7 +30,10 @@ run(async () => {
     await page.route('**/api/v1/**', async (route) => {
       const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
       let data = [];
-      if (path === '/auth/me') data = { uid: 'select-user', username: 'select', nickname: '菜单验收', email: '', role: 'user', status: 'active' };
+      if (path === '/auth/me' || path === '/auth/refresh') {
+        data = { uid: 'select-user', username: 'select', nickname: '菜单验收', email: '', role: 'user', status: 'active' };
+        if (path === '/auth/refresh') data = { accessToken: 'fixture-token', expiresIn: 900, user: data };
+      }
       if (path === '/site/config') data = { siteName: 'wmind', brand: 'wmind', passwordMinLength: 8, exportEnabled: true };
       if (path === '/auth/2fa/status') data = { enabled: false };
       if (path === '/maps/menu-fixture') data = {
@@ -50,7 +53,9 @@ run(async () => {
     await page.goto(`${BASE}/maps/menu-fixture`);
     await waitForCanvas(page);
     await shortMenu(page, page.getByRole('combobox', { name: '快捷缩放', exact: true }), '快捷缩放（6项）', true);
-    const structure = page.getByRole('group', { name: '界面', exact: true }).getByRole('combobox', { name: '结构', exact: true });
+    const panel = page.locator('#editor-canvas-panel');
+    await panel.getByRole('tab', { name: '样式', exact: true }).click();
+    const structure = panel.getByRole('combobox', { name: '结构', exact: true });
     await shortMenu(page, structure, '结构（9项）');
     await page.getByRole('button', { name: '导出', exact: true }).click();
     const dialog = page.locator('dialog[open]');
@@ -63,11 +68,11 @@ run(async () => {
     await page.keyboard.press('Escape');
 
     // 高度受限时仍需滚动，键盘首尾跳转必须滚到活动项；不能靠隐藏滚动条修复。
-    await page.setViewportSize({ width: 900, height: 360 });
+    await page.setViewportSize({ width: 900, height: 300 });
     await structure.click();
     const list = page.getByRole('listbox');
     const limited = await metrics(list);
-    check('空间不足时结构菜单仍可滚动且不越界', limited.scroll > limited.client && limited.top >= 8 && limited.bottom <= 352, JSON.stringify(limited));
+    check('空间不足时结构菜单仍可滚动且不越界', limited.scroll > limited.client && limited.top >= 8 && limited.bottom <= 292, JSON.stringify(limited));
     await page.keyboard.press('End');
     const lastVisible = await list.evaluate((node) => {
       const item = document.getElementById(node.getAttribute('aria-activedescendant'));

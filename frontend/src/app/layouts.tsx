@@ -22,17 +22,31 @@ function LoadingPage() {
   );
 }
 
+function SessionErrorPage({ error, onRetry }: { error: Error; onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <main className="grid min-h-svh place-items-center px-6 text-sm">
+      <div role="alert" className="space-y-4 text-center">
+        <p className="text-muted-foreground">{error.message}</p>
+        <Button variant="outline" onClick={onRetry}>{t('common.retry')}</Button>
+      </div>
+    </main>
+  );
+}
+
 export function RequireAuth() {
-  const { data: user, isLoading, isError } = useCurrentUser();
+  const { data: user, isLoading, isError, error, refetch } = useCurrentUser();
   const location = useLocation();
   if (isLoading) return <LoadingPage />;
-  if (isError || !user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (isError) return <SessionErrorPage error={error} onRetry={() => void refetch()} />;
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <Outlet />;
 }
 
 export function RequireAdmin() {
-  const { data: user, isLoading } = useCurrentUser();
+  const { data: user, isLoading, isError, error, refetch } = useCurrentUser();
   if (isLoading) return <LoadingPage />;
+  if (isError) return <SessionErrorPage error={error} onRetry={() => void refetch()} />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'admin') return <Navigate to="/" replace />;
   return <Outlet />;

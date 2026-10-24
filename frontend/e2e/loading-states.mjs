@@ -16,6 +16,7 @@ run(async () => {
       await page.route('**/api/v1/**', async (route) => {
         const endpoint = new URL(route.request().url()).pathname.replace('/api/v1', '');
         if (endpoint === '/auth/me') return route.fulfill({ json: { data: user } });
+        if (endpoint === '/auth/refresh') return route.fulfill({ json: { data: { accessToken: 'fixture-token', expiresIn: 900, user } } });
         if (endpoint === '/site/config') return route.fulfill({ json: { data: site } });
         await pending.promise;
         await route.fulfill({ json: { data: [], pagination: { total: 0, page: 1, pageSize: 20, totalPages: 1 } } }).catch(() => {});
@@ -38,6 +39,7 @@ run(async () => {
     const { page, errors } = await newPage(browser, { context });
     await page.route('**/api/v1/**', (route) => {
       const endpoint = new URL(route.request().url()).pathname;
+      if (endpoint.endsWith('/auth/refresh')) return route.fulfill({ json: { data: { accessToken: 'fixture-token', expiresIn: 900, user } } });
       return route.fulfill({ json: { data: endpoint.endsWith('/auth/me') ? user : endpoint.endsWith('/site/config') ? site : [], pagination: { total: 0, page: 1, pageSize: 20, totalPages: 1 } } });
     });
     const requests = [];
