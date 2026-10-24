@@ -25,4 +25,14 @@ describe('加载 W 标志', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const [, target] of svg.matchAll(/url\(#([^\)]+)\)/g)) expect(ids).toContain(target);
   });
+
+  it('支持局部、按钮和浅灰图片尺寸，仍保留原有轮廓与可访问隐藏', () => {
+    for (const size of ['small', 'inline'] as const) {
+      const svg = renderToStaticMarkup(<LoadingMark size={size} tone="soft" className="custom" style={{ width: 24 }} />);
+      expect(svg).toContain(`wmind-loading-mark--${size}`);
+      expect(svg).toContain('wmind-loading-mark--soft custom');
+      expect(svg).toContain('style="width:24px"');
+      expect(svg).toContain('aria-hidden="true"');
+    }
+  });
 });

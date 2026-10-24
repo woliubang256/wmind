@@ -103,6 +103,22 @@ body {
   --loading-mark-fold: #424e60;
 }
 
+.wmind-loading-mark--small { width: 2.5rem; }
+.wmind-loading-mark--inline { display: inline-block; width: 1.25rem; vertical-align: middle; }
+
+/* 图片占位更轻，不抢缩略图、头像和画布内容的视觉重心。 */
+.wmind-loading-mark.wmind-loading-mark--soft {
+  --loading-mark-edge: #eef0f3;
+  --loading-mark-face: #dde1e7;
+  --loading-mark-fold: #c9d0d9;
+}
+
+.dark .wmind-loading-mark.wmind-loading-mark--soft {
+  --loading-mark-edge: #b9c1cd;
+  --loading-mark-face: #9da9bb;
+  --loading-mark-fold: #7d8a9f;
+}
+
 .wmind-loading-mark__shine {
   animation: wmind-loading-sweep 2.4s ease-in-out infinite;
 }

@@ -1,4 +1,5 @@
-import { useId } from 'react';
+import { useId, type SVGProps } from 'react';
+import { cn } from '@/lib/utils';
 
 // 按 public/wmind-logo.jpg 的四段折带轮廓描绘，去掉橙色背景，保留折面。
 const RIBBONS = [
@@ -9,7 +10,10 @@ const RIBBONS = [
 ] as const;
 
 /** 装饰性加载标志；加载状态的可访问文字由调用方提供。 */
-export function LoadingMark() {
+export function LoadingMark({ size = 'default', tone = 'default', className, ...props }: SVGProps<SVGSVGElement> & {
+  size?: 'default' | 'small' | 'inline';
+  tone?: 'default' | 'soft';
+}) {
   const id = useId();
   const clip = `${id}-clip`;
   const left = `${id}-left`;
@@ -18,7 +22,7 @@ export function LoadingMark() {
   const shine = `${id}-shine`;
 
   return (
-    <svg className="wmind-loading-mark" width="72" height="50" viewBox="180 314 888 606" aria-hidden="true" focusable="false">
+    <svg {...props} className={cn('wmind-loading-mark', size !== 'default' && `wmind-loading-mark--${size}`, tone === 'soft' && 'wmind-loading-mark--soft', className)} width="72" height="50" viewBox="180 314 888 606" aria-hidden="true" focusable="false">
       <defs>
         <clipPath id={clip}>
           {RIBBONS.map((d) => <path key={d} d={d} />)}
