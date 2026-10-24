@@ -52,7 +52,7 @@ export function AdminOverviewPage() {
       <PageHeader
         title={t('admin.overview.title')}
         actions={
-          <Button variant="outline" size="sm" onClick={() => void stats.refetch()} disabled={stats.isFetching}>
+          <Button loading={stats.isFetching} variant="outline" size="sm" onClick={() => void stats.refetch()} disabled={stats.isFetching}>
             <Icon name="clock" className="size-4" />
             {stats.isFetching ? t('admin.overview.refreshing') : t('admin.overview.refresh')}
           </Button>

@@ -381,7 +381,7 @@ function UserEditor({ open, user, onClose, onSaved }: UserEditorProps) {
           <Button variant="ghost" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" form="user-editor-form" disabled={save.isPending}>
+          <Button loading={save.isPending} type="submit" form="user-editor-form" disabled={save.isPending}>
             {save.isPending ? t('common.saving') : t('common.save')}
           </Button>
         </>
@@ -517,7 +517,7 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: User | null; onC
             <Button variant="ghost" onClick={close}>
               {t('common.cancel')}
             </Button>
-            <Button disabled={reset.isPending || (mode === 'custom' && password.length === 0)} onClick={() => reset.mutate()}>
+            <Button loading={reset.isPending} disabled={reset.isPending || (mode === 'custom' && password.length === 0)} onClick={() => reset.mutate()}>
               {reset.isPending ? t('admin.users.processing') : t('admin.users.resetPassword')}
             </Button>
           </>
@@ -603,7 +603,7 @@ function DeleteUserDialog({ user, onClose, onDone }: { user: User | null; onClos
           <Button variant="ghost" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate()}>
+          <Button loading={remove.isPending} variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate()}>
             {remove.isPending ? t('admin.users.deleting') : t('admin.users.confirmDelete')}
           </Button>
         </>

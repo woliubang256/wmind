@@ -161,7 +161,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
             <Button variant="ghost" size="sm" disabled={dirtyKeys.length === 0 || save.isPending} onClick={() => { setDraft(initial); setErrors({}); }}>
               {t('admin.settings.discard')}
             </Button>
-            <Button type="submit" size="sm" disabled={dirtyKeys.length === 0 || save.isPending}>
+            <Button loading={save.isPending} type="submit" size="sm" disabled={dirtyKeys.length === 0 || save.isPending}>
               {save.isPending ? t('common.saving') : t('admin.settings.save')}
             </Button>
           </div>
