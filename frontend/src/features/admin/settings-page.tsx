@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { EmptyState, PageHeader, Panel } from '@/components/ui/panel';
@@ -49,7 +50,7 @@ export function AdminSettingsPage() {
         // 用户还没保存的改动抹掉，所以这里不随 refetch 重建。
         <SettingsForm initial={settings.data} />
       ) : (
-        <EmptyState icon="settings" title={t('admin.settings.loading')} />
+        <LoadingState label={t('admin.settings.loading')} className="min-h-64" />
       )}
       </div>
     </div>

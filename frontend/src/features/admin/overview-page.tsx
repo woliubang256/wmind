@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Badge, EmptyState, PageHeader, Panel } from '@/components/ui/panel';
 import { adminApi } from '@/lib/api/endpoints';
 import type { AuditLog } from '@/lib/api/types';
@@ -69,6 +70,8 @@ export function AdminOverviewPage() {
             </Button>
           }
         />
+      ) : stats.isPending ? (
+        <LoadingState className="min-h-32" />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard icon="users" label={t('admin.overview.userCount')} value={formatNumber(data?.userCount ?? 0)} />
@@ -94,10 +97,10 @@ export function AdminOverviewPage() {
           description={
             data
               ? t('admin.overview.trendToday', { count: formatNumber(data.mapCountToday) })
-              : t('common.loading')
+              : undefined
           }
         >
-          <TrendChart points={data?.trend ?? []} />
+          {stats.isPending ? <LoadingState small className="min-h-40" /> : <TrendChart points={data?.trend ?? []} />}
         </Panel>
 
         <Panel
@@ -111,6 +114,8 @@ export function AdminOverviewPage() {
         >
           {audit.isError ? (
             <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t('admin.overview.auditFailed')}</p>
+          ) : audit.isPending ? (
+            <LoadingState small className="min-h-40" />
           ) : (audit.data?.items.length ?? 0) === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t('admin.overview.auditEmpty')}</p>
           ) : (

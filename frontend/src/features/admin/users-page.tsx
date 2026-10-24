@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { LoadingState } from '@/components/ui/loading-state';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -173,14 +174,14 @@ export function AdminUsersPage() {
               }
             />
           </div>
+        ) : users.isPending ? (
+          <LoadingState className="min-h-64" />
         ) : items.length === 0 ? (
           <div className="p-5">
             <EmptyState
               icon="users"
               title={
-                users.isLoading
-                  ? t('common.loading')
-                  : filters.keyword
+                filters.keyword
                     ? t('admin.users.emptySearch')
                     : t('admin.users.empty')
               }
