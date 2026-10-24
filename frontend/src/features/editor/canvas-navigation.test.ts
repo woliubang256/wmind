@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { centeredViewport, scrollAxis } from './canvas-navigation';
+import { centeredViewport, restoredViewport, savedCanvasView, scrollAxis } from './canvas-navigation';
 
 describe('画布导航', () => {
+  it('不同容器尺寸恢复同一世界坐标中心并保留缩放', () => {
+    const view = savedCanvasView({ x: -500, y: 220, zoom: 1.5 }, { width: 1000, height: 600 });
+    const next = restoredViewport(view, { width: 375, height: 420 });
+    expect(savedCanvasView(next, { width: 375, height: 420 })).toEqual(view);
+    expect(next.zoom).toBe(1.5);
+  });
   it('保持缩放并将中心主题几何中心定位到可视区域中心', () => {
     for (const zoom of [0.1, 0.75, 1, 2, 4]) {
       const root = { x: -125, y: 70, width: 150, height: 48 };

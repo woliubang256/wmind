@@ -26,6 +26,7 @@ const SUITE = [
   ['settings-cleanup', '设置精简 / 导航字号 / 确认弹窗布局'],
   ['select-overflow', '下拉菜单高度 / 受限空间与键盘滚动'],
   ['backup-timezone', '固定时区搜索 / 保存刷新 / 中英文与受限视口'],
+  ['admin-settings-layout', '后台短字段桌面并排 / 手机单列 / 备份默认S3'],
   ['trash-retention', '回收站保留设置 / 剩余天数'],
   ['import-tabs', '文件与 Markdown 文本导入'],
   ['import-batch', '批量导入 / 原生 XMind 连线 / 最后成功项'],
@@ -38,6 +39,7 @@ const SUITE = [
   ['zoom-presets', '底部快捷缩放 / 中心锚点 / 键盘'],
   ['canvas', '多画布 / 大纲 / ZEN'],
   ['canvas-navigation', '单行底栏 / 画布菜单 / 滚动条 / 中心定位'],
+  ['canvas-view-reload', '作者视角 / 冲突重载 / 草稿恢复 / 浏览零写入'],
   ['a11y', '画布无障碍'],
   ['annotations', '概要 / 边界 / 联系'],
   ['toolbar', '操作提示 / 独立主题按钮'],
@@ -51,7 +53,11 @@ const SUITE = [
   ['markers', '主题标记'],
   ['culling', '视口裁剪'],
   ['export', '导出与界面语言'],
+  ['export-policy', 'JPEG默认格式 / 分享强制品牌 / 图形与拆分出口'],
   ['share', '分享链接'],
+  ['share-canvas-state', '分享视图 / 滚动缩放 / 临时折叠 / 刷新恢复'],
+  ['share-collapse-a11y', '分享折叠键盘操作 / 可访问名称 / 焦点保持'],
+  ['share-font-loading', '分享字体延迟 / 就绪后布局 / 保存视角'],
   ['share-defaults', '分享默认权限 / 期限 / 文案与异步配置'],
 ];
 

@@ -44,11 +44,10 @@ import { EditorProvider, useEditor, useEditorStoreApi } from '@/editor/store/use
 import { layoutMindmap } from '@/editor/layout/mindmap';
 import { layoutAnnotations, unionRect } from '@/editor/layout/annotations';
 import type { LayoutResult } from '@/editor/layout/types';
-import { MIN_ZOOM, zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
+import { zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
 import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import { topicElementId } from '@/editor/viewer/a11y-ids';
-import type { Viewport } from '@/editor/viewer/viewer-types';
 import type { Topic } from '@/editor/model/types';
 import type { Style, Theme } from '@/editor/model/types';
 import {
@@ -98,6 +97,7 @@ import {
 import { SheetTabs } from './sheet-tabs';
 import { CanvasScrollbars } from './canvas-scrollbars';
 import { centeredViewport } from './canvas-navigation';
+import { useCanvasViewport } from './use-canvas-viewport';
 import { downloadBlob } from '@/editor/export/download';
 import type { Sheet } from '@/editor/model/types';
 import { OutlineView, indentTarget, outdentTarget } from './outline-view';
@@ -283,6 +283,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const futureCount = useEditor((state) => state.future.length);
   const saveState = useEditor((state) => state.save);
   const version = useEditor((state) => state.version);
+  const documentLoadGeneration = useEditor((state) => state.documentLoadGeneration);
 
   const [contentPopover, setContentPopover] = useState<{ topicId: string; sheetId: string; anchor: Element } | null>(null);
   const [preview, setPreview] = useState(false);
@@ -291,7 +292,6 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   /** ZEN：只留画布，页头、面板、标签栏、页脚全部收起。 */
   const [zen, setZen] = useState(false);
   const { config } = useSiteConfig();
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [draft, setDraft] = useState<LocalDraft | null>(initialDraft);
   const [conflictOpen, setConflictOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -485,36 +485,16 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     return unionRect([layout.bounds, ...(annotations.bounds ? [annotations.bounds] : [])], 16)!;
   }, [sheet, layout, doc.theme]);
 
-  const fit = useCallback(() => {
-    const element = canvasRef.current;
-    if (!element) return;
-    const rect = element.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-    const raw = Math.min(rect.width / contentBounds.width, rect.height / contentBounds.height) * 0.94;
-    const zoom = Math.max(MIN_ZOOM, Math.min(1.2, raw));
-    setViewport({
-      zoom,
-      x: (rect.width - contentBounds.width * zoom) / 2 - contentBounds.x * zoom,
-      y: (rect.height - contentBounds.height * zoom) / 2 - contentBounds.y * zoom,
-    });
-  }, [contentBounds]);
+  const { viewport, setViewport, fit } = useCanvasViewport({
+    canvasRef, sheetId, bounds: contentBounds, savedView: doc.viewState?.sheets[sheetId],
+    ready: fonts.ready, surfaceKey: view, resetKey: documentLoadGeneration,
+    onSave: preview ? undefined : (id, view) => store.getState().saveCanvasView(id, view),
+  });
 
-  // 只在挂载与容器尺寸变化时重新适配。用 ref 拿最新的 fit，避免把 fit 放进
-  // 依赖数组——否则每敲一个字都会重新适配一次，用户手动缩放的位置会被抢走。
+  // 显式操作使用最新的内容范围；首屏、切画布、窗口变化由视图 hook 恢复，
+  // 不因每次编辑或 resize 抢走已保存的缩放与观察中心。
   const fitRef = useRef(fit);
   fitRef.current = fit;
-  // 依赖 fonts.ready：骨架屏期间 canvasRef 还是 null，只在挂载时跑一次的话，
-  // 字体就绪、画布真正挂上之后就没人观察容器尺寸了。
-  // 依赖 view：切到大纲再切回来，画布是**重新挂载**的，ref 换了新元素，
-  // 不重跑这里就既不会适配视野也没有 ResizeObserver。
-  useEffect(() => {
-    const element = canvasRef.current;
-    if (!element) return undefined;
-    fitRef.current();
-    const observer = new ResizeObserver(() => fitRef.current());
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [fonts.ready, view]);
 
   /**
    * 切换结构后重新适配视野。
@@ -527,26 +507,21 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
    * 缩放/平移的位置抢走。
    */
   const structure = sheet.structure;
-  const fittedStructure = useRef(structure);
+  const fittedStructure = useRef({ sheetId, structure, documentLoadGeneration });
   useEffect(() => {
-    if (fittedStructure.current === structure) return;
-    fittedStructure.current = structure;
-    fitRef.current();
-  }, [structure]);
+    const previous = fittedStructure.current;
+    fittedStructure.current = { sheetId, structure, documentLoadGeneration };
+    if (previous.documentLoadGeneration === documentLoadGeneration && previous.sheetId === sheetId && previous.structure !== structure) fitRef.current();
+  }, [sheetId, structure, documentLoadGeneration]);
 
   /**
-   * 切换画布后重新适配视野。
-   *
-   * 每张画布的包围盒差别可以很大（一张三个节点、一张三百个），沿用上一张的
-   * 视口会让新画布要么小得看不清、要么整棵树都在屏幕外。这里与「换结构」
-   * 同一套逻辑，只是触发源换成 `sheetId`。
+   * 切画布时清理附属结构激活态；视角由 hook 按各自保存值恢复。
    */
   const fittedSheet = useRef(sheetId);
   useEffect(() => {
     if (fittedSheet.current === sheetId) return;
     fittedSheet.current = sheetId;
     setActiveAnnotation(null);
-    fitRef.current();
   }, [sheetId]);
 
   const zoomAtCenter = (factor: number) => {

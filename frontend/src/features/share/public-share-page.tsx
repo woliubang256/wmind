@@ -17,7 +17,8 @@
  * 选中、拖拽的插件根本没有被挂载。
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { produce } from 'immer';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { LoadingState } from '@/components/ui/loading-state';
 import { TextField } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { ApiError } from '@/lib/api/errors';
 import {
   clearShareAccess,
@@ -37,6 +39,15 @@ import {
 import { parseDocument } from '@/editor/model/validate';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import { READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
+import { MAX_ZOOM, MIN_ZOOM, zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
+import { findTopicInSheet } from '@/editor/model/traverse';
+import { layoutMindmap } from '@/editor/layout/mindmap';
+import type { LayoutResult } from '@/editor/layout/types';
+import { layoutAnnotations, unionRect } from '@/editor/layout/annotations';
+import { CanvasScrollbars } from '@/features/editor/canvas-scrollbars';
+import { centeredViewport } from '@/features/editor/canvas-navigation';
+import { useCanvasViewport } from '@/features/editor/use-canvas-viewport';
+import { ToolbarButton } from '@/features/editor/toolbar-button';
 import { useFontsReady } from '@/features/editor/use-fonts-ready';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { shareKeys } from './queries';
@@ -125,14 +136,42 @@ function PasswordGate({ token, onGranted }: { token: string; onGranted: (accessT
   );
 }
 
+/** 与编辑端一致：等待字体期间不测字，避免回退字体的几何进入布局缓存。 */
+const PENDING_LAYOUT: LayoutResult = {
+  boxes: new Map(), edges: [], sizes: new Map(), styles: new Map(),
+  bounds: { x: 0, y: 0, width: 1, height: 1 },
+};
+
 /** 只读画布。文档已经过归一化，字体就绪后才进布局（否则宽度会被永久缓存错）。 */
 function ShareCanvas({ share }: { share: PublicShare }) {
   const { t } = useTranslation();
   const { config } = useSiteConfig();
-  const document = useMemo(() => parseDocument(share.document).document, [share.document]);
+  // 访客折叠只改独立归一化副本，不回写源文档或浏览器持久存储。
+  const [document, setDocument] = useState(() => parseDocument(share.document).document);
   const fonts = useFontsReady(document);
-  const sheet = document.sheets[0];
+  const [sheetId, setSheetId] = useState(() => document.viewState?.activeSheetId ?? document.sheets[0]!.id);
+  const sheet = document.sheets.find((item) => item.id === sheetId) ?? document.sheets[0]!;
   const [exportOpen, setExportOpen] = useState(false);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const layout = useMemo(
+    () => fonts.ready ? layoutMindmap({ sheet, theme: document.theme }) : PENDING_LAYOUT,
+    [sheet, document.theme, fonts.ready, fonts.generation],
+  );
+  const bounds = useMemo(() => {
+    const annotations = layoutAnnotations(sheet, layout, sheet.themeOverride ?? document.theme);
+    return unionRect([layout.bounds, ...(annotations.bounds ? [annotations.bounds] : [])], 16)!;
+  }, [sheet, layout, document.theme]);
+  const { viewport, setViewport, fit } = useCanvasViewport({ canvasRef, sheetId: sheet.id, bounds,
+    savedView: document.viewState?.sheets[sheet.id], ready: fonts.ready });
+  const zoom = (factor: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) setViewport((current) => zoomedViewport(current, factor, { x: rect.width / 2, y: rect.height / 2 }));
+  };
+  const toggleCollapse = (id: string) => setDocument((current) => produce(current, (draft) => {
+    const target = draft.sheets.find((item) => item.id === sheet.id);
+    const found = target && findTopicInSheet(target, id);
+    if (found && (found.topic.children.attached.length || found.topic.children.detached.length)) found.topic.collapsed = !found.topic.collapsed;
+  }));
 
   // 两个开关都要开：分享者允许下载，且站点没关导出。站点级开关是管理员
   // 的意志，不该被单条分享链接的 `allowDownload` 覆盖。
@@ -161,24 +200,49 @@ function ShareCanvas({ share }: { share: PublicShare }) {
         ) : null}
       </header>
 
-      <div className="h-[calc(100svh-15rem)] min-h-[420px] overflow-hidden rounded-2xl border border-border/70 bg-background">
+      <div className="flex h-[calc(100svh-15rem)] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-background">
+        <div ref={canvasRef} className="relative min-h-0 flex-1">
         {fonts.ready ? (
+          <div id="share-canvas-surface" className="size-full">
           <MindMapViewer
             sheet={sheet}
             theme={document.theme}
             plugins={READ_ONLY_PLUGINS}
+            layout={layout}
+            viewport={viewport}
+            onViewportChange={setViewport}
+            onToggleCollapse={toggleCollapse}
             readOnly
             ariaLabel={share.title}
             className="size-full"
           />
+          <CanvasScrollbars canvasRef={canvasRef} bounds={bounds} viewport={viewport} onChange={setViewport} surfaceId="share-canvas-surface" />
+          </div>
         ) : (
           <LoadingState className="size-full" />
         )}
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-1 border-t border-border/70 bg-card px-3 py-1.5">
+          {document.sheets.length > 1 ? <Select aria-label={t('editor.sheets.label')} value={sheet.id} onChange={setSheetId}
+            className="mr-auto w-40 max-w-full" size="sm" options={document.sheets.map((item) => ({ value: item.id, label: item.title }))} /> : null}
+          <ToolbarButton variant="ghost" size="icon" className="size-8" aria-label={t('editor.zoomOut')} disabled={!fonts.ready || viewport.zoom <= MIN_ZOOM} onClick={() => zoom(1 / 1.2)}><Icon name="zoom-out" className="size-4" /></ToolbarButton>
+          <Select aria-label={t('editor.zoomPresets')} size="sm" menuMinWidth={112} value={Number((viewport.zoom * 100).toFixed(6))}
+            options={[50, 75, 100, 125, 150, 200].map((percent) => ({ value: percent, label: `${percent}%` }))}
+            disabled={!fonts.ready} onChange={(percent) => zoom(percent / 100 / viewport.zoom)}
+            renderTrigger={(props) => <button {...props} className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"><span>{t('editor.zoomLevel', { percent: Math.round(viewport.zoom * 100) })}</span><Icon name="chevron-down" className="size-3 rotate-180" /></button>} />
+          <ToolbarButton variant="ghost" size="icon" className="size-8" aria-label={t('editor.zoomIn')} disabled={!fonts.ready || viewport.zoom >= MAX_ZOOM} onClick={() => zoom(1.2)}><Icon name="zoom-in" className="size-4" /></ToolbarButton>
+          <ToolbarButton variant="ghost" size="icon" className="size-8" aria-label={t('editor.fit')} disabled={!fonts.ready} onClick={fit}><Icon name="maximize" className="size-4" /></ToolbarButton>
+          <ToolbarButton variant="ghost" size="icon" className="size-8" aria-label={t('editor.centerTopic')} disabled={!fonts.ready} onClick={() => {
+            const rect = canvasRef.current?.getBoundingClientRect();
+            const root = layout.boxes.get(sheet.rootTopic.id);
+            if (rect && root) setViewport((current) => centeredViewport(current, root, rect));
+          }}><Icon name="locate" className="size-4" /></ToolbarButton>
+        </div>
       </div>
 
       {canExport && exportOpen ? (
         <Suspense fallback={<LoadingState className="fixed inset-0 z-40 bg-background/90" />}>
-          <ExportDialog open={exportOpen} document={document} sheetId={sheet.id} onClose={() => setExportOpen(false)} />
+          <ExportDialog open={exportOpen} document={document} sheetId={sheet.id} brandLocked onClose={() => setExportOpen(false)} />
         </Suspense>
       ) : null}
     </div>
@@ -241,7 +305,7 @@ export function PublicSharePage() {
     return <InvalidShare code="SHARE_NOT_FOUND" />;
   }
 
-  if (query.data) return <ShareCanvas share={query.data} />;
+  if (query.data) return <ShareCanvas key={token} share={query.data} />;
 
   // 站点关了分享但接口还没回来：直接给关闭页，不闪一下「不存在」。
   if (!config.shareEnabled) return <InvalidShare code="SHARE_DISABLED" />;

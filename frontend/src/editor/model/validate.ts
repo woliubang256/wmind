@@ -1,5 +1,6 @@
 import { parseTopicContent } from './topic-content';
 import { parseRelationshipRouting } from './relationship-routing';
+import { parseViewState } from './view-state';
 /**
  * 文档解析与归一化。
  *
@@ -483,6 +484,7 @@ export function parseDocument(input: unknown): ParseResult {
 
   const meta = isRecord(input.meta) ? input.meta : {};
   const now = new Date().toISOString();
+  const viewState = parseViewState(input.viewState, sheets.map((sheet) => sheet.id));
 
   return {
     document: {
@@ -492,6 +494,7 @@ export function parseDocument(input: unknown): ParseResult {
       title: asString(input.title, '未命名导图'),
       theme: parseTheme(input.theme, warnings),
       sheets,
+      ...(viewState ? { viewState } : {}),
       meta: {
         createdAt: asString(meta.createdAt, now),
         updatedAt: asString(meta.updatedAt, now),

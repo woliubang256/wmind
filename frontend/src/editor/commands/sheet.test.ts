@@ -245,15 +245,15 @@ describe('store.setSheet', () => {
     expect(state.editingId).toBeNull();
   });
 
-  it('不算文档变更：不标脏、不产生历史', () => {
+  it('当前画布需要自动保存，但不产生编辑历史', () => {
     const store = createEditorStore({ doc: docWithTwoSheets() });
     const revision = store.getState().revision;
 
     store.getState().setSheet('sh-2');
 
-    expect(store.getState().revision).toBe(revision);
+    expect(store.getState().revision).toBe(revision + 1);
     expect(store.getState().past).toHaveLength(0);
-    expect(store.getState().save.status).toBe('idle');
+    expect(store.getState().save.status).toBe('dirty');
   });
 
   it('切到同一张画布是空操作', () => {

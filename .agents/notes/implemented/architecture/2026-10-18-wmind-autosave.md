@@ -15,6 +15,8 @@ M2.6 的前端要回答「怎样才算可靠地保存了」。要定的问题：
 
 ## Decision
 
+[作者保存画布视角](../feature/2026-10-25-wmind-saved-canvas-view.md)扩展 revision 来源：主动导航与切画布也走本文状态机及草稿保护，首屏和 resize 不制造保存。冲突丢弃与草稿恢复的 `loadDocument` 递增独立代次，使同 ID 画布丢弃旧视角缓存，不在重载后重新适应并反写服务端视角。
+
 ### 状态机是纯对象，不碰 React
 
 `createAutosave({ read, save, onSaved, onConflict, onError, debounceMs, maxWaitMs, retryDelays })`

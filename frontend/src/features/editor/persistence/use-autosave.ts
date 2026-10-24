@@ -114,8 +114,8 @@ export function useAutosave({ uid, store, enabled = true }: UseAutosaveOptions):
     store.getState().setSave({ status: 'saved', at: Date.now(), error: null, conflict: null });
   }, [enabled, store, controller]);
 
-  // 只有 revision 变化才算「编辑」。选中、平移、改视口都会触发 store 的订阅，
-  // 拿它们去排保存等于每拖一下画布就存一次。
+  // 只有 revision 变化才排保存。选区等临时态不写；作者主动导航通过
+  // saveCanvasView/setSheet 推进 revision，仍共用这里的防抖与最长等待。
   useEffect(() => {
     if (!enabled) return undefined;
     let lastRevision = store.getState().revision;

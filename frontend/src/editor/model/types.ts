@@ -235,6 +235,18 @@ export interface DocumentMeta {
   app: string;
 }
 
+/** 以世界坐标中心保存，适应不同尺寸的编辑与分享窗口。 */
+export interface CanvasView {
+  centerX: number;
+  centerY: number;
+  zoom: number;
+}
+
+export interface DocumentViewState {
+  activeSheetId: string;
+  sheets: Record<string, CanvasView>;
+}
+
 export interface WmindDocument {
   format: 'wmind';
   formatVersion: string;
@@ -242,6 +254,7 @@ export interface WmindDocument {
   title: string;
   theme: Theme;
   sheets: Sheet[];
+  viewState?: DocumentViewState;
   meta: DocumentMeta;
   extensions: unknown[];
 }

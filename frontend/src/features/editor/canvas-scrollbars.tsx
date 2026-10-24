@@ -4,9 +4,10 @@ import type { Rect } from '@/editor/layout/types';
 import type { Viewport } from '@/editor/viewer/viewer-types';
 import { scrollAxis } from './canvas-navigation';
 
-export function CanvasScrollbars({ canvasRef, bounds, viewport, onChange }: {
+export function CanvasScrollbars({ canvasRef, bounds, viewport, onChange, surfaceId = 'editor-canvas-surface' }: {
   canvasRef: RefObject<HTMLDivElement | null>; bounds: Rect; viewport: Viewport;
   onChange: React.Dispatch<React.SetStateAction<Viewport>>;
+  surfaceId?: string;
 }) {
   const { t } = useTranslation();
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -29,7 +30,7 @@ export function CanvasScrollbars({ canvasRef, bounds, viewport, onChange }: {
     return <div key={direction} data-canvas-scrollbar={direction}
       role="scrollbar" tabIndex={0} aria-label={t(horizontal ? 'editor.scrollHorizontal' : 'editor.scrollVertical')}
       aria-orientation={direction} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(axis.fraction * 100)}
-      aria-controls="editor-canvas-surface"
+      aria-controls={surfaceId}
       className={`absolute z-10 touch-none rounded bg-muted/40 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${horizontal ? 'bottom-0.5 left-1 right-4 h-3 cursor-default' : 'bottom-4 right-0.5 top-1 w-3 cursor-default'}`}
       onPointerDown={(event) => {
         event.preventDefault(); event.stopPropagation();

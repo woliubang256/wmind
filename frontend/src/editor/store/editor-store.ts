@@ -11,7 +11,8 @@
 
 import { produce } from 'immer';
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { WmindDocument } from '../model/types';
+import type { CanvasView, WmindDocument } from '../model/types';
+import { isCanvasView, parseViewState } from '../model/view-state';
 import { firstSheet } from '../model/traverse';
 import { newTopicId } from '../model/ids';
 import type { CommandContext, CommandResult, EditorCommand } from '../commands/types';
@@ -62,6 +63,8 @@ export interface EditorState {
    * （演示文档 / 压测文档）时为 0，表示「还没有对应的服务器记录」。
    */
   version: number;
+  /** 整份文档重载代次；同画布也须丢弃之前的视口缓存。 */
+  documentLoadGeneration: number;
   lastCommand: { type: string; key: string | null; at: number } | null;
 
   dispatch(command: EditorCommand): void;
@@ -76,7 +79,7 @@ export interface EditorState {
   /**
    * 切换当前画布。
    *
-   * 不是命令、不进历史：它不改文档，只是「现在看哪一张」。切过去必须清空
+   * 不是命令、不进历史，但当前画布随视图自动保存。切过去必须清空
    * 选中与编辑态——选中记的是节点 id，属于上一张画布，留着会让下一张画布
    * 上同 id 的节点莫名其妙高亮（导入的文档里跨画布同 id 完全可能）。
    * 撤销 / 重做会把 `sheetId` 一起还原（见 HistoryEntry），所以切画布之后
@@ -85,6 +88,8 @@ export interface EditorState {
   setSheet(sheetId: string): void;
 
   setViewport(viewport: Viewport): void;
+  /** 主动导航需要保存，但不进入内容撤销栈。 */
+  saveCanvasView(sheetId: string, view: CanvasView): void;
   setSave(patch: Partial<SaveState>): void;
 
   /**
@@ -141,7 +146,17 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
   const now = options.now ?? (() => Date.now());
   const nextId = options.nextId ?? newTopicId;
 
-  const initialSheet = options.sheetId ?? firstSheet(options.doc).id;
+  const initialSheet = options.sheetId ?? parseViewState(options.doc.viewState, options.doc.sheets.map((sheet) => sheet.id))?.activeSheetId ?? firstSheet(options.doc).id;
+
+  const restoreHistory = (doc: WmindDocument, current: WmindDocument, activeSheetId: string): WmindDocument => {
+    if (!current.viewState && !doc.viewState) return doc;
+    // 已删除画布的视角只能从历史快照找回；仍存在的画布则保留最新导航。
+    const viewState = parseViewState({
+      activeSheetId,
+      sheets: { ...doc.viewState?.sheets, ...current.viewState?.sheets },
+    }, doc.sheets.map((sheet) => sheet.id));
+    return { ...doc, viewState };
+  };
 
   return createStore<EditorState>((set, get) => ({
     doc: options.doc,
@@ -154,6 +169,7 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
     save: { status: 'idle', at: null, error: null, conflict: null },
     revision: 0,
     version: options.version ?? 0,
+    documentLoadGeneration: 0,
     lastCommand: null,
 
     dispatch(command: EditorCommand): void {
@@ -216,7 +232,7 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
       const entry = state.past[state.past.length - 1];
       if (!entry) return;
       set({
-        doc: entry.doc,
+        doc: restoreHistory(entry.doc, state.doc, entry.sheetId),
         selection: entry.selection,
         sheetId: entry.sheetId,
         past: state.past.slice(0, -1),
@@ -243,7 +259,7 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
       const entry = state.future[state.future.length - 1];
       if (!entry) return;
       set({
-        doc: entry.doc,
+        doc: restoreHistory(entry.doc, state.doc, entry.sheetId),
         selection: entry.selection,
         sheetId: entry.sheetId,
         past: [...state.past, {
@@ -288,11 +304,27 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
       // 不存在的 id 直接忽略：删掉当前画布之后调用方可能拿着旧 id 再切一次，
       // 那时静默失败比抛错合适——界面已经渲染出第一张画布了。
       if (!state.doc.sheets.some((sheet) => sheet.id === sheetId)) return;
-      set({ sheetId, selection: [], editingId: null });
+      const doc = produce(state.doc, (draft) => {
+        draft.viewState = { activeSheetId: sheetId, sheets: draft.viewState?.sheets ?? {} };
+      });
+      set({ doc, sheetId, selection: [], editingId: null, revision: state.revision + 1, save: dirtySave(state.save) });
     },
 
     setViewport(viewport: Viewport): void {
       set({ viewport });
+    },
+
+    saveCanvasView(sheetId: string, view: CanvasView): void {
+      const state = get();
+      if (!isCanvasView(view) || !state.doc.sheets.some((sheet) => sheet.id === sheetId)) return;
+      const previous = state.doc.viewState?.sheets[sheetId];
+      if (previous && previous.centerX === view.centerX && previous.centerY === view.centerY && previous.zoom === view.zoom) return;
+      const doc = produce(state.doc, (draft) => {
+        draft.viewState ??= { activeSheetId: state.sheetId, sheets: {} };
+        draft.viewState.activeSheetId = state.sheetId;
+        draft.viewState.sheets[sheetId] = { ...view };
+      });
+      set({ doc, revision: state.revision + 1, save: dirtySave(state.save) });
     },
 
     setSave(patch: Partial<SaveState>): void {
@@ -326,9 +358,15 @@ export function createEditorStore(options: EditorStoreOptions): StoreApi<EditorS
     },
 
     loadDocument(doc: WmindDocument): void {
+      // 冲突重载直接安装 API 文档，不经过首屏 parseDocument；这里也须守住视图边界。
+      const viewState = parseViewState(doc.viewState, doc.sheets.map((sheet) => sheet.id));
+      const normalized = { ...doc };
+      if (viewState) normalized.viewState = viewState;
+      else delete normalized.viewState;
       set({
-        doc,
-        sheetId: firstSheet(doc).id,
+        doc: normalized,
+        documentLoadGeneration: get().documentLoadGeneration + 1,
+        sheetId: viewState?.activeSheetId ?? firstSheet(doc).id,
         selection: [],
         editingId: null,
         past: [],
