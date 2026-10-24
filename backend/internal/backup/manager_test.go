@@ -16,6 +16,7 @@ import (
 
 	"github.com/woliubang256/wmind/backend/internal/auth"
 	"github.com/woliubang256/wmind/backend/internal/backup"
+	"github.com/woliubang256/wmind/backend/internal/domain"
 	"github.com/woliubang256/wmind/backend/internal/migrate"
 	"github.com/woliubang256/wmind/backend/internal/repository/sqlite"
 	"github.com/woliubang256/wmind/backend/internal/service"
@@ -31,13 +32,26 @@ type remoteStub struct {
 	objects    map[string]bool
 	deleted    []string
 	deleteFail bool
+	checkFail  bool
 }
 
 func (r *remoteStub) Test(context.Context, backup.Configuration) error { return nil }
 func (r *remoteStub) Exists(_ context.Context, _ backup.Configuration, name string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.checkFail {
+		return false, errors.New("object check failed")
+	}
 	return r.objects[name], nil
+}
+
+type failingCatalogSettings struct{ domain.SettingsRepo }
+
+func (s failingCatalogSettings) Upsert(ctx context.Context, key, value string, actor *int64, now time.Time) error {
+	if key == "backup.catalog" {
+		return errors.New("catalog write failed")
+	}
+	return s.SettingsRepo.Upsert(ctx, key, value, actor, now)
 }
 func (r *remoteStub) Delete(_ context.Context, _ backup.Configuration, name string) error {
 	r.mu.Lock()
@@ -339,6 +353,58 @@ func TestRestorePreservesOwnedCatalogAndInvalidatesDedupBaseline(t *testing.T) {
 	}
 	if job := runBackup(t, f, "manual"); job.Status != "skipped" {
 		t.Fatal("new baseline was not registered", job)
+	}
+}
+
+func TestDedupFailureNeverAdvancesBaselineAndSkippedJobsDoNotCount(t *testing.T) {
+	f := newManagerFixture(t)
+	for i := 0; i < 3; i++ {
+		runBackup(t, f, "manual")
+	}
+	c := f.manager.State().Configuration
+	c.RetainCount = 1
+	c.SkipUnchanged = true
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	f.remote.checkFail = true
+	if job := runBackup(t, f, "manual"); job.Status != "failed" || job.ErrorCode != "REMOTE_CHECK_FAILED" || len(f.remote.objects) != 3 {
+		t.Fatal(job)
+	}
+	f.remote.checkFail = false
+	if job := runBackup(t, f, "manual"); job.Status != "skipped" || len(f.remote.objects) != 1 {
+		t.Fatal("skip must clean old quota without adding copy", job)
+	}
+	f.db.Exec(`UPDATE maps SET title='changed while upload fails'`)
+	f.remote.fail = true
+	if job := runBackup(t, f, "manual"); job.Status != "failed" || len(f.remote.objects) != 1 {
+		t.Fatal(job)
+	}
+	f.remote.fail = false
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" {
+		t.Fatal("failed upload incorrectly advanced baseline", job)
+	}
+}
+
+func TestCatalogPersistenceFailureNeverDeletesPreviousCopies(t *testing.T) {
+	f := newManagerFixture(t)
+	c := f.manager.State().Configuration
+	c.RetainCount = 1
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	first := runBackup(t, f, "manual")
+	m, err := backup.NewManager(f.ctx, backup.ManagerConfig{Repository: sqlite.NewBackupRepository(f.db), Settings: failingCatalogSettings{sqlite.NewSettingsRepository(f.db)}, UploadDir: f.uploads, WorkDir: f.work, Secret: strings.Repeat("s", 32), Remote: f.remote})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.manager = m
+	t.Cleanup(m.Wait)
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" || job.WarningCode != "CATALOG_FAILED" || !f.remote.objects[first.Filename] || len(f.remote.objects) != 2 {
+		t.Fatal(job)
+	}
+	if len(f.remote.deleted) != 0 {
+		t.Fatal("deleted before new copy durably registered")
 	}
 }
 func TestManagerBackupUploadRestoreAndSessions(t *testing.T) {

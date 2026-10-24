@@ -64,6 +64,9 @@ func TestBackupHTTPConfigurationScheduleAndRestore(t *testing.T) {
 		t.Fatalf("save: %d %+v", status, body.Error)
 	}
 	config := body.Data["configuration"].(map[string]any)
+	if config["retainCount"] != float64(30) || config["skipUnchanged"] != false {
+		t.Fatal("incorrect backup defaults", config)
+	}
 	davConfig := config["webdav"].(map[string]any)
 	if davConfig["password"] != nil || davConfig["passwordSet"] != true {
 		t.Fatal("secret leaked", davConfig)
@@ -149,6 +152,75 @@ func TestBackupHTTPConfigurationScheduleAndRestore(t *testing.T) {
 	status, body = s.do("GET", "/api/v1/site/config", "", nil)
 	if status != 200 || body.Data["siteName"] != "wmind" {
 		t.Fatalf("settings cache not restored %d %+v", status, body)
+	}
+}
+
+func TestBackupDedupAfterRealLoginMapReadAndAnonymousShareView(t *testing.T) {
+	s := newAuthTestServer(t)
+	token := s.loginAs(testAdminEmail, testAdminPassword)
+	uid := s.createMap(token, "只读去重测试")
+	share := s.createShare(token, uid, map[string]any{})
+	var mu sync.Mutex
+	uploads := 0
+	dav := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "PROPFIND":
+			w.WriteHeader(207)
+		case "PUT":
+			mu.Lock()
+			uploads++
+			mu.Unlock()
+			w.WriteHeader(201)
+		case "HEAD":
+			w.WriteHeader(200)
+		case "DELETE":
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(405)
+		}
+	}))
+	defer dav.Close()
+	c := backup.DefaultConfiguration()
+	c.SkipUnchanged = true
+	c.WebDAV.URL = dav.URL
+	if err := s.backups.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	run := func() backup.Job {
+		t.Helper()
+		status, body := s.do("POST", "/api/v1/admin/backups/run", token, nil)
+		if status != 201 {
+			t.Fatal(status, body.Error)
+		}
+		s.backups.Wait()
+		return *s.backups.State().Current
+	}
+	first := run()
+	if first.Status != "succeeded" {
+		t.Fatal(first)
+	}
+	token = s.loginAs(testAdminEmail, testAdminPassword)
+	for _, read := range []struct{ path, token string }{{"/api/v1/maps/" + uid, token}, {"/api/v1/public/shares/" + share["token"].(string), ""}} {
+		status, body := s.do("GET", read.path, read.token, nil)
+		if status != 200 {
+			t.Fatal(read.path, status, body.Error)
+		}
+	}
+	if job := run(); job.Status != "skipped" || job.ContentVersion != first.ContentVersion {
+		t.Fatal("real reads triggered backup", job)
+	}
+	mu.Lock()
+	count := uploads
+	mu.Unlock()
+	if count != 1 {
+		t.Fatal("duplicate remote object", count)
+	}
+	status, body := s.do("PATCH", "/api/v1/shares/"+share["uid"].(string), token, map[string]any{"allowDownload": false})
+	if status != 200 {
+		t.Fatal(status, body.Error)
+	}
+	if job := run(); job.Status != "succeeded" || job.ContentVersion == first.ContentVersion {
+		t.Fatal("share configuration change ignored", job)
 	}
 }
 func TestMaintenanceRejectsBusinessRequestsButKeepsLiveness(t *testing.T) {
