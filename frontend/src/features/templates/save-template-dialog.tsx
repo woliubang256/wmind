@@ -61,7 +61,7 @@ export function SaveTemplateDialog({ open, mapUid, defaultName, onClose }: SaveT
           <Button variant="outline" onClick={onClose} disabled={save.isPending}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={submit} disabled={save.isPending || name.trim() === ''}>
+          <Button loading={save.isPending} onClick={submit} disabled={save.isPending || name.trim() === ''}>
             {save.isPending ? t('common.saving') : t('common.save')}
           </Button>
         </>

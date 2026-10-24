@@ -183,7 +183,7 @@ export function TemplatesPage() {
             <Button variant="outline" onClick={() => setRenaming(null)} disabled={rename.isPending}>
               {t('common.cancel')}
             </Button>
-            <Button
+            <Button loading={rename.isPending}
               onClick={() => {
                 if (renaming) rename.mutate({ uid: renaming.uid, name: renameValue });
               }}

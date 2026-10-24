@@ -87,8 +87,8 @@ function BackupForm({ state }: { state: BackupState }) {
       </fieldset>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" size="sm" disabled={disabled || !dirty || !scheduleValid || !retentionValid}><Icon name="save" className="size-3.5" />{save.isPending ? t('common.saving') : t('backup.save')}</Button>
-          <Button size="sm" variant="outline" disabled={disabled || !retentionValid} onClick={() => test.mutate()}>{test.isPending ? t('backup.testing') : t('backup.test')}</Button>
+          <Button loading={save.isPending} type="submit" size="sm" disabled={disabled || !dirty || !scheduleValid || !retentionValid}><Icon name="save" className="size-3.5" />{save.isPending ? t('common.saving') : t('backup.save')}</Button>
+          <Button loading={test.isPending} size="sm" variant="outline" disabled={disabled || !retentionValid} onClick={() => test.mutate()}>{test.isPending ? t('backup.testing') : t('backup.test')}</Button>
         </div>
         <Button size="sm" variant="outline" disabled={disabled || dirty} title={dirty ? t('backup.saveFirst') : undefined} onClick={() => run.mutate()}><Icon name="upload" className="size-3.5" />{t('backup.run')}</Button>
       </div>
@@ -126,7 +126,7 @@ function RestorePanel({ busy, maxBytes }: { busy: boolean; maxBytes: number }) {
       <p className="text-xs leading-5 text-muted-foreground">{t('backup.restoreHint', { size: size(maxBytes) })}</p>
     </div>
     <Modal open={preview !== undefined} title={t('backup.confirmTitle')} description={t('backup.overwriteWarning')} onClose={() => { setPreview(undefined); setConfirmed(false); }} dismissible={!restore.isPending}
-      footer={<><Button size="sm" variant="ghost" disabled={restore.isPending} onClick={() => setPreview(undefined)}>{t('common.cancel')}</Button><Button size="sm" variant="destructive" disabled={!confirmed || restore.isPending || busy} onClick={() => restore.mutate()}>{restore.isPending ? t('backup.startingRestore') : t('backup.confirmRestore')}</Button></>}>
+      footer={<><Button size="sm" variant="ghost" disabled={restore.isPending} onClick={() => setPreview(undefined)}>{t('common.cancel')}</Button><Button loading={restore.isPending} size="sm" variant="destructive" disabled={!confirmed || restore.isPending || busy} onClick={() => restore.mutate()}>{restore.isPending ? t('backup.startingRestore') : t('backup.confirmRestore')}</Button></>}>
       {preview && <div className="space-y-4 text-sm">
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
           <dt className="text-muted-foreground">{t('backup.archiveFile')}</dt><dd className="break-all">{filename}</dd>
