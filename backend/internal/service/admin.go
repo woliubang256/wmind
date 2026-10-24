@@ -303,10 +303,10 @@ func (s *AdminService) updateUser(ctx context.Context, user *domain.User, patch 
 		if err != nil {
 			return nil, mapAdminUserError(err)
 		}
-		if *patch.Status != domain.UserStatusActive {
-			if err := s.revokeSessions(ctx, user.ID, state); err != nil {
-				return nil, err
-			}
+		// Enabling also revokes: legacy disabled accounts may still have sessions
+		// issued before the shared security-version protocol was introduced.
+		if err := s.revokeSessions(ctx, user.ID, state); err != nil {
+			return nil, err
 		}
 	}
 
@@ -524,7 +524,7 @@ func (s *AdminService) ListAuditLogs(ctx context.Context, query AuditQuery) ([]*
 }
 
 // withUserSecurity follows the login/refresh lock order: security row, then user
-// mutation and token rows. Every account change is committed with revocation.
+// mutation and token rows. Security changes and revocation share this transaction.
 func (s *AdminService) withUserSecurity(ctx context.Context, uid string, fn func(context.Context, *domain.User, *domain.TwoFactorState) error) error {
 	user, err := s.users.GetByUID(ctx, uid)
 	if err != nil {

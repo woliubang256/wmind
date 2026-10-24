@@ -150,6 +150,24 @@ func TestAdminSessionsOldTokensDoNotReviveOnEnable(t *testing.T) {
 	}
 }
 
+func TestAdminSessionsEnablingLegacyDisabledAccountRevokesOldTokens(t *testing.T) {
+	f := adminSessions(t)
+	// An account disabled by an older binary has no rotated security version.
+	if _, err := f.users.UpdateStatus(t.Context(), f.initial.User.UID, domain.UserStatusDisabled, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	status := domain.UserStatusActive
+	if _, err := f.admin.UpdateUser(t.Context(), f.initial.User.UID, service.AdminUserPatch{Status: &status}, service.Actor{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.auth[1].Authenticate(t.Context(), f.initial.AccessToken); err == nil {
+		t.Error("enabling legacy account revived old access token")
+	}
+	if _, err := f.auth[1].Refresh(t.Context(), f.initial.RefreshToken, service.SessionMeta{}); err == nil {
+		t.Error("enabling legacy account revived old refresh token")
+	}
+}
+
 type failSessionRevoke struct{ domain.RefreshTokenRepo }
 
 func (failSessionRevoke) RevokeAllForUser(context.Context, int64, time.Time) (int64, error) {
