@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import { Select } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { backupApi, backupKeys, type BackupConfiguration, type BackupJob, type BackupState, type RestorePreview } from './backup-api';
 import { CronEditor } from './cron-editor';
+import { timezoneOptions } from './timezones';
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function size(bytes: number): string { return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`; }
@@ -33,7 +34,7 @@ function BackupForm({ state }: { state: BackupState }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<BackupConfiguration>(state.configuration);
   const [schedule, setSchedule] = useState({ cron: draft.cron, timezone: draft.timezone });
-  const timezonesId = useId();
+  const timezones = useMemo(() => timezoneOptions(draft.timezone), [draft.timezone]);
   useEffect(() => { const timer = setTimeout(() => setSchedule({ cron: draft.cron, timezone: draft.timezone }), 350); return () => clearTimeout(timer); }, [draft.cron, draft.timezone]);
   const preview = useQuery({ queryKey: ['admin', 'backup-schedule', schedule], queryFn: () => backupApi.schedule(schedule.cron, schedule.timezone), retry: false, staleTime: 60000 });
   const scheduleCurrent = schedule.cron === draft.cron && schedule.timezone === draft.timezone;
@@ -59,7 +60,7 @@ function BackupForm({ state }: { state: BackupState }) {
       <fieldset disabled={disabled} className="space-y-4 border-t border-border/70 pt-4">
         <legend className="sr-only">{t('backup.scheduleTitle')}</legend>
         <CronEditor value={draft.cron} onChange={(value) => set('cron', value)} disabled={disabled} />
-        <Field label={t('backup.timezone')}><Input value={draft.timezone} onChange={(event) => set('timezone', event.target.value)} aria-label={t('backup.timezone')} list={timezonesId} spellCheck={false} /><datalist id={timezonesId}>{['Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Asia/Singapore', 'UTC', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles', 'Australia/Sydney'].map((zone) => <option key={zone} value={zone} />)}</datalist></Field>
+        <Field label={t('backup.timezone')}><Select value={draft.timezone} onChange={(zone) => set('timezone', zone)} options={timezones} disabled={disabled} aria-label={t('backup.timezone')} search={{ placeholder: t('backup.searchTimezone'), emptyLabel: t('backup.noTimezone') }} /></Field>
         <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs" aria-live="polite">
           <p className="font-medium">{t('backup.upcoming')} <span className="font-normal text-muted-foreground">{draft.timezone}</span></p>
           {preview.isError && scheduleCurrent ? <p role="alert" className="mt-1 text-destructive">{t('backup.invalidSchedule')}</p> : !scheduleCurrent || preview.isFetching ? <LoadingState inline label={t('backup.checkingSchedule')} className="mt-1 text-xs" /> : <ol className="mt-1.5 grid gap-x-6 gap-y-1 text-muted-foreground sm:grid-cols-2">{preview.data?.nextRuns.map((date) => <li key={date}>{formatTime(date)}</li>)}</ol>}

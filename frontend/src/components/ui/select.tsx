@@ -48,6 +48,15 @@ export interface SelectOption<T extends string | number = string> {
   disabled?: boolean;
 }
 
+export function filterSelectOptions<T extends string | number>(
+  options: readonly SelectOption<T>[], query: string,
+): readonly SelectOption<T>[] {
+  const normalize = (text: string) => text.trim().toLowerCase().replace(/[\s_]+/g, ' ');
+  const needle = normalize(query);
+  if (!needle) return options;
+  return options.filter((option) => normalize(option.label).includes(needle) || normalize(String(option.value)).includes(needle));
+}
+
 // ------------------------------------------------------------------ 纯逻辑
 // 下面四个函数刻意不碰 DOM：下拉最容易错的就是「跳着跳着跳到 disabled 上」
 // 与「敲了首字母没反应」，而这两件事用单测盯比用界面盯便宜得多。
@@ -163,6 +172,7 @@ export function placeMenu(
 const ITEM_HEIGHT = { sm: 28, md: 34 } as const;
 // 弹层使用 border-box：p-1 的上下 8px 和 border 的上下 2px 都占外高。
 const MENU_VERTICAL_CHROME = 8 + 2;
+const SEARCH_HEIGHT = 40;
 
 export interface SelectProps<T extends string | number = string> {
   value: T;
@@ -180,13 +190,15 @@ export interface SelectProps<T extends string | number = string> {
   menuMinWidth?: number;
   invalid?: boolean;
   placeholder?: string;
+  /** 仅筛选固定选项，不允许创建自定义值。 */
+  search?: { placeholder: string; emptyLabel: string };
   /** 自定义入口须转发 ref、ARIA 与事件；选项、键盘和焦点仍由 Select 管理。 */
   renderTrigger?: (props: ComponentPropsWithRef<'button'>) => ReactNode;
 }
 
 export function Select<T extends string | number = string>({
   value,
-  options,
+  options: allOptions,
   onChange,
   id,
   disabled = false,
@@ -195,6 +207,7 @@ export function Select<T extends string | number = string>({
   menuMinWidth = 0,
   invalid = false,
   placeholder = '',
+  search,
   renderTrigger,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
@@ -205,20 +218,25 @@ export function Select<T extends string | number = string>({
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [active, setActive] = useState(-1);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [placement, setPlacement] = useState<MenuPlacement | null>(null);
+  const searchable = search !== undefined;
+  const options = useMemo(() => searchable ? filterSelectOptions(allOptions, query) : allOptions, [allOptions, query, searchable]);
 
   const selectedIndex = useMemo(
     () => options.findIndex((option) => option.value === value),
     [options, value],
   );
-  const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+  const selected = allOptions.find((option) => option.value === value);
 
   const close = useCallback((returnFocus = true) => {
     setOpen(false);
     setPlacement(null);
+    setQuery('');
     if (returnFocus) triggerRef.current?.focus();
   }, []);
 
@@ -231,6 +249,10 @@ export function Select<T extends string | number = string>({
     setOpen(true);
   }, []);
 
+  useEffect(() => {
+    if (disabled) close(false);
+  }, [disabled, close]);
+
   // 落点：打开时算一次，滚动与窗口变化时重算。
   useEffect(() => {
     if (!open) return;
@@ -241,7 +263,7 @@ export function Select<T extends string | number = string>({
       setPlacement(
         placeMenu(
           rect,
-          options.length * ITEM_HEIGHT[size] + MENU_VERTICAL_CHROME,
+          Math.max(options.length, searchable ? 1 : 0) * ITEM_HEIGHT[size] + MENU_VERTICAL_CHROME + (searchable ? SEARCH_HEIGHT : 0),
           { width: window.innerWidth, height: window.innerHeight },
           { minWidth: Math.max(menuMinWidth, rect.width), maxHeight: 320 },
         ),
@@ -255,7 +277,7 @@ export function Select<T extends string | number = string>({
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  }, [open, options.length, size, menuMinWidth]);
+  }, [open, options.length, size, menuMinWidth, searchable]);
 
   // 打开后把焦点交给 listbox：方向键、首字母、Esc 都在它上面处理。
   //
@@ -265,7 +287,10 @@ export function Select<T extends string | number = string>({
   // 原地不动。回调 ref 只在节点真正挂载时调一次，正好是我们要的时机。
   const attachList = useCallback((node: HTMLDivElement | null) => {
     listRef.current = node;
-    if (node !== null) node.focus({ preventScroll: true });
+    if (node !== null && !searchable) node.focus({ preventScroll: true });
+  }, [searchable]);
+  const attachSearch = useCallback((node: HTMLInputElement | null) => {
+    node?.focus({ preventScroll: true });
   }, []);
 
   // aria-activedescendant 不会替我们滚动；只滚列表，避免 scrollIntoView 连带挪动页面。
@@ -282,7 +307,7 @@ export function Select<T extends string | number = string>({
     const bottom = box.top + list.clientTop + list.clientHeight - parseFloat(style.paddingBottom);
     if (optionBox.top < top) list.scrollTop -= top - optionBox.top;
     else if (optionBox.bottom > bottom) list.scrollTop += optionBox.bottom - bottom;
-  }, [active, listVisible]);
+  }, [active, listVisible, options]);
 
   // 点外面关闭。用 `pointerdown` 而不是 `click`：后者在 mousedown 之后才触发，
   // 中间的 focus 变化会先把弹层关掉一次。
@@ -291,7 +316,7 @@ export function Select<T extends string | number = string>({
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (target === null) return;
-      if (listRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target) || listRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
       close(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -318,11 +343,11 @@ export function Select<T extends string | number = string>({
   const commit = useCallback(
     (index: number) => {
       const option = options[index];
-      if (option === undefined || option.disabled) return;
+      if (disabled || option === undefined || option.disabled) return;
       if (option.value !== value) onChange(option.value);
       close();
     },
-    [options, value, onChange, close],
+    [options, value, onChange, close, disabled],
   );
 
   const moveActive = useCallback(
@@ -330,7 +355,9 @@ export function Select<T extends string | number = string>({
     [options],
   );
 
-  const onListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const onListKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    const editingSearch = event.currentTarget instanceof HTMLInputElement;
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
@@ -341,10 +368,12 @@ export function Select<T extends string | number = string>({
         moveActive(-1);
         return;
       case 'Home':
+        if (editingSearch) return;
         event.preventDefault();
         setActive(edgeEnabledIndex(options, 'first'));
         return;
       case 'End':
+        if (editingSearch) return;
         event.preventDefault();
         setActive(edgeEnabledIndex(options, 'last'));
         return;
@@ -353,6 +382,7 @@ export function Select<T extends string | number = string>({
         commit(active);
         return;
       case ' ':
+        if (editingSearch) return;
         event.preventDefault();
         commit(active);
         return;
@@ -367,7 +397,7 @@ export function Select<T extends string | number = string>({
         close(false);
         return;
       default:
-        if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (!editingSearch && event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
           typeKey(event.key);
         }
     }
@@ -390,6 +420,13 @@ export function Select<T extends string | number = string>({
       return;
     }
     if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (searchable) {
+        if (event.key === ' ') return;
+        event.preventDefault();
+        openMenu(edgeEnabledIndex(filterSelectOptions(allOptions, event.key), 'first'));
+        setQuery(event.key);
+        return;
+      }
       openMenu(typeaheadIndex(options, event.key, selectedIndex >= 0 ? selectedIndex - 1 : -1));
     }
   };
@@ -434,73 +471,99 @@ export function Select<T extends string | number = string>({
     ),
   };
 
+  const menuStyle = placement ? {
+    position: 'fixed' as const, top: placement.top, left: placement.left,
+    width: placement.width, maxHeight: placement.maxHeight,
+  } : undefined;
+  const list = (
+    <div
+      ref={attachList}
+      id={listId}
+      role="listbox"
+      tabIndex={-1}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      aria-activedescendant={active >= 0 && options[active] ? optionId(active) : undefined}
+      onKeyDown={onListKeyDown}
+      style={searchable ? undefined : menuStyle}
+      className={cn(
+        'z-50 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg',
+        'outline-none',
+        searchable && 'min-h-0 flex-1 rounded-none border-0 shadow-none',
+      )}
+    >
+      {options.map((option, index) => {
+        const isSelected = option.value === value;
+        const isActive = index === active;
+        return (
+          <div
+            key={String(option.value)}
+            id={optionId(index)}
+            role="option"
+            aria-selected={isSelected}
+            aria-disabled={option.disabled || undefined}
+            data-active={isActive || undefined}
+            // Keep focus in the list/search field so keyboard selection still works.
+            onPointerDown={(event) => event.preventDefault()}
+            onPointerMove={() => {
+              if (!option.disabled && !isActive) setActive(index);
+            }}
+            onClick={() => commit(index)}
+            className={cn(
+              'flex cursor-pointer items-center gap-1.5 rounded-md px-2',
+              compact ? 'h-7 text-xs' : 'h-[34px] text-sm',
+              'truncate whitespace-nowrap',
+              option.disabled && 'cursor-not-allowed opacity-45',
+              isActive && !option.disabled && 'bg-accent text-accent-foreground',
+              isSelected && 'font-medium text-primary',
+            )}
+          >
+            {/* 勾选位固定占位，否则选中项的文字会比别的项右移一格。 */}
+            <Icon
+              name="check"
+              className={cn('size-3.5 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')}
+              strokeWidth="2.6"
+            />
+            <span className="truncate">{option.label}</span>
+          </div>
+        );
+      })}
+      {search && options.length === 0 && (
+        <div role="status" className={cn('flex items-center px-2 text-sm text-muted-foreground', compact ? 'h-7' : 'h-[34px]')}>
+          {search.emptyLabel}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
       {renderTrigger ? renderTrigger(triggerProps) : <button {...triggerProps} />}
-
       {open && placement !== null && portalTarget !== null
-        ? createPortal(
-            <div
-              ref={attachList}
-              id={listId}
-              role="listbox"
-              tabIndex={-1}
-              aria-label={ariaLabel}
-              aria-labelledby={ariaLabelledBy}
-              aria-activedescendant={active >= 0 ? optionId(active) : undefined}
+        ? createPortal(search ? (
+          <div ref={menuRef} style={menuStyle} className="z-50 flex flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg">
+            <input
+              ref={attachSearch}
+              role="combobox"
+              aria-label={search.placeholder}
+              aria-expanded="true"
+              aria-autocomplete="list"
+              aria-controls={listId}
+              aria-activedescendant={active >= 0 && options[active] ? optionId(active) : undefined}
+              value={query}
+              placeholder={search.placeholder}
+              autoComplete="off"
+              spellCheck={false}
               onKeyDown={onListKeyDown}
-              style={{
-                position: 'fixed',
-                top: placement.top,
-                left: placement.left,
-                width: placement.width,
-                maxHeight: placement.maxHeight,
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActive(edgeEnabledIndex(filterSelectOptions(allOptions, event.target.value), 'first'));
               }}
-              className={cn(
-                'z-50 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg',
-                'outline-none',
-              )}
-            >
-              {options.map((option, index) => {
-                const isSelected = option.value === value;
-                const isActive = index === active;
-                return (
-                  <div
-                    key={String(option.value)}
-                    id={optionId(index)}
-                    role="option"
-                    aria-selected={isSelected}
-                    aria-disabled={option.disabled || undefined}
-                    data-active={isActive || undefined}
-                    // 阻止默认：否则 pointerdown 会把焦点从 listbox 挪走，
-                    // 之后的按键就没人接了。click 仍然会正常触发。
-                    onPointerDown={(event) => event.preventDefault()}
-                    onPointerMove={() => {
-                      if (!option.disabled && !isActive) setActive(index);
-                    }}
-                    onClick={() => commit(index)}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-1.5 rounded-md px-2',
-                      compact ? 'h-7 text-xs' : 'h-[34px] text-sm',
-                      'truncate whitespace-nowrap',
-                      option.disabled && 'cursor-not-allowed opacity-45',
-                      isActive && !option.disabled && 'bg-accent text-accent-foreground',
-                      isSelected && 'font-medium text-primary',
-                    )}
-                  >
-                    {/* 勾选位固定占位，否则选中项的文字会比别的项右移一格。 */}
-                    <Icon
-                      name="check"
-                      className={cn('size-3.5 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')}
-                      strokeWidth="2.6"
-                    />
-                    <span className="truncate">{option.label}</span>
-                  </div>
-                );
-              })}
-            </div>,
-            portalTarget,
-          )
+              className="h-10 w-full shrink-0 border-b border-border bg-transparent px-3 text-sm font-normal outline-none"
+            />
+            {list}
+          </div>
+        ) : list, portalTarget)
         : null}
     </>
   );

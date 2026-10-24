@@ -69,7 +69,7 @@ run(async () => {
     await panel.getByText('Cron 表达式或时区无效，或没有可执行的日期。').waitFor();
     check('无效 Cron 显示错误并禁止保存', await panel.getByRole('button', { name: '保存备份配置', exact: true }).isDisabled());
     await pick('备份频率', '每天凌晨 03:00');
-    await panel.getByLabel('执行时区', { exact: true }).fill('UTC');
+    await pick('执行时区', 'UTC');
     await pick('备份方式', 'S3 / 兼容存储');
     check('S3 条件表单和 Path Style 显示', await panel.getByLabel('S3 Endpoint', { exact: true }).isVisible() && await panel.getByRole('switch', { name: '使用 Path Style 地址' }).getAttribute('aria-checked') === 'true');
     await pick('备份方式', 'WebDAV');

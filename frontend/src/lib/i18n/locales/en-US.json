@@ -1229,6 +1229,8 @@
     "expression": "Cron expression",
     "cronHint": "Five fields: minute, hour, day of month, month, day of week. When both day fields are restricted, either may match.",
     "timezone": "Schedule time zone",
+    "searchTimezone": "Search time zones",
+    "noTimezone": "No time zones found",
     "upcoming": "Next 5 runs",
     "invalidSchedule": "The Cron expression or time zone is invalid, or no execution date exists.",
     "checkingSchedule": "Calculating run times…",

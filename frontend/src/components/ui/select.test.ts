@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   edgeEnabledIndex,
+  filterSelectOptions,
   nextEnabledIndex,
   placeMenu,
   typeaheadIndex,
@@ -20,6 +21,28 @@ const withHoles: SelectOption[] = [
   { value: 'c', label: 'Cherry' },
   { value: 'd', label: 'Date', disabled: true },
 ];
+
+describe('filterSelectOptions', () => {
+  const zones = [
+    { value: 'Asia/Shanghai', label: 'Asia/Shanghai' },
+    { value: 'America/New_York', label: 'America/New_York' },
+    { value: 'UTC', label: 'UTC', disabled: true },
+  ];
+
+  it('按标识和标签搜索，忽略大小写、首尾空格和下划线', () => {
+    expect(filterSelectOptions(zones, ' shANGhai ')).toEqual([zones[0]]);
+    expect(filterSelectOptions(zones, 'new york')).toEqual([zones[1]]);
+    expect(filterSelectOptions([{ value: 'x', label: '上海' }], '上海')).toHaveLength(1);
+    expect(filterSelectOptions([{ value: 12, label: '十二' }], '12')).toHaveLength(1);
+  });
+
+  it('不匹配返回空列表，空搜索保留原列表，禁用项保持禁用', () => {
+    expect(filterSelectOptions(zones, 'invalid-zone')).toEqual([]);
+    expect(filterSelectOptions(zones, '   ')).toBe(zones);
+    expect(filterSelectOptions(zones, 'utc')).toEqual([zones[2]]);
+    expect(zones).toHaveLength(3);
+  });
+});
 
 describe('nextEnabledIndex', () => {
   it('向下与向上各走一步', () => {

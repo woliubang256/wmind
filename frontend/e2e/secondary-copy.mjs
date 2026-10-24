@@ -105,7 +105,7 @@ async function adminChecks(page, t, locale, saved) {
   await pick('backup.frequency', 'backup.presets.weekly');
   verify('切回预设收起高级规则', await expression.count() === 0);
   await pick('backup.frequency', 'backup.presets.custom');
-  verify('预设生成正确表达式且保留其他设置', await expression.inputValue() === '0 3 * * 1' && await panel.getByLabel(t('backup.timezone'), { exact: true }).inputValue() === 'Asia/Shanghai');
+  verify('预设生成正确表达式且保留其他设置', await expression.inputValue() === '0 3 * * 1' && await panel.getByRole('combobox', { name: t('backup.timezone'), exact: true }).getAttribute('data-value') === 'Asia/Shanghai');
   await pick('backup.target', 'backup.s3Compatible');
   verify('多项凭据的留空规则只出现一次', await panel.getByText(t('backup.secretRetained'), { exact: true }).count() === 1 && await panel.getByLabel('S3 Access Key', { exact: true }).getAttribute('placeholder') === '••••••••');
   await panel.getByLabel(t('backup.chooseZIP'), { exact: true }).setInputFiles({ name: 'backup.zip', mimeType: 'application/zip', buffer: Buffer.from('fixture') });

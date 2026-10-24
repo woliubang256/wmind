@@ -25,6 +25,7 @@ const SUITE = [
   ['avatars', '头像来源优先级 / 上传与回退'],
   ['settings-cleanup', '设置精简 / 导航字号 / 确认弹窗布局'],
   ['select-overflow', '下拉菜单高度 / 受限空间与键盘滚动'],
+  ['backup-timezone', '固定时区搜索 / 保存刷新 / 中英文与受限视口'],
   ['trash-retention', '回收站保留设置 / 剩余天数'],
   ['import-tabs', '文件与 Markdown 文本导入'],
   ['import-batch', '批量导入 / 原生 XMind 连线 / 最后成功项'],
