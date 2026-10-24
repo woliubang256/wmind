@@ -78,7 +78,7 @@ function AvatarCard({ user }: { user: NonNullable<ReturnType<typeof useCurrentUs
             onChange={pick}
             aria-label={t('account.avatar')}
           />
-          <Button variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          <Button loading={uploading} variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
             <Icon name="image" className="size-4" />
             {uploading ? t('account.uploading') : t('account.changeAvatar')}
           </Button>
@@ -152,7 +152,7 @@ function ProfileCard({ user }: { user: NonNullable<ReturnType<typeof useCurrentU
           hint={t('account.emailHint')}
         />
         <div className="flex justify-end">
-          <Button type="submit" disabled={save.isPending}>
+          <Button loading={save.isPending} type="submit" disabled={save.isPending}>
             {save.isPending ? t('common.saving') : t('common.save')}
           </Button>
         </div>
@@ -227,7 +227,7 @@ function PasswordCard() {
           error={errors.confirmPassword}
         />
         <div className="flex justify-end">
-          <Button type="submit" disabled={change.isPending}>
+          <Button loading={change.isPending} type="submit" disabled={change.isPending}>
             {change.isPending ? t('common.saving') : t('account.changePassword')}
           </Button>
         </div>

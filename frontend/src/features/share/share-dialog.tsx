@@ -195,7 +195,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
             </div>
 
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => create.mutate()} disabled={create.isPending}>
+              <Button loading={create.isPending} size="sm" onClick={() => create.mutate()} disabled={create.isPending}>
                 <Icon name="plus" className="mr-1.5 size-4" />
                 {create.isPending ? t('share.create.submitting') : t('share.create.submit')}
               </Button>

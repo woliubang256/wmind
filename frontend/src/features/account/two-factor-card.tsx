@@ -82,7 +82,7 @@ export function TwoFactorCard({ userUID }: { userUID: string }) {
         <p className="text-xs text-muted-foreground">{t('twoFactor.reuseHint')}</p>
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy}>{busy ? t('common.processing') : t(mode === 'start' ? 'twoFactor.next' : mode === 'enable' ? 'twoFactor.confirmEnable' : 'common.submit')}</Button>
+          <Button loading={busy} type="submit" disabled={busy}>{busy ? t('common.processing') : t(mode === 'start' ? 'twoFactor.next' : mode === 'enable' ? 'twoFactor.confirmEnable' : 'common.submit')}</Button>
           <Button type="button" variant="outline" disabled={busy} onClick={reset}>{t('common.cancel')}</Button>
         </div>
       </form>}
