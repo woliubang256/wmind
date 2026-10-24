@@ -141,6 +141,7 @@ func newManagerFixture(t *testing.T) *managerFixture {
 	}
 	t.Cleanup(func() { cancel(); manager.Wait() })
 	c := backup.DefaultConfiguration()
+	c.Target = "webdav"
 	c.WebDAV.URL = "https://example.com/backups"
 	c.WebDAV.Password = "private-password"
 	c.Enabled = true

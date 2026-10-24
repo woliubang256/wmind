@@ -84,6 +84,16 @@ run(async () => {
       const timezone = page.getByRole('combobox', { name: t('backup.timezone'), exact: true });
       await frequency.waitFor();
       verify('桌面备份频率与时区并排', sameRow(await rect(frequency), await rect(timezone)));
+      const target = page.getByRole('combobox', { name: t('backup.target'), exact: true });
+      verify('备份方式使用接口默认 S3', await target.getAttribute('data-value') === 's3');
+      await target.click();
+      await page.getByRole('option', { name: 'WebDAV', exact: true }).click();
+      await page.getByRole('button', { name: t('backup.save'), exact: true }).click();
+      await page.getByText(t('backup.saved'), { exact: true }).waitFor();
+      await page.reload();
+      await page.getByRole('tab', { name: t('backup.tab'), exact: true }).click();
+      await target.waitFor();
+      verify('已保存 WebDAV 刷新后不被 S3 默认值覆盖', await target.getAttribute('data-value') === 'webdav');
       await frequency.click();
       await page.getByRole('option', { name: t('backup.presets.custom'), exact: true }).click();
       const expression = page.getByRole('textbox', { name: t('backup.expression'), exact: true });

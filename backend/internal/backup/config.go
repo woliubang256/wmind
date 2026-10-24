@@ -49,7 +49,7 @@ type Configuration struct {
 }
 
 func DefaultConfiguration() Configuration {
-	return Configuration{RetainCount: 30, Cron: "0 3 * * *", Timezone: "Asia/Shanghai", Target: "webdav", S3: S3Config{Region: "us-east-1", Prefix: "wmind", PathStyle: true}}
+	return Configuration{RetainCount: 30, Cron: "0 3 * * *", Timezone: "Asia/Shanghai", Target: "s3", S3: S3Config{Region: "us-east-1", Prefix: "wmind", PathStyle: true}}
 }
 
 // Default only absent new fields. Explicit zero and unknown fields stay invalid.

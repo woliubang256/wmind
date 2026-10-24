@@ -27,6 +27,37 @@ func TestBackupEndpointsRequireAdmin(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupHTTPDefaultS3AndSavedWebDAV(t *testing.T) {
+	s := newAuthTestServer(t)
+	token := s.loginAs(testAdminEmail, testAdminPassword)
+	status, body := s.do("GET", "/api/v1/admin/backups", token, nil)
+	if status != 200 {
+		t.Fatalf("get defaults: %d %+v", status, body.Error)
+	}
+	configuration := body.Data["configuration"].(map[string]any)
+	if configuration["target"] != "s3" || configuration["enabled"] != false {
+		t.Fatal("new installation must default to disabled S3")
+	}
+	c := backup.DefaultConfiguration()
+	c.Target = "webdav"
+	c.WebDAV.URL = "https://backup.example.test"
+	status, body = s.do("PUT", "/api/v1/admin/backups/config", token, c)
+	if status != 200 {
+		t.Fatalf("save WebDAV: %d %+v", status, body.Error)
+	}
+	if err := s.backups.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	status, body = s.do("GET", "/api/v1/admin/backups", token, nil)
+	if status != 200 {
+		t.Fatalf("get saved configuration: %d %+v", status, body.Error)
+	}
+	configuration = body.Data["configuration"].(map[string]any)
+	if configuration["target"] != "webdav" || configuration["webdav"].(map[string]any)["url"] != c.WebDAV.URL {
+		t.Fatal("saved WebDAV configuration was replaced by defaults")
+	}
+}
 func TestBackupHTTPConfigurationScheduleAndRestore(t *testing.T) {
 	s := newAuthTestServer(t)
 	token := s.loginAs(testAdminEmail, testAdminPassword)
@@ -58,6 +89,7 @@ func TestBackupHTTPConfigurationScheduleAndRestore(t *testing.T) {
 	defer dav.Close()
 	c := backup.DefaultConfiguration()
 	c.Enabled = true
+	c.Target = "webdav"
 	c.WebDAV = backup.WebDAVConfig{URL: dav.URL, Username: "backup-user", Password: "backup-password"}
 	status, body := s.do("PUT", "/api/v1/admin/backups/config", token, c)
 	if status != 200 {
@@ -182,6 +214,7 @@ func TestBackupDedupAfterRealLoginMapReadAndAnonymousShareView(t *testing.T) {
 	defer dav.Close()
 	c := backup.DefaultConfiguration()
 	c.SkipUnchanged = true
+	c.Target = "webdav"
 	c.WebDAV.URL = dav.URL
 	if err := s.backups.Save(t.Context(), c, nil); err != nil {
 		t.Fatal(err)

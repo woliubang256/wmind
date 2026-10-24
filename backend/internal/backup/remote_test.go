@@ -43,6 +43,7 @@ func TestWebDAVCreatesDirectoryTestsAndUploads(t *testing.T) {
 	}))
 	defer server.Close()
 	c := DefaultConfiguration()
+	c.Target = "webdav"
 	c.WebDAV = WebDAVConfig{URL: server.URL + "/dav/备份", Username: "test-user", Password: "test-secret"}
 	remote := NewRemoteStorage()
 	if err := remote.Test(t.Context(), c); err != nil {
@@ -120,6 +121,7 @@ func TestRemoteRefusesRedirectsAndDoesNotLeakCredentials(t *testing.T) {
 	}))
 	defer redirect.Close()
 	c := DefaultConfiguration()
+	c.Target = "webdav"
 	c.WebDAV = WebDAVConfig{URL: redirect.URL, Username: "private-user", Password: "private-password"}
 	err := NewRemoteStorage().Test(t.Context(), c)
 	if err == nil || reached || strings.Contains(err.Error(), "private-password") {

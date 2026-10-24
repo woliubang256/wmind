@@ -39,6 +39,29 @@ func TestRetentionDefaultsAndConfigurationCompatibility(t *testing.T) {
 	}
 }
 
+func TestDefaultTargetUsesS3WithoutReplacingExplicitWebDAV(t *testing.T) {
+	c := DefaultConfiguration()
+	if c.Target != "s3" || c.Enabled || c.Validate(false) != nil {
+		t.Fatal("new configuration must start with disabled S3")
+	}
+	if c.Validate(true) == nil {
+		t.Fatal("unconfigured S3 must not be executable")
+	}
+	legacy := `{"enabled":false,"cron":"0 3 * * *","timezone":"Asia/Shanghai","target":"webdav","webdav":{"url":"https://backup.example.test"},"s3":{}}`
+	if err := json.Unmarshal([]byte(legacy), &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Target != "webdav" || c.WebDAV.URL != "https://backup.example.test" || c.Validate(false) != nil {
+		t.Fatal("explicit legacy WebDAV must be preserved")
+	}
+	for _, target := range []string{"", "invalid"} {
+		c.Target = target
+		if c.Validate(false) == nil {
+			t.Fatal("invalid target silently defaulted")
+		}
+	}
+}
+
 func TestConfigurationEncryptionAndMasking(t *testing.T) {
 	box, err := NewSecretBox(strings.Repeat("a", 32))
 	if err != nil {
