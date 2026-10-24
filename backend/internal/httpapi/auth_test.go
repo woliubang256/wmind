@@ -84,7 +84,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		service.AuthServiceConfig{
 			TwoFactor: sqlite.NewTwoFactorRepository(db), TwoFactorKey: "http-test-encryption-key-long-enough",
 			Issuer: issuer, RefreshTTL: 7 * 24 * time.Hour,
-			Site: settingsSvc, UserCacheTTL: 60 * time.Second,
+			Site: settingsSvc,
 		},
 	)
 	if err != nil {
@@ -112,7 +112,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Stats: sqlite.NewAdminStatsRepository(db), Uploads: avatarStore,
 		Users: userRepo, Tokens: sqlite.NewRefreshTokenRepository(db),
 		Audit: sqlite.NewAuditRepository(db), Site: settingsSvc,
-		Invalidator: svc, Tx: txManager, Logger: logger,
+		TwoFactor: sqlite.NewTwoFactorRepository(db), Tx: txManager, Logger: logger,
 	})
 	if err != nil {
 		t.Fatalf("NewAdminService: %v", err)
@@ -166,7 +166,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	backups, err := backup.NewManager(backupCtx, backup.ManagerConfig{
 		Repository: sqlite.NewBackupRepository(db), Settings: sqlite.NewSettingsRepository(db), UploadDir: uploads,
 		WorkDir: filepath.Join(t.TempDir(), "backups"), Secret: "http-test-encryption-key-long-enough", Logger: logger,
-		AfterRestore: func(ctx context.Context) error { svc.InvalidateAllUsers(); return settingsSvc.Reload(ctx) },
+		AfterRestore: settingsSvc.Reload,
 	})
 	if err != nil {
 		t.Fatal(err)

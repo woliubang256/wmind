@@ -41,7 +41,7 @@ func factorServer(t *testing.T) factorFixture {
 	issuer, _ := auth.NewTokenIssuer("service-test-key-32-bytes-at-least", 15*time.Minute)
 	issuer.SetClock(func() time.Time { return now })
 	repo := sqlite.NewTwoFactorRepository(db)
-	svc, err := service.NewAuthService(sqlite.NewUserRepository(db), sqlite.NewRefreshTokenRepository(db), sqlite.NewTxManager(db), service.AuthServiceConfig{Issuer: issuer, Now: func() time.Time { return now }, TwoFactor: repo, TwoFactorKey: "test-mfa-encryption-key-at-least-32", UserCacheTTL: time.Minute})
+	svc, err := service.NewAuthService(sqlite.NewUserRepository(db), sqlite.NewRefreshTokenRepository(db), sqlite.NewTxManager(db), service.AuthServiceConfig{Issuer: issuer, Now: func() time.Time { return now }, TwoFactor: repo, TwoFactorKey: "test-mfa-encryption-key-at-least-32"})
 	if err != nil {
 		t.Fatal(err)
 	}

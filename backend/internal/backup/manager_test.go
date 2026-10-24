@@ -124,7 +124,7 @@ func newManagerFixture(t *testing.T) *managerFixture {
 	os.WriteFile(filepath.Join(uploads, "image.png"), []byte("original-image"), 0600)
 	secret := strings.Repeat("s", 32)
 	issuer, _ := auth.NewTokenIssuer(secret, time.Minute)
-	authSvc, err := service.NewAuthService(sqlite.NewUserRepository(db), sqlite.NewRefreshTokenRepository(db), sqlite.NewTxManager(db), service.AuthServiceConfig{Issuer: issuer, RefreshTTL: time.Hour, TwoFactor: sqlite.NewTwoFactorRepository(db), TwoFactorKey: secret, UserCacheTTL: time.Hour})
+	authSvc, err := service.NewAuthService(sqlite.NewUserRepository(db), sqlite.NewRefreshTokenRepository(db), sqlite.NewTxManager(db), service.AuthServiceConfig{Issuer: issuer, RefreshTTL: time.Hour, TwoFactor: sqlite.NewTwoFactorRepository(db), TwoFactorKey: secret})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func newManagerFixture(t *testing.T) *managerFixture {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	remote := &remoteStub{}
-	cfg := backup.ManagerConfig{Repository: sqlite.NewBackupRepository(db), Settings: sqlite.NewSettingsRepository(db), UploadDir: uploads, WorkDir: filepath.Join(root, "work"), Secret: secret, Logger: log, Remote: remote, AfterRestore: func(context.Context) error { authSvc.InvalidateAllUsers(); return nil }}
+	cfg := backup.ManagerConfig{Repository: sqlite.NewBackupRepository(db), Settings: sqlite.NewSettingsRepository(db), UploadDir: uploads, WorkDir: filepath.Join(root, "work"), Secret: secret, Logger: log, Remote: remote}
 	manager, err := backup.NewManager(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)

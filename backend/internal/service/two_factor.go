@@ -30,16 +30,32 @@ type TwoFactorChange struct {
 // Every mutation, login and refresh takes the security-row lock before token locks.
 func (s *AuthService) withTwoFactor(ctx context.Context, user *domain.User, fn func(context.Context, *domain.TwoFactorState) error) error {
 	return s.tx.WithTx(ctx, func(ctx context.Context) error {
-		if s.twoFactor == nil {
-			return fn(ctx, &domain.TwoFactorState{})
+		state := &domain.TwoFactorState{}
+		if s.twoFactor != nil {
+			if err := s.twoFactor.Ensure(ctx, user.ID); err != nil {
+				return err
+			}
+			var err error
+			state, err = s.twoFactor.Get(ctx, user.ID, true)
+			if err != nil {
+				return err
+			}
 		}
-		if err := s.twoFactor.Ensure(ctx, user.ID); err != nil {
-			return err
-		}
-		state, err := s.twoFactor.Get(ctx, user.ID, true)
+		// Never issue a session from a user snapshot read before the security lock.
+		current, err := s.users.GetByID(ctx, user.ID)
 		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return apperr.New(apperr.CodeAuthTokenInvalid, "")
+			}
 			return err
 		}
+		if !current.IsActive() {
+			return apperr.New(apperr.CodeAuthAccountDisabled, "")
+		}
+		if current.PasswordHash != user.PasswordHash {
+			return apperr.New(apperr.CodeAuthTokenInvalid, "")
+		}
+		*user = *current
 		return fn(ctx, state)
 	})
 }

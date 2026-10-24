@@ -66,10 +66,6 @@ type AuthServiceConfig struct {
 	Issuer       *auth.TokenIssuer
 	RefreshTTL   time.Duration
 	Site         SiteConfigProvider
-	// UserCacheTTL 是 RequireAuth 用户状态的缓存时长。0 表示不缓存。
-	// 禁用账号时由管理端调用 InvalidateUser 主动失效，所以缓存不会让
-	// 「禁用」延迟生效。
-	UserCacheTTL time.Duration
 	// Throttle 是登录失败锁定器；为空时使用默认的「5 次失败锁 15 分钟」。
 	Throttle *LoginThrottle
 	// Now 为空时使用 time.Now；测试可注入固定时钟。
@@ -90,24 +86,7 @@ type AuthService struct {
 	site            SiteConfigProvider
 	now             Clock
 	throttle        *LoginThrottle
-
-	cacheTTL time.Duration
-	mu       sync.RWMutex
-	cache    map[string]cachedUser
 }
-
-// cachedUser 是「已认证用户」的短期缓存。
-//
-// 缓存的是用户对象而不是令牌：同一个用户的多设备、多请求共用一份，
-// 而 JWT 校验本身很便宜，没必要缓存。
-type cachedUser struct {
-	user      *domain.User
-	expiresAt time.Time
-}
-
-// maxCachedUsers 是缓存条目上限。超过后在写入时清理过期项，
-// 避免一个长期运行的实例把每个登录过的用户都留在内存里。
-const maxCachedUsers = 4096
 
 // NewAuthService 构造认证服务。
 func NewAuthService(users domain.UserRepo, tokens domain.RefreshTokenRepo, tx domain.TxManager, cfg AuthServiceConfig) (*AuthService, error) {
@@ -122,9 +101,6 @@ func NewAuthService(users domain.UserRepo, tokens domain.RefreshTokenRepo, tx do
 	}
 	if cfg.RefreshTTL <= 0 {
 		cfg.RefreshTTL = 7 * 24 * time.Hour
-	}
-	if cfg.UserCacheTTL < 0 {
-		cfg.UserCacheTTL = 0
 	}
 	if cfg.Now == nil {
 		cfg.Now = SystemClock
@@ -145,7 +121,6 @@ func NewAuthService(users domain.UserRepo, tokens domain.RefreshTokenRepo, tx do
 		users: users, tokens: tokens, tx: tx,
 		issuer: cfg.Issuer, refreshTTL: cfg.RefreshTTL, site: cfg.Site, now: cfg.Now,
 		throttle: cfg.Throttle,
-		cacheTTL: cfg.UserCacheTTL, cache: make(map[string]cachedUser),
 	}, nil
 }
 
@@ -188,7 +163,13 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*AuthResu
 		}
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
-	return s.issueSession(ctx, user, in.Meta)
+	var result *AuthResult
+	err = s.withTwoFactor(ctx, user, func(ctx context.Context, _ *domain.TwoFactorState) error {
+		var err error
+		result, err = s.issueSession(ctx, user, in.Meta)
+		return err
+	})
+	return result, err
 }
 
 // registrationRole 返回新注册用户的角色。
@@ -428,8 +409,8 @@ func (s *AuthService) Me(ctx context.Context, uid string) (*domain.User, error) 
 
 // Authenticate 校验 Access Token 并返回对应用户。供 RequireAuth 使用。
 //
-// 用户状态每次从数据库读（外层有 60 秒缓存）：JWT 里不带 status，
-// 否则「禁用账号」要等令牌过期才生效。
+// 用户和安全版本每次从共享数据库读，不使用进程内状态缓存。
+// 禁用、删除在所有实例的下一次认证生效，重新启用也不能复活旧会话。
 func (s *AuthService) Authenticate(ctx context.Context, accessToken string) (*domain.User, error) {
 	if accessToken == "" {
 		return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
@@ -442,15 +423,12 @@ func (s *AuthService) Authenticate(ctx context.Context, accessToken string) (*do
 		return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
 	}
 
-	user, cached := s.cachedUser(claims.Subject)
-	if !cached {
-		user, err = s.users.GetByUID(ctx, claims.Subject)
-		if err != nil {
-			if errors.Is(err, domain.ErrNotFound) {
-				return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
-			}
-			return nil, apperr.Wrap(apperr.CodeInternalError, err)
+	user, err := s.users.GetByUID(ctx, claims.Subject)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
 		}
+		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
 	if !user.IsActive() {
 		return nil, apperr.New(apperr.CodeAuthAccountDisabled, "")
@@ -464,64 +442,7 @@ func (s *AuthService) Authenticate(ctx context.Context, accessToken string) (*do
 			return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
 		}
 	}
-	if !cached {
-		s.cacheUser(user)
-	}
 	return user, nil
-}
-
-// InvalidateAllUsers clears cached account state after a database restore.
-func (s *AuthService) InvalidateAllUsers() {
-	s.mu.Lock()
-	clear(s.cache)
-	s.mu.Unlock()
-}
-
-// InvalidateUser 让某用户的认证缓存立即失效。
-//
-// 禁用、删除、改角色之后必须调用：JWT 里不带状态，缓存是「禁用即时生效」
-// 唯一可能被拖慢的地方。
-func (s *AuthService) InvalidateUser(uid string) {
-	if s.cacheTTL <= 0 || uid == "" {
-		return
-	}
-	s.mu.Lock()
-	delete(s.cache, uid)
-	s.mu.Unlock()
-}
-
-func (s *AuthService) cachedUser(uid string) (*domain.User, bool) {
-	if s.cacheTTL <= 0 {
-		return nil, false
-	}
-	s.mu.RLock()
-	entry, ok := s.cache[uid]
-	s.mu.RUnlock()
-	if !ok || !s.now().Before(entry.expiresAt) {
-		return nil, false
-	}
-	// 返回副本：调用方可能把用户对象挂到请求上下文里，共享指针会让
-	// 一次意外的字段赋值污染所有并发请求。
-	copied := *entry.user
-	return &copied, true
-}
-
-func (s *AuthService) cacheUser(user *domain.User) {
-	if s.cacheTTL <= 0 {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.cache) >= maxCachedUsers {
-		now := s.now()
-		for key, entry := range s.cache {
-			if !now.Before(entry.expiresAt) {
-				delete(s.cache, key)
-			}
-		}
-	}
-	copied := *user
-	s.cache[user.UID] = cachedUser{user: &copied, expiresAt: s.now().Add(s.cacheTTL)}
 }
 
 // SeedAdmin 在用户表为空时创建首个管理员。

@@ -24,7 +24,7 @@ const tokenIssuerName = "wmind"
 // Claims 是 Access Token 的声明。
 //
 // 刻意**不含** status：账号被禁用后必须立刻失效，而 JWT 一旦签发就无法
-// 收回。用户状态由 RequireAuth 每次查库（带 60 秒缓存，禁用时主动失效），
+// 收回。用户状态与安全版本由 RequireAuth 每次从共享数据库读取，
 // 见 docs/04 §2.3。
 type Claims struct {
 	SecurityVersion string `json:"sv,omitempty"`

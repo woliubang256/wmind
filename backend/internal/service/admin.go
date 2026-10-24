@@ -42,14 +42,6 @@ type Auditor interface {
 	Record(ctx context.Context, entry AuditEntry) error
 }
 
-// UserStatusInvalidator 让管理动作立刻影响已签发的令牌。
-//
-// AuthService 有 60 秒的用户状态缓存；禁用/删除/改角色后必须主动失效，
-// 否则「禁用」最多延迟一分钟才生效（验收标准 3 要求立即）。
-type UserStatusInvalidator interface {
-	InvalidateUser(uid string)
-}
-
 // StorageUsage 提供上传文件的业务字节数。
 type StorageUsage interface {
 	Usage(context.Context) (int64, error)
@@ -57,30 +49,30 @@ type StorageUsage interface {
 
 // AdminServiceConfig 是 AdminService 的依赖。
 type AdminServiceConfig struct {
-	Stats       domain.AdminStatsRepo
-	Uploads     StorageUsage
-	Users       domain.UserRepo
-	Tokens      domain.RefreshTokenRepo
-	Audit       domain.AuditRepo
-	Site        SiteConfigProvider
-	Invalidator UserStatusInvalidator
-	Tx          domain.TxManager
-	Logger      *slog.Logger
-	Now         Clock
+	Stats     domain.AdminStatsRepo
+	Uploads   StorageUsage
+	Users     domain.UserRepo
+	Tokens    domain.RefreshTokenRepo
+	Audit     domain.AuditRepo
+	Site      SiteConfigProvider
+	TwoFactor domain.TwoFactorRepo
+	Tx        domain.TxManager
+	Logger    *slog.Logger
+	Now       Clock
 }
 
 // AdminService 实现管理后台的业务规则。
 type AdminService struct {
-	stats       domain.AdminStatsRepo
-	uploads     StorageUsage
-	users       domain.UserRepo
-	tokens      domain.RefreshTokenRepo
-	audit       domain.AuditRepo
-	site        SiteConfigProvider
-	invalidator UserStatusInvalidator
-	tx          domain.TxManager
-	logger      *slog.Logger
-	now         Clock
+	stats     domain.AdminStatsRepo
+	uploads   StorageUsage
+	users     domain.UserRepo
+	tokens    domain.RefreshTokenRepo
+	audit     domain.AuditRepo
+	site      SiteConfigProvider
+	twoFactor domain.TwoFactorRepo
+	tx        domain.TxManager
+	logger    *slog.Logger
+	now       Clock
 }
 
 // NewAdminService 构造管理服务。
@@ -94,6 +86,9 @@ func NewAdminService(cfg AdminServiceConfig) (*AdminService, error) {
 	if cfg.Audit == nil {
 		return nil, errors.New("AdminService 需要审计仓储")
 	}
+	if cfg.Tokens == nil || cfg.TwoFactor == nil || cfg.Tx == nil {
+		return nil, errors.New("AdminService 需要令牌、安全状态仓储与事务管理器")
+	}
 	if cfg.Site == nil {
 		cfg.Site = OpenSiteConfig()
 	}
@@ -106,7 +101,7 @@ func NewAdminService(cfg AdminServiceConfig) (*AdminService, error) {
 	return &AdminService{
 		stats: cfg.Stats, uploads: cfg.Uploads,
 		users: cfg.Users, tokens: cfg.Tokens, audit: cfg.Audit, site: cfg.Site,
-		invalidator: cfg.Invalidator, tx: cfg.Tx, logger: cfg.Logger, now: cfg.Now,
+		twoFactor: cfg.TwoFactor, tx: cfg.Tx, logger: cfg.Logger, now: cfg.Now,
 	}, nil
 }
 
@@ -226,10 +221,25 @@ type AdminUserPatch struct {
 
 // UpdateUser 修改用户资料、角色或状态。
 func (s *AdminService) UpdateUser(ctx context.Context, uid string, patch AdminUserPatch, actor Actor) (*domain.User, error) {
-	user, err := s.users.GetByUID(ctx, uid)
+	var updated *domain.User
+	var oldRole domain.Role
+	var oldStatus domain.UserStatus
+	err := s.withUserSecurity(ctx, uid, func(ctx context.Context, user *domain.User, state *domain.TwoFactorState) error {
+		oldRole, oldStatus = user.Role, user.Status
+		var err error
+		updated, err = s.updateUser(ctx, user, patch, state)
+		return err
+	})
 	if err != nil {
-		return nil, mapAdminUserError(err)
+		return nil, err
 	}
+	s.auditUserChange(ctx, actor, updated, oldRole, oldStatus)
+	return updated, nil
+}
+
+func (s *AdminService) updateUser(ctx context.Context, user *domain.User, patch AdminUserPatch, state *domain.TwoFactorState) (*domain.User, error) {
+	uid := user.UID
+	var err error
 
 	// 先把「会不会把最后一个管理员弄没」判断完，再动手。
 	if err := s.guardLastAdmin(ctx, user, patch); err != nil {
@@ -264,13 +274,6 @@ func (s *AdminService) UpdateUser(ctx context.Context, uid string, patch AdminUs
 		}
 	}
 
-	before := struct {
-		nickname string
-		email    string
-		role     domain.Role
-		status   domain.UserStatus
-	}{user.Nickname, user.Email, user.Role, user.Status}
-
 	now := s.now()
 	updated := user
 	if nickname != user.Nickname || email != user.Email {
@@ -301,13 +304,12 @@ func (s *AdminService) UpdateUser(ctx context.Context, uid string, patch AdminUs
 			return nil, mapAdminUserError(err)
 		}
 		if *patch.Status != domain.UserStatusActive {
-			// 禁用必须立刻踢人：refresh token 撤销后无法续期，状态缓存失效后
-			// 已签发的 Access Token 也会在下一次请求被拒（验收标准 3）。
-			s.revokeSessions(ctx, user.UID, user.ID)
+			if err := s.revokeSessions(ctx, user.ID, state); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	s.auditUserChange(ctx, actor, updated, before.role, before.status)
 	return updated, nil
 }
 
@@ -367,30 +369,33 @@ func (s *AdminService) guardLastAdmin(ctx context.Context, user *domain.User, pa
 // 一期没有导图表（M2 才有），map_strategy 参数保留但只做校验，实际处理
 // 在 M2 接入导图仓储后补上。
 func (s *AdminService) DeleteUser(ctx context.Context, uid string, actor Actor) error {
-	user, err := s.users.GetByUID(ctx, uid)
-	if err != nil {
-		return mapAdminUserError(err)
-	}
-	if actor.UID != "" && actor.UID == user.UID {
-		return apperr.New(apperr.CodeAdminCannotDeleteSelf, "")
-	}
-	if user.IsAdmin() && user.IsActive() {
-		count, err := s.users.CountActiveAdmins(ctx)
-		if err != nil {
-			return apperr.Wrap(apperr.CodeInternalError, err)
+	var deleted *domain.User
+	err := s.withUserSecurity(ctx, uid, func(ctx context.Context, user *domain.User, state *domain.TwoFactorState) error {
+		if actor.UID != "" && actor.UID == user.UID {
+			return apperr.New(apperr.CodeAdminCannotDeleteSelf, "")
 		}
-		if count <= 1 {
-			return apperr.New(apperr.CodeAdminLastAdmin, "")
+		if user.IsAdmin() && user.IsActive() {
+			count, err := s.users.CountActiveAdmins(ctx)
+			if err != nil {
+				return apperr.Wrap(apperr.CodeInternalError, err)
+			}
+			if count <= 1 {
+				return apperr.New(apperr.CodeAdminLastAdmin, "")
+			}
 		}
-	}
 
-	if err := s.users.SoftDelete(ctx, uid, s.now()); err != nil {
-		return mapAdminUserError(err)
+		if err := s.users.SoftDelete(ctx, uid, s.now()); err != nil {
+			return mapAdminUserError(err)
+		}
+		deleted = user
+		return s.revokeSessions(ctx, user.ID, state)
+	})
+	if err != nil {
+		return err
 	}
-	s.revokeSessions(ctx, user.UID, user.ID)
 	_ = s.Record(ctx, AuditEntry{
-		Actor: actor, Action: domain.AuditUserDelete, TargetType: "user", TargetID: user.UID,
-		Detail: map[string]any{"username": user.Username, "email": user.Email},
+		Actor: actor, Action: domain.AuditUserDelete, TargetType: "user", TargetID: deleted.UID,
+		Detail: map[string]any{"username": deleted.Username, "email": deleted.Email},
 	})
 	return nil
 }
@@ -432,10 +437,15 @@ func (s *AdminService) ResetPassword(ctx context.Context, uid, password string, 
 	if err != nil {
 		return nil, passwordPolicyError(err)
 	}
-	if err := s.users.UpdatePassword(ctx, user.ID, hash, s.now()); err != nil {
-		return nil, apperr.Wrap(apperr.CodeInternalError, err)
+	err = s.withUserSecurity(ctx, uid, func(ctx context.Context, current *domain.User, state *domain.TwoFactorState) error {
+		if err := s.users.UpdatePassword(ctx, current.ID, hash, s.now()); err != nil {
+			return apperr.Wrap(apperr.CodeInternalError, err)
+		}
+		return s.revokeSessions(ctx, current.ID, state)
+	})
+	if err != nil {
+		return nil, err
 	}
-	s.revokeSessions(ctx, user.UID, user.ID)
 
 	// 审计只记「发生了重置」与「是否随机生成」，绝不记密码本身。
 	_ = s.Record(ctx, AuditEntry{
@@ -513,19 +523,42 @@ func (s *AdminService) ListAuditLogs(ctx context.Context, query AuditQuery) ([]*
 	return logs, total, nil
 }
 
-// revokeSessions 撤销某用户的全部刷新令牌，并让状态缓存失效。
-//
-// 两步都要做：只撤令牌的话，已签发的 Access Token 还能用满 15 分钟；
-// 只失效缓存的话，对方可以用 refresh token 续期。
-func (s *AdminService) revokeSessions(ctx context.Context, uid string, userID int64) {
-	if s.tokens != nil {
-		if _, err := s.tokens.RevokeAllForUser(ctx, userID, s.now()); err != nil {
-			s.logger.Error("撤销用户会话失败", "userID", userID, "err", err)
+// withUserSecurity follows the login/refresh lock order: security row, then user
+// mutation and token rows. Every account change is committed with revocation.
+func (s *AdminService) withUserSecurity(ctx context.Context, uid string, fn func(context.Context, *domain.User, *domain.TwoFactorState) error) error {
+	user, err := s.users.GetByUID(ctx, uid)
+	if err != nil {
+		return mapAdminUserError(err)
+	}
+	return s.tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := s.twoFactor.Ensure(ctx, user.ID); err != nil {
+			return err
 		}
+		state, err := s.twoFactor.Get(ctx, user.ID, true)
+		if err != nil {
+			return err
+		}
+		current, err := s.users.GetByUID(ctx, uid)
+		if err != nil {
+			return mapAdminUserError(err)
+		}
+		return fn(ctx, current, state)
+	})
+}
+
+// revokeSessions requires the security-row lock and an enclosing transaction.
+func (s *AdminService) revokeSessions(ctx context.Context, userID int64, state *domain.TwoFactorState) error {
+	version, _, err := auth.NewRefreshToken()
+	if err != nil {
+		return err
 	}
-	if s.invalidator != nil {
-		s.invalidator.InvalidateUser(uid)
+	state.SessionVersion = version
+	state.Challenges = nil
+	if err := s.twoFactor.Save(ctx, userID, state); err != nil {
+		return err
 	}
+	_, err = s.tokens.RevokeAllForUser(ctx, userID, s.now())
+	return err
 }
 
 // ensureAvailable 提前查出邮箱/用户名冲突，给出准确错误码。

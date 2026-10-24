@@ -195,10 +195,9 @@ func run() error {
 	}
 	authSvc, err := service.NewAuthService(userRepo, tokenRepo, txManager, service.AuthServiceConfig{
 		TwoFactor: factorRepo, TwoFactorKey: factorKey,
-		Issuer:       issuer,
-		RefreshTTL:   cfg.Auth.RefreshTTL,
-		Site:         settingsSvc,
-		UserCacheTTL: 60 * time.Second,
+		Issuer:     issuer,
+		RefreshTTL: cfg.Auth.RefreshTTL,
+		Site:       settingsSvc,
 	})
 	if err != nil {
 		return err
@@ -234,7 +233,7 @@ func run() error {
 	adminSvc, err := service.NewAdminService(service.AdminServiceConfig{
 		Stats: statsRepo, Uploads: avatarStore,
 		Users: userRepo, Tokens: tokenRepo, Audit: auditRepo,
-		Site: settingsSvc, Invalidator: authSvc, Tx: txManager, Logger: log,
+		Site: settingsSvc, TwoFactor: factorRepo, Tx: txManager, Logger: log,
 	})
 	if err != nil {
 		return err
@@ -280,7 +279,7 @@ func run() error {
 	backupsCtx, stopBackups := context.WithCancel(context.Background())
 	backups, err := backup.NewManager(backupsCtx, backup.ManagerConfig{
 		ProtectedPaths: backupProtectedPaths, Repository: backupRepo, Settings: settingsRepo, UploadDir: cfg.Storage.Dir, Secret: factorKey, Logger: log,
-		AfterRestore: func(ctx context.Context) error { authSvc.InvalidateAllUsers(); return settingsSvc.Reload(ctx) },
+		AfterRestore: settingsSvc.Reload,
 	})
 	if err != nil {
 		stopBackups()
