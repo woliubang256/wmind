@@ -33,7 +33,13 @@ export const EDITOR_PLUGINS = [panZoomPlugin, collapsePlugin, selectionPlugin, e
 - 每个插件自己管自己的 DOM 监听与清理，`useEffect` 的依赖就是插件 key，不会互相牵连；
 - M3 的分享页、M4 的缩略图渲染直接传 `READ_ONLY_PLUGINS`，不需要再理解编辑器。
 
-`readOnly` 仍然会透传到 context 里，但只用于**视觉**（不渲染折叠按钮的 hover 态等），不用于行为开关。
+`readOnly` 仍然会透传到 context 里，用于只读视觉与可访问语义，不替代插件装配的编辑权限边界。
+
+### 只读折叠按钮同时支持键盘与读屏
+
+只读宿主实际挂载 `collapse` 插件且提供 `onToggleCollapse` 时，SVG 使用带名称的 `group` 而非 `img`，否则浏览器会把整图作为原子图片并吞掉子按钮。可交互内容入口同样使用 group；无交互查看器仍为 img。编辑画布继续使用现有 tree / treeitem 与快捷键，不新增徽标 Tab 停靠点。
+
+仅只读可交互场景的折叠徽标使用 button 角色、原始主题标题组成的名称、`aria-expanded` 和 `tabIndex=0`。`CollapsePlugin` 委托捕获 Enter / Space，阻止默认行为及冒泡，防止 Space 同时启动平移；长按只激活一次。折叠和展开复用同一个 SVG g，状态变化不丢焦点。叶子没有按钮，`showBadges=false` 的静态导出不生成交互元素。
 
 ### 内联样式属性，不用 CSS 类
 
@@ -96,6 +102,7 @@ export const EDITOR_PLUGINS = [panZoomPlugin, collapsePlugin, selectionPlugin, e
 - 内联样式让导出可行，但也意味着「改样式」必须走 React 重渲染，不能靠切换 class。M3 如果要加「高亮某条路径」这类临时视觉效果，得走独立的 overlay 层，不能改节点属性。
 - `memo` 的 `areEqual` 依赖 `layout` 的引用稳定：任何一次布局重算都会让全部节点重渲染。这是可以接受的——布局重算本身就意味着文档变了。
 - 已知限制：折叠徽标超过 99 显示 `99+`，因为再长会撑破节点宽度；`TopicShape` 的 10 种形状都是手写 path，M3 加新形状要同步改这里和 `docs/03` 的形状枚举。
+- 分享键盘复现脚本 `e2e/share-collapse-a11y.mjs` 在修复前 10 项失败，修复后扩展的 25 项全部通过：实际浏览器 group/button 角色查询、Tab 顺序、焦点可见、徽标状态、Enter / Space、长按单发、多语言、作者树语义和静态导出无控件。全部 API 由夹具响应，不写真实数据。查看器 5 文件 / 43 项单测、前端类型检查与笔记门禁通过。
 
 ## Alternatives considered
 
@@ -112,3 +119,5 @@ export const EDITOR_PLUGINS = [panZoomPlugin, collapsePlugin, selectionPlugin, e
 **每个插件用 `addEventListener` 绑到具体节点上**：更直观。放弃原因是 2000 节点 = 2000 组监听器，且节点增删时要同步解绑。统一用事件委托 + `data-topic-id` 属性查找，一个容器监听器解决全部。
 
 **`readOnly` 布尔开关控制插件内部行为**：实现最少。放弃原因是「只读页面能编辑」这类 bug 一旦出现就是安全事故，而「插件没挂载」是结构上不可能发生。
+
+**所有只读 SVG 都保留 img，只给内部徽标添加 ARIA**：可以少改一个父级角色；但图片的后代在辅助技术里不作为独立控件暴露，按钮仍不可发现，因此交互只读用 group，静态只读保留 img。

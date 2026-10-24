@@ -61,13 +61,16 @@ export interface TopicsLayerProps {
    * 是否把每个主题渲染成 `treeitem`。
    *
    * 只有**可编辑**的画布才需要：那时画布是一个 `role="tree"`，节点是它的
-   * 子项。只读预览整张图是一个 `img`，里面再冒出 4 个 treeitem 会让读屏
-   * 报出一棵「没有名字的树」，比不报还糟。导出同理（`false`）。
+   * 子项。只读预览不是树（静态为 img，交互为 group），不生成无父树的
+   * treeitem。导出同理（`false`）。
    */
   treeItems?: boolean;
   contentReadOnly?: boolean;
   contentInteractive?: boolean;
   contentLabels?: TopicContentLabels;
+  /** 只读且宿主接上折叠时，徽标才成为可聚焦按钮；编辑器已有树键盘操作。 */
+  collapseInteractive?: boolean;
+  collapseLabel?: string;
   /** 仅实时查看器启用；静态导出不得带加载占位。 */
   loadingImages?: boolean;
   /**
@@ -91,6 +94,8 @@ export const TopicsLayer = memo(function TopicsLayer({
   contentReadOnly = false,
   contentInteractive = false,
   contentLabels,
+  collapseInteractive = false,
+  collapseLabel,
   loadingImages = false,
   cullRect = null,
   keep = EMPTY_KEEP,
@@ -117,6 +122,8 @@ export const TopicsLayer = memo(function TopicsLayer({
             contentReadOnly={contentReadOnly}
             contentInteractive={contentInteractive}
             contentLabels={contentLabels}
+            collapseInteractive={collapseInteractive}
+            collapseLabel={collapseLabel}
             loadingImages={loadingImages}
           />
         );

@@ -47,13 +47,14 @@ export interface TopicNodeProps {
   /**
    * 是否作为 `role="tree"` 的子项参与读屏。
    *
-   * 只有可编辑的画布传 `true`；只读预览与导出都不传——那两种场景下整张图
-   * 是一个 `img`，里面再挂 treeitem 会让读屏报出一棵无名树。
+   * 只有可编辑的画布传 `true`；只读预览与导出都不传，避免生成无父树的子项。
    */
   treeItem?: boolean;
   contentReadOnly?: boolean;
   contentInteractive?: boolean;
   contentLabels?: TopicContentLabels;
+  collapseInteractive?: boolean;
+  collapseLabel?: string;
   loadingImages?: boolean;
 }
 
@@ -75,6 +76,8 @@ export const TopicNode = memo(function TopicNode({
   contentReadOnly = false,
   contentInteractive = false,
   contentLabels,
+  collapseInteractive = false,
+  collapseLabel = 'Collapse / expand',
   loadingImages = false,
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
@@ -86,8 +89,8 @@ export const TopicNode = memo(function TopicNode({
   // 自上而下的结构（org-chart）在下沿。
   const badgeX = box.side === 'left' ? box.x : box.side === 'bottom' ? box.x + box.width / 2 : box.x + box.width;
   const badgeY = box.side === 'bottom' ? box.y + box.height : box.y + box.height / 2;
-  const showBadge = showBadges && box.collapsed && box.hiddenChildren > 0;
   const hasChildren = box.childCount > 0;
+  const showCollapseToggle = showBadges && hasChildren && (!box.collapsed || box.hiddenChildren > 0);
 
   return (
     <g
@@ -103,8 +106,7 @@ export const TopicNode = memo(function TopicNode({
         `aria-expanded` 只在**有子节点**时给：给叶子节点加 aria-expanded="false"
         会让读屏念「已折叠」，而它根本没有可展开的东西。
 
-        只读预览与导出传 `treeItem=false`，这些属性整体不出现——那里整张图
-        是一个 `img`，不属于任何树。
+        只读预览与导出传 `treeItem=false`，这些属性整体不出现，不属于任何树。
       */
       role={treeItem ? 'treeitem' : undefined}
       aria-level={treeItem ? box.depth + 1 : undefined}
@@ -161,8 +163,18 @@ export const TopicNode = memo(function TopicNode({
         ))}
       </text>
 
-      {showBadge ? (
-        <g data-collapse-toggle={box.id} aria-hidden="true" style={{ cursor: 'pointer' }}>
+      {/* 同一个 g 跨展开/折叠复用，键盘激活后不能卸载按钮导致焦点丢失。 */}
+      {showCollapseToggle ? (
+        <g
+          className={`${box.collapsed ? '' : 'wmind-collapse-toggle '}focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+          data-collapse-toggle={box.id}
+          role={collapseInteractive ? 'button' : undefined}
+          tabIndex={collapseInteractive ? 0 : undefined}
+          aria-hidden={collapseInteractive ? undefined : true}
+          aria-expanded={collapseInteractive ? !box.collapsed : undefined}
+          aria-label={collapseInteractive ? title ? `${collapseLabel}: ${title}` : collapseLabel : undefined}
+          style={{ cursor: 'pointer' }}
+        >
           <circle
             cx={badgeX}
             cy={badgeY}
@@ -171,7 +183,7 @@ export const TopicNode = memo(function TopicNode({
             stroke={style.lineColor}
             strokeWidth={1.5}
           />
-          <text
+          {box.collapsed ? <text
             x={badgeX}
             y={badgeY}
             textAnchor="middle"
@@ -180,29 +192,13 @@ export const TopicNode = memo(function TopicNode({
             style={{ fontSize: 10, fontWeight: 600, fill: style.lineColor }}
           >
             {box.hiddenChildren > 99 ? '99+' : box.hiddenChildren}
-          </text>
-        </g>
-      ) : null}
-
-      {/* 展开态且有子节点：悬停时浮现「折叠」按钮（减号）。
-          折叠态那个带数字的徽标本身就是展开按钮，两者语义相同、位置相同。 */}
-      {showBadges && !box.collapsed && box.childCount > 0 ? (
-        <g className="wmind-collapse-toggle" data-collapse-toggle={box.id} aria-hidden="true" style={{ cursor: 'pointer' }}>
-          <circle
-            cx={badgeX}
-            cy={badgeY}
-            r={BADGE_RADIUS}
-            fill="var(--wmind-badge-bg, #FFFFFF)"
-            stroke={style.lineColor}
-            strokeWidth={1.5}
-          />
-          <path
+          </text> : <path
             d={`M ${badgeX - 4} ${badgeY} H ${badgeX + 4}`}
             stroke={style.lineColor}
             strokeWidth={1.5}
             strokeLinecap="round"
             pointerEvents="none"
-          />
+          />}
         </g>
       ) : null}
 
@@ -236,6 +232,8 @@ function areEqual(prev: TopicNodeProps, next: TopicNodeProps): boolean {
     prev.selected === next.selected &&
     prev.editing === next.editing &&
     prev.contentLabels === next.contentLabels &&
+    prev.collapseInteractive === next.collapseInteractive &&
+    prev.collapseLabel === next.collapseLabel &&
     prev.loadingImages === next.loadingImages &&
     prev.contentInteractive === next.contentInteractive &&
     prev.contentReadOnly === next.contentReadOnly &&

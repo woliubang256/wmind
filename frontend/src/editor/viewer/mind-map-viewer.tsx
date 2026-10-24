@@ -359,6 +359,9 @@ export function MindMapViewer({
   }, [selection, editingId]);
 
   const contentLabels = useMemo(() => ({ todo: t('editor.content.todo'), note: t('editor.content.note'), link: t('editor.content.link'), more: t('editor.content.more') }), [t]);
+  // 编辑树已有独立键盘导航；只读宿主必须真正接上插件与回调才生成可聚焦按钮。
+  const collapseInteractive = readOnly && Boolean(onToggleCollapse && plugins?.some((plugin) => plugin.key === 'collapse' && plugin.Overlay));
+  const readOnlyInteractive = collapseInteractive || contentInteractive;
   return (
     <ViewerContext.Provider value={context}>
       <div
@@ -369,13 +372,13 @@ export function MindMapViewer({
           ref={svgRef}
           className="block h-full w-full touch-none select-none"
           /*
-            只读态：整张图是一个 `img`，名字由页面给。
+            静态只读态是 img；含交互按钮时用 group，避免 img 吞掉子控件。
             编辑态：`role="none"`——树的角色由外层那个可聚焦容器声明（见
             editor-page），这里让出角色，避免 SVG 默认的 `graphics-document`
             在树与 treeitem 之间插进一个没有意义的中间节点。子元素的
             `treeitem` 不受影响：`role="none"` 只移除元素自身。
           */
-          role={readOnly ? 'img' : 'none'}
+          role={readOnly ? readOnlyInteractive ? 'group' : 'img' : 'none'}
           aria-label={readOnly ? (ariaLabel ?? sheet.title) : undefined}
           data-read-only={readOnly ? 'true' : 'false'}
         >
@@ -401,6 +404,8 @@ export function MindMapViewer({
               contentReadOnly={readOnly}
               contentInteractive={contentInteractive}
               contentLabels={contentLabels}
+              collapseInteractive={collapseInteractive}
+              collapseLabel={t('editor.collapse')}
               cullRect={cullRect}
               keep={keep}
             />
