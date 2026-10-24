@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
-import { LoadingMark } from '@/components/ui/loading-mark';
+import { LoadingState } from '@/components/ui/loading-state';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { LocaleSwitcher } from '@/components/locale-switcher';
 import { UserMenu } from '@/components/user-menu';
 import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
@@ -14,13 +15,9 @@ import { useThemeStore } from './theme-store';
 import { authKeys, useCurrentUser } from './auth';
 
 function LoadingPage() {
-  const { t } = useTranslation();
   return (
     <main className="grid min-h-svh place-items-center text-sm text-muted-foreground">
-      <div role="status" className="flex flex-col items-center gap-4">
-        <LoadingMark />
-        <p>{t('common.loading')}</p>
-      </div>
+      <LoadingState />
     </main>
   );
 }
@@ -202,7 +199,7 @@ export function AppLayout() {
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/90 backdrop-blur">
         <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
           <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-            <img src={config.logoUrl || '/wmind-logo.jpg'} alt="" className="size-8 rounded-lg object-cover shadow-sm" />
+            <LoadingImage src={config.logoUrl || '/wmind-logo.jpg'} alt="" containerClassName="size-8 overflow-hidden rounded-lg shadow-sm" className="size-full object-cover" />
             <span className="hidden max-w-40 truncate sm:inline">{config.siteName}</span>
           </Link>
 
@@ -275,7 +272,7 @@ export function PublicLayout() {
   const { config } = useSiteConfig();
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <header className="border-b border-border/70 px-5 py-3"><Link to="/" className="inline-flex items-center gap-2 font-semibold"><img src={config.logoUrl || '/wmind-logo.jpg'} alt="" className="size-9 rounded-xl object-cover" /><span>{config.siteName}</span></Link></header>
+      <header className="border-b border-border/70 px-5 py-3"><Link to="/" className="inline-flex items-center gap-2 font-semibold"><LoadingImage src={config.logoUrl || '/wmind-logo.jpg'} alt="" containerClassName="size-9 overflow-hidden rounded-xl" className="size-full object-cover" /><span>{config.siteName}</span></Link></header>
       <main className="mx-auto max-w-6xl px-4 py-8"><Outlet /></main>
     </div>
   );

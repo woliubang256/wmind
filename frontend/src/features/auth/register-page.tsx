@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { LocaleSwitcher } from '@/components/locale-switcher';
 import { TextField } from '@/components/ui/input';
 import { authKeys, useCurrentUser } from '@/app/auth';
@@ -66,7 +67,7 @@ export function RegisterPage() {
   };
 
   if (userLoading || siteLoading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
+    return <LoadingState className="py-12" />;
   }
   if (currentUser) return <Navigate to="/" replace />;
 
@@ -134,15 +135,9 @@ export function RegisterPage() {
           error={errors.nickname}
           hint={t('register.nicknameHint')}
         />
-        <Button type="submit" disabled={register.isPending} className="w-full">
-          {register.isPending ? (
-            <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" />
-          ) : (
-            <>
-              {t('register.submit')}
-              <Icon name="arrow-right" className="size-4" />
-            </>
-          )}
+        <Button type="submit" loading={register.isPending} className="w-full">
+          {t('register.submit')}
+          <Icon name="arrow-right" className="size-4" />
         </Button>
       </form>
 

@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { LocaleSwitcher } from '@/components/locale-switcher';
 import { TextField } from '@/components/ui/input';
 import { api, setAccessToken, type AuthSession } from '@/lib/api/client';
@@ -64,7 +66,7 @@ export function LoginPage() {
     },
   });
 
-  if (isLoading) return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
+  if (isLoading) return <LoadingState className="py-12" />;
   if (currentUser) return <Navigate to="/" replace />;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -91,10 +93,11 @@ export function LoginPage() {
       <LocaleSwitcher className="absolute right-4 top-4" />
 
       <div className="mb-8 mt-5 flex flex-col items-center gap-4 text-center sm:mt-7">
-        <img
+        <LoadingImage
           src={config.logoUrl || '/wmind-logo.jpg'}
           alt={t('auth.logoAlt')}
-          className="size-24 rounded-3xl object-cover shadow-lg shadow-orange-500/15"
+          containerClassName="size-24 overflow-hidden rounded-3xl shadow-lg shadow-orange-500/15"
+          className="size-full object-cover"
         />
         <h1 className="text-xl font-semibold tracking-tight">{t('auth.loginTitle', { site: config.siteName })}</h1>
       </div>
@@ -114,15 +117,9 @@ export function LoginPage() {
           <TextField label={t('common.password')} name="password" type="password" autoComplete="current-password" value={password}
             onChange={(event) => setPassword(event.target.value)} error={errors.password} />
         </>}
-        <Button type="submit" disabled={login.isPending} className="w-full">
-          {login.isPending ? (
-            <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" />
-          ) : (
-            <>
-              {t(challenge ? 'twoFactor.verify' : 'common.login')}
-              <Icon name="arrow-right" className="size-4" />
-            </>
-          )}
+        <Button type="submit" loading={login.isPending} className="w-full">
+          {t(challenge ? 'twoFactor.verify' : 'common.login')}
+          <Icon name="arrow-right" className="size-4" />
         </Button>
         {challenge ? <Button type="button" variant="outline" className="w-full" disabled={login.isPending}
           onClick={() => { setChallenge(null); setCode(''); setPassword(''); setErrors({}); login.reset(); }}>{t('twoFactor.backToPassword')}</Button> : null}
