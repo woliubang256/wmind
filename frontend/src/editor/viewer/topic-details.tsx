@@ -1,4 +1,5 @@
 import { Icon } from '@/components/ui/icon';
+import { LoadingSvgImage } from '@/components/ui/loading-image';
 import { fontStack } from '../theme/fonts';
 import type { TopicDetails } from '../layout/topic-details';
 import type { topicContentGeometry } from '../layout/topic-content';
@@ -6,8 +7,8 @@ import type { NodeBox, Rect } from '../layout/types';
 
 export type TopicContentLabels = Record<'todo' | 'note' | 'link' | 'more', string>;
 
-export function TopicDetailsView({ details, box, geometry, color, interactive, readOnly, labels }: {
-  details: TopicDetails; box: NodeBox; geometry: ReturnType<typeof topicContentGeometry>; color: string; interactive: boolean; readOnly: boolean; labels?: TopicContentLabels;
+export function TopicDetailsView({ details, box, geometry, color, interactive, readOnly, labels, loadingImages = false }: {
+  details: TopicDetails; box: NodeBox; geometry: ReturnType<typeof topicContentGeometry>; color: string; interactive: boolean; readOnly: boolean; labels?: TopicContentLabels; loadingImages?: boolean;
 }) {
   const y = geometry.detailsY;
   let mediaY = y + 8 + details.lines.length * 20;
@@ -39,7 +40,7 @@ export function TopicDetailsView({ details, box, geometry, color, interactive, r
     })}
     {details.media.map((item) => {
       const top = mediaY; mediaY += item.height + 8;
-      return <image key={item.kind} data-topic-content-kind={item.kind} href={item.src} x={box.x + (box.width - item.width) / 2}
+      return <LoadingSvgImage key={item.kind} loading={loadingImages} data-topic-content-kind={item.kind} href={item.src} x={box.x + (box.width - item.width) / 2}
         y={top} width={item.width} height={item.height} preserveAspectRatio="xMidYMid meet" style={interactive ? { cursor: 'pointer' } : undefined} />;
     })}
   </g>;

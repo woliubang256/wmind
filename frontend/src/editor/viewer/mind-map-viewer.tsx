@@ -393,6 +393,7 @@ export function MindMapViewer({
 
             <TopicsLayer
               layout={layout}
+              loadingImages
               selection={selection}
               editingId={editingId}
               titles={titles}

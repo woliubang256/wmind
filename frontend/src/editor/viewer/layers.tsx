@@ -68,6 +68,8 @@ export interface TopicsLayerProps {
   contentReadOnly?: boolean;
   contentInteractive?: boolean;
   contentLabels?: TopicContentLabels;
+  /** 仅实时查看器启用；静态导出不得带加载占位。 */
+  loadingImages?: boolean;
   /**
    * 世界坐标的视口矩形；`null` 表示不裁剪（小图与导出）。
    *
@@ -89,6 +91,7 @@ export const TopicsLayer = memo(function TopicsLayer({
   contentReadOnly = false,
   contentInteractive = false,
   contentLabels,
+  loadingImages = false,
   cullRect = null,
   keep = EMPTY_KEEP,
 }: TopicsLayerProps) {
@@ -114,6 +117,7 @@ export const TopicsLayer = memo(function TopicsLayer({
             contentReadOnly={contentReadOnly}
             contentInteractive={contentInteractive}
             contentLabels={contentLabels}
+            loadingImages={loadingImages}
           />
         );
       })}

@@ -6,6 +6,18 @@ import { topicContentGeometry } from '../layout/topic-content';
 import { TopicsLayer } from './layers';
 
 describe('主题插入内容几何', () => {
+  it('仅实时查看器的图片和媒体带浅灰 W，导出保留原始图片与相同几何', () => {
+    const doc = docWithTree(); const sheet = doc.sheets[0]!;
+    sheet.rootTopic.image = { src: '/slow.png', width: 120, height: 80 };
+    sheet.rootTopic.content = { sticker: 'star', illustration: 'growth' };
+    const layout = layoutMindmap({ sheet, theme: doc.theme });
+    const live = renderToStaticMarkup(<svg><TopicsLayer layout={layout} loadingImages /></svg>);
+    expect(live.match(/class="wmind-loading-mark wmind-loading-mark--soft"/g)).toHaveLength(3);
+    const exported = renderToStaticMarkup(<svg><TopicsLayer layout={layout} showBadges={false} /></svg>);
+    expect(exported).not.toContain('wmind-loading');
+    const geometry = (svg: string) => [...svg.matchAll(/<image[^>]+>/g)].map(([tag]) => tag.replace(/ opacity="0"/g, ''));
+    expect(geometry(live)).toEqual(geometry(exported));
+  });
   it('主题链接显示目标标题，不向用户展示内部协议与 id', () => {
     const doc = docWithTree(); const sheet = doc.sheets[0]!;
     sheet.rootTopic.href = 'xmind:#a';

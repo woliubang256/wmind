@@ -10,6 +10,7 @@ import type { TopicDetails } from '../layout/topic-details';
  */
 
 import { memo } from 'react';
+import { LoadingSvgImage } from '@/components/ui/loading-image';
 import type { ComputedStyle } from '../model/types';
 import type { ImageSize, MarkerLayout, NodeBox } from '../layout/types';
 import { NODE_METRICS } from '../layout/constants';
@@ -53,6 +54,7 @@ export interface TopicNodeProps {
   contentReadOnly?: boolean;
   contentInteractive?: boolean;
   contentLabels?: TopicContentLabels;
+  loadingImages?: boolean;
 }
 
 const SELECTION_INSET = 3;
@@ -73,6 +75,7 @@ export const TopicNode = memo(function TopicNode({
   contentReadOnly = false,
   contentInteractive = false,
   contentLabels,
+  loadingImages = false,
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
   const showImage = image !== null && image.src !== '';
@@ -110,10 +113,11 @@ export const TopicNode = memo(function TopicNode({
       aria-label={treeItem && title !== '' ? title : undefined}
     >
       <TopicShape box={box} style={style} />
-      {details ? <TopicDetailsView details={details} box={box} geometry={geometry} color={style.textColor} interactive={showBadges && contentInteractive} readOnly={contentReadOnly} labels={contentLabels} /> : null}
+      {details ? <TopicDetailsView details={details} box={box} geometry={geometry} color={style.textColor} interactive={showBadges && contentInteractive} readOnly={contentReadOnly} labels={contentLabels} loadingImages={loadingImages} /> : null}
 
       {showImage ? (
-        <image
+        <LoadingSvgImage
+          loading={loadingImages}
           href={image.src}
           x={imageX}
           y={imageY}
@@ -232,6 +236,7 @@ function areEqual(prev: TopicNodeProps, next: TopicNodeProps): boolean {
     prev.selected === next.selected &&
     prev.editing === next.editing &&
     prev.contentLabels === next.contentLabels &&
+    prev.loadingImages === next.loadingImages &&
     prev.contentInteractive === next.contentInteractive &&
     prev.contentReadOnly === next.contentReadOnly &&
     prev.treeItem === next.treeItem
