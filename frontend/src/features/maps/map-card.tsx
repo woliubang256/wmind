@@ -19,6 +19,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Icon, type IconName } from '@/components/ui/icon';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { cn } from '@/lib/utils';
 import { formatBytes, formatRelative } from '@/lib/format';
 import type { MapSummary } from '@/lib/api/maps';
@@ -59,7 +60,6 @@ function CardAction({ label, icon, onClick, tone = 'default', disabled }: CardAc
     </button>
   );
 }
-
 export interface MapCardProps {
   map: MapSummary;
   actions: MapCardAction[];
@@ -87,11 +87,12 @@ export function MapCard({ map, actions, busy = false, meta, href }: MapCardProps
           // 还没有缩略图：给一个淡图标而不是空白。空白会让人以为加载失败。
           <Icon name="waypoints" className="size-10 text-muted-foreground/40" strokeWidth={1.2} />
         ) : (
-          <img
+          <LoadingImage
             src={map.thumbnailUrl}
             alt={t('maps.thumbnailAlt', { title: map.title })}
             loading="lazy"
             decoding="async"
+            containerClassName="size-full"
             className="size-full object-contain"
           />
         )}
@@ -131,18 +132,5 @@ export function MapCard({ map, actions, busy = false, meta, href }: MapCardProps
         ))}
       </div>
     </article>
-  );
-}
-
-/** 加载骨架。尺寸与真卡片一致，避免数据到达时整页跳动。 */
-export function MapCardSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-      <div className="aspect-[16/10] animate-pulse border-b border-border/60 bg-secondary/40" />
-      <div className="space-y-2 px-3 py-3">
-        <div className="h-4 w-2/3 animate-pulse rounded bg-secondary" />
-        <div className="h-3 w-1/2 animate-pulse rounded bg-secondary/70" />
-      </div>
-    </div>
   );
 }

@@ -30,7 +30,8 @@ import { IMPORT_LIMITS } from '@/editor/import/limits';
 import { createStarterDocument } from '@/features/editor/demo-document';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { mapKeys } from './queries';
-import { MapCard, MapCardSkeleton } from './map-card';
+import { MapCard } from './map-card';
+import { LoadingState } from '@/components/ui/loading-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ShareDialog } from '@/features/share/share-dialog';
 import { TemplatePicker } from '@/features/templates/template-picker';
@@ -250,16 +251,12 @@ export function RecentPage() {
           ]}
         />
         <span className="ml-auto text-sm text-muted-foreground">
-          {maps.isPending ? t('common.loading') : t('maps.count', { count: formatNumber(total) })}
+          {maps.isPending ? null : t('maps.count', { count: formatNumber(total) })}
         </span>
       </div>
 
       {maps.isPending ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }, (_, index) => (
-            <MapCardSkeleton key={index} />
-          ))}
-        </div>
+        <LoadingState className="min-h-80" />
       ) : isEmpty && searching ? (
         <EmptyState
           icon="search"
@@ -401,7 +398,7 @@ export function RecentPage() {
       />
 
       {importOpen ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<LoadingState className="fixed inset-0 z-40 bg-background/90" />}>
           <ImportDialog
             open
             onClose={() => setImportOpen(false)}

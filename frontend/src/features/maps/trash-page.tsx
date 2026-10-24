@@ -18,7 +18,8 @@ import { EmptyState, PageHeader } from '@/components/ui/panel';
 import { mapApi, type MapSummary } from '@/lib/api/maps';
 import { formatNumber } from '@/lib/format';
 import { mapKeys } from './queries';
-import { MapCard, MapCardSkeleton } from './map-card';
+import { MapCard } from './map-card';
+import { LoadingState } from '@/components/ui/loading-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { trashDaysRemaining } from './trash-retention';
 
@@ -102,11 +103,7 @@ export function TrashPage() {
       />
 
       {trash.isPending ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 4 }, (_, index) => (
-            <MapCardSkeleton key={index} />
-          ))}
-        </div>
+        <LoadingState className="min-h-80" />
       ) : isEmpty ? (
         <EmptyState icon="trash" title={t('trash.empty.title')} description={t('trash.empty.body')} />
       ) : (
