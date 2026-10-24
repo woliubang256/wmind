@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { LoadingState } from '@/components/ui/loading-state';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { authKeys } from '@/app/auth';
 import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/input';
@@ -52,7 +54,7 @@ export function TwoFactorCard({ userUID }: { userUID: string }) {
   const busy = change.isPending;
   return <Panel title={t('twoFactor.title')} description={t('twoFactor.description')} bodyClassName="p-5 sm:p-6">
     <div className="space-y-4" data-two-factor-settings>
-      {status.isPending ? <p role="status">{t('common.loading')}</p> : status.isError ? <div role="alert" className="space-y-3">
+      {status.isPending ? <LoadingState small className="py-6" /> : status.isError ? <div role="alert" className="space-y-3">
         <p>{status.error.message}</p><Button variant="outline" onClick={() => void status.refetch()}>{t('common.retry')}</Button>
       </div> : <p className="text-sm" role="status">{status.data.enabled ? t('twoFactor.enabled', { count: status.data.recoveryCodesRemaining }) : t('twoFactor.disabled')}</p>}
       {codes.length > 0 ? <div className="space-y-4 rounded-xl border border-border bg-muted/30 p-4">
@@ -73,7 +75,7 @@ export function TwoFactorCard({ userUID }: { userUID: string }) {
         <TextField label={t('twoFactor.password')} type="password" autoComplete="current-password" value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} required />
         {setup ? <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{t('twoFactor.scanHint')}</p>
-          <img src={setup.qrCode} alt={t('twoFactor.qrAlt')} width={240} height={240} className="rounded-lg border border-border bg-white" />
+          <LoadingImage src={setup.qrCode} alt={t('twoFactor.qrAlt')} width={240} height={240} containerClassName="size-60 overflow-hidden rounded-lg border border-border bg-white" className="size-full" />
           <TextField label={t('twoFactor.manualKey')} value={setup.secret} readOnly className="font-mono" onFocus={(e) => e.target.select()} />
         </div> : null}
         {mode !== 'start' ? <TextField label={t(mode === 'enable' ? 'twoFactor.code' : 'twoFactor.codeOrRecovery')} autoComplete="one-time-code" value={code} disabled={busy} onChange={(e) => setCode(e.target.value)} required /> : null}

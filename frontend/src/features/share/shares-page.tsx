@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Badge, EmptyState, PageHeader, Panel } from '@/components/ui/panel';
 import { resolveShareUrl, shareApi, type ShareLink } from '@/lib/api/shares';
 import { shareKeys } from './queries';
@@ -65,7 +66,7 @@ export function SharesPage() {
       <PageHeader title={t('share.mine.title')} />
 
       {query.isPending ? (
-        <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+        <LoadingState className="min-h-64" />
       ) : items.length === 0 ? (
         <EmptyState
           icon="link"

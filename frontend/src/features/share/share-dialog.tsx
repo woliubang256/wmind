@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { SelectField, TextField } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/panel';
@@ -221,7 +222,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
           <section className="space-y-3">
             <h3 className="text-sm font-medium">{t('share.list.title', { count: items.length })}</h3>
             {links.isPending ? (
-              <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+              <LoadingState small className="py-6" />
             ) : items.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t('share.list.empty')}</p>
             ) : (
