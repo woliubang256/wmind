@@ -139,7 +139,7 @@ export function TrashPage() {
           </div>
           {trash.hasNextPage ? (
             <div className="flex justify-center">
-              <Button
+              <Button loading={trash.isFetchingNextPage}
                 variant="outline"
                 size="sm"
                 onClick={() => void trash.fetchNextPage()}

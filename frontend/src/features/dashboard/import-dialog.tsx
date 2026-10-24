@@ -187,7 +187,7 @@ export function ImportDialog({ open, onClose, initialFiles, onFilesConsumed }: I
         <Button variant="outline" onClick={close} disabled={creating}>
           {t('import.dialog.cancel')}
         </Button>
-        {readyCount > 0 ? <Button onClick={() => void confirm()} disabled={creating}>
+        {readyCount > 0 ? <Button loading={creating} onClick={() => void confirm()} disabled={creating}>
           <Icon name="check" className="size-4" />
           {creating ? t('import.dialog.creating') : t(phase.items.length > 1 ? 'import.dialog.createBatch' : 'import.dialog.create', { n: readyCount })}
         </Button> : <Button onClick={() => setPhase({ kind: 'idle' })} disabled={creating}>{t('import.dialog.retry')}</Button>}

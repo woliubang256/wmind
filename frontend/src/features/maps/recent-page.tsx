@@ -320,7 +320,7 @@ export function RecentPage() {
 
           <div ref={sentinelRef} className="flex justify-center pt-2">
             {maps.hasNextPage ? (
-              <Button variant="outline" size="sm" onClick={loadMore} disabled={maps.isFetchingNextPage}>
+              <Button loading={maps.isFetchingNextPage} variant="outline" size="sm" onClick={loadMore} disabled={maps.isFetchingNextPage}>
                 {maps.isFetchingNextPage ? t('maps.loadingMore') : t('maps.loadMore')}
               </Button>
             ) : items.length > PAGE_SIZE ? (
