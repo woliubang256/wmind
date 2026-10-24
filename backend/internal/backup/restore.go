@@ -167,6 +167,19 @@ func (m *Manager) restore(ctx context.Context, job *Job, stage stagedRestore) er
 			return err
 		}
 	}
+	// Remote ownership belongs to this installation, not the old DB snapshot.
+	// Revoke cached sessions above even if persisting this ledger fails.
+	m.mu.Lock()
+	objects := append([]backupObject{}, m.catalog...)
+	for i := range objects {
+		objects[i].Fingerprint = ""
+	}
+	m.catalog = objects
+	m.mu.Unlock()
+	if err = m.saveCatalog(ctx, objects); err != nil {
+		job.ErrorCode = "RESTORE_RELOAD_FAILED"
+		return err
+	}
 	if err = m.Reload(ctx); err != nil {
 		job.ErrorCode = "RESTORE_RELOAD_FAILED"
 		return err

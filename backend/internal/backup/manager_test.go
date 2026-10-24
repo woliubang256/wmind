@@ -311,6 +311,36 @@ func TestOptionalDedupIgnoresReadingButIncludesBusinessAndSecurity(t *testing.T)
 		t.Fatal("disabled dedup still skipped", job)
 	}
 }
+
+func TestRestorePreservesOwnedCatalogAndInvalidatesDedupBaseline(t *testing.T) {
+	f := newManagerFixture(t)
+	c := f.manager.State().Configuration
+	c.RetainCount = 2
+	c.SkipUnchanged = true
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	runBackup(t, f, "manual")
+	data := bytes.Clone(f.remote.data)
+	f.db.Exec(`UPDATE maps SET title='newer'`)
+	runBackup(t, f, "manual")
+	preview, err := f.manager.Inspect(t.Context(), "admin", bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.manager.StartRestore("admin", preview.ID); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, f.manager); job.Status != "succeeded" {
+		t.Fatal(job)
+	}
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" || len(f.remote.objects) != 2 {
+		t.Fatal("restore lost ownership/retention", job, len(f.remote.objects))
+	}
+	if job := runBackup(t, f, "manual"); job.Status != "skipped" {
+		t.Fatal("new baseline was not registered", job)
+	}
+}
 func TestManagerBackupUploadRestoreAndSessions(t *testing.T) {
 	f := newManagerFixture(t)
 	if _, err := f.manager.StartBackup("manual"); err != nil {
