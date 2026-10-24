@@ -89,11 +89,14 @@ import {
 import { StructureTab } from './panel/structure-tab';
 import {
   addSheetCommand,
+  copySheetCommand,
   moveSheetCommand,
   removeSheetCommand,
   renameSheetCommand,
 } from '@/editor/commands/sheet';
 import { SheetTabs } from './sheet-tabs';
+import { downloadBlob } from '@/editor/export/download';
+import type { Sheet } from '@/editor/model/types';
 import { OutlineView, indentTarget, outdentTarget } from './outline-view';
 import { canvasLabel, selectionAnnouncement, type SelectedTopicInfo } from './canvas-a11y';
 import { mapApi, type MapDetail } from '@/lib/api/maps';
@@ -571,6 +574,14 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     );
   }, []);
   const resetZoom = useCallback(() => setZoom(1), [setZoom]);
+  const centerTopic = () => {
+    const element = canvasRef.current;
+    const root = layout.boxes.get(sheet.rootTopic.id);
+    if (!element || !root) return;
+    const rect = element.getBoundingClientRect();
+    setViewport((prev) => ({ ...prev, x: rect.width / 2 - (root.x + root.width / 2) * prev.zoom,
+      y: rect.height / 2 - (root.y + root.height / 2) * prev.zoom }));
+  };
 
   /** Ctrl+S：跳过防抖，立刻落盘。 */
   const save = useCallback(() => {
@@ -618,6 +629,26 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     );
     store.getState().setSheet(id);
   }, [store, t]);
+
+  const [sheetClipboard, setSheetClipboard] = useState<Sheet | null>(null);
+  const copySheet = (id: string) => {
+    const source = store.getState().doc.sheets.find((item) => item.id === id);
+    if (source) setSheetClipboard(structuredClone(source));
+  };
+  const pasteSheet = (afterId: string, source = sheetClipboard) => {
+    if (!source) return;
+    const id = newSheetId();
+    store.getState().dispatch(copySheetCommand(source, id, t('editor.sheets.copyTitle', { title: source.title }), afterId));
+    store.getState().setSheet(id);
+  };
+  const saveSheetAs = (id: string) => {
+    const current = store.getState().doc;
+    const source = current.sheets.find((item) => item.id === id);
+    if (!source) return;
+    const document = { ...current, title: source.title, sheets: [source] };
+    const filename = source.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_') || 'canvas';
+    downloadBlob(new Blob([JSON.stringify(document, null, 2)], { type: 'application/json' }), `${filename}.wmind`);
+  };
 
   const renameSheet = useCallback(
     (id: string, title: string) => {
@@ -1292,7 +1323,9 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         多一个切画布的入口会让它看起来像可编辑的。ZEN 里也收起——「全屏
         编辑」的全部意思就是除了画布什么都不剩。
       */}
-      {!preview && !zen ? (
+      {zen ? null : (
+      <footer className="flex min-w-0 items-center gap-3 border-t border-border/70 bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+      {!preview ? (
         <SheetTabs
           sheets={sheets}
           activeId={sheet.id}
@@ -1301,12 +1334,16 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           onRename={renameSheet}
           onDelete={deleteSheet}
           onMove={moveSheet}
+          canPaste={sheetClipboard !== null}
+          onCopy={copySheet}
+          onPaste={pasteSheet}
+          onDuplicate={(id) => pasteSheet(id, store.getState().doc.sheets.find((item) => item.id === id))}
+          onSaveAs={saveSheetAs}
         />
       ) : null}
 
-      {zen ? null : (
-      <footer className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-1.5 text-xs text-muted-foreground">
-        <span>{t('editor.nodeCount', { count: countSheetNodes(sheet) })}</span>
+        <div className="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
+        <span>{t('editor.nodeCount', { count: nodeCount })}</span>
         <Select
           aria-label={t('editor.zoomPresets')}
           size="sm"
@@ -1323,6 +1360,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
             </button>
           )}
         />
+        <Button variant="ghost" size="icon" className="size-7" title={t('editor.centerTopic')} aria-label={t('editor.centerTopic')}
+          disabled={view !== 'canvas' || !fonts.ready} onClick={centerTopic}>
+          <Icon name="locate" className="size-3.5" />
+        </Button>
         {enabled ? (
           <SaveIndicator
             save={saveState}
@@ -1332,6 +1373,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         ) : (
           <span>{t('editor.save.localOnly')}</span>
         )}
+        </div>
       </footer>
       )}
 

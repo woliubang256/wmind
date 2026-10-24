@@ -16,13 +16,14 @@
  * 遮罩、Esc 三层语义，为一行文字不值当。
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Icon } from '@/components/ui/icon';
 import type { Sheet } from '@/editor/model/types';
 import { sheetHasContent } from '@/editor/commands/sheet';
+import { SheetMenu, type SheetAction } from './sheet-menu';
 
 export interface SheetTabsProps {
   sheets: readonly Sheet[];
@@ -32,6 +33,11 @@ export interface SheetTabsProps {
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onMove: (id: string, toIndex: number) => void;
+  canPaste: boolean;
+  onCopy: (id: string) => void;
+  onPaste: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onSaveAs: (id: string) => void;
 }
 
 export function SheetTabs({
@@ -42,6 +48,7 @@ export function SheetTabs({
   onRename,
   onDelete,
   onMove,
+  canPaste, onCopy, onPaste, onDuplicate, onSaveAs,
 }: SheetTabsProps) {
   const { t } = useTranslation();
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -50,6 +57,24 @@ export function SheetTabs({
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [menu, setMenu] = useState<{ sheet: Sheet; anchor: HTMLElement } | null>(null);
+  const closeMenu = useCallback((restoreFocus: boolean) => {
+    setMenu((current) => { if (restoreFocus) current?.anchor.focus(); return null; });
+  }, []);
+  const menuAction = (action: SheetAction) => {
+    if (!menu) return;
+    const target = menu.sheet;
+    switch (action) {
+      case 'rename': startRename(target); break;
+      case 'copy': onCopy(target.id); break;
+      case 'paste': onPaste(target.id); break;
+      case 'duplicate': onDuplicate(target.id); break;
+      case 'delete': requestDelete(target); break;
+      case 'add': onAdd(); break;
+      case 'saveAs': onSaveAs(target.id); break;
+    }
+  };
+  useEffect(() => { setMenu(null); }, [activeId]);
   /** 改名结束后要把焦点还给标签，否则焦点掉到 body 上，键盘操作就断了。 */
   const restoreFocusId = useRef<string | null>(null);
 
@@ -139,11 +164,11 @@ export function SheetTabs({
   };
 
   return (
-    <div className="flex items-center gap-1 border-t border-border/70 bg-muted/30 px-2 py-1">
+    <div className="flex min-w-0 items-center gap-1">
       <div
         role="tablist"
         aria-label={t('editor.sheets.label')}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+        className="flex min-w-0 items-center gap-1 overflow-x-auto"
       >
         {sheets.map((sheet, index) => {
           const active = sheet.id === activeId;
@@ -215,6 +240,7 @@ export function SheetTabs({
                   onDoubleClick={() => startRename(sheet)}
                   onKeyDown={(event) => onTabKeyDown(event, sheet, index)}
                   onClick={() => onSwitch(sheet.id)}
+                  onContextMenu={(event) => { event.preventDefault(); setMenu({ sheet, anchor: event.currentTarget }); }}
                   className={[
                     'max-w-[12rem] truncate rounded-md px-2.5 py-1 text-xs',
                     active ? 'font-medium text-foreground' : 'text-muted-foreground',
@@ -225,15 +251,16 @@ export function SheetTabs({
                 </button>
               )}
 
-              {/* 删除按钮与标签是兄弟而不是父子：button 里套 button 是非法标记。 */}
-              {active && sheets.length > 1 && !isRenaming ? (
+              {!isRenaming ? (
                 <button
                   type="button"
-                  aria-label={t('editor.sheets.delete')}
-                  onClick={() => requestDelete(sheet)}
-                  className="mr-1 grid size-5 place-items-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`${sheet.title} · ${t('editor.sheets.menu')}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menu?.sheet.id === sheet.id}
+                  onClick={(event) => menu?.sheet.id === sheet.id ? closeMenu(true) : setMenu({ sheet, anchor: event.currentTarget })}
+                  className="mr-1 grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent"
                 >
-                  <Icon name="x" className="size-3" />
+                  <Icon name="chevron-down" className="size-3" />
                 </button>
               ) : null}
             </div>
@@ -251,6 +278,8 @@ export function SheetTabs({
       >
         <Icon name="plus" className="size-3.5" />
       </Button>
+
+      {menu ? <SheetMenu anchor={menu.anchor} canPaste={canPaste} canDelete={sheets.length > 1} onAction={menuAction} onClose={closeMenu} /> : null}
 
       <ConfirmDialog
         open={pendingDelete !== null}
