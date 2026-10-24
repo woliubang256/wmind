@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addSheetCommand,
+  copySheetCommand,
   moveSheetCommand,
   removeSheetCommand,
   renameSheetCommand,
@@ -21,6 +22,39 @@ function docWithTwoSheets(): WmindDocument {
   });
   return doc;
 }
+
+describe('copySheetCommand', () => {
+  it('完整复制且重映射附属结构、内链和自由主题，重复复制不共享 ID', () => {
+    const doc = docWithTwoSheets();
+    const source = doc.sheets[0]!;
+    source.floatingTopics = [topic('float', '自由主题')];
+    source.summaries = [{ id: 'summary', topicId: 'root', range: ['a'], title: '', style: null }];
+    source.boundaries = [{ id: 'boundary', range: ['a', 'b'], title: '范围', style: null }];
+    source.relationships = [{ id: 'rel', end1Id: 'summary', end2Id: 'float', title: '', style: null }];
+    source.rootTopic.href = 'xmind:#a';
+    let next = 0;
+    const store = createEditorStore({ doc, nextId: () => `copy-${++next}` });
+    const command = copySheetCommand(source, 'copied', '副本', source.id);
+    source.title = '快照之后修改';
+    store.getState().dispatch(command);
+    const sheets = store.getState().doc.sheets;
+    const copy = sheets[1]!;
+    expect(sheets.map((sheet) => sheet.id)).toEqual(['sh-1', 'copied', 'sh-2']);
+    expect(copy.title).toBe('副本');
+    expect(copy.rootTopic.id).not.toBe(source.rootTopic.id);
+    expect(copy.rootTopic.href).toBe(`xmind:#${copy.rootTopic.children.attached[0]!.id}`);
+    expect(copy.boundaries[0]!.range).toEqual(copy.rootTopic.children.attached.slice(0, 2).map((t) => t.id));
+    expect(copy.relationships[0]!.end1Id).toBe(copy.summaries[0]!.id);
+    expect(copy.relationships[0]!.end2Id).toBe(copy.floatingTopics[0]!.id);
+    expect(copy.summaries[0]!.title).toBe('');
+    store.getState().dispatch(copySheetCommand(source, 'copied2', '副本2', copy.id));
+    expect(store.getState().doc.sheets[2]!.rootTopic.id).not.toBe(copy.rootTopic.id);
+    store.getState().undo();
+    expect(store.getState().doc.sheets).toHaveLength(3);
+    store.getState().redo();
+    expect(store.getState().doc.sheets).toHaveLength(4);
+  });
+});
 
 describe('addSheetCommand', () => {
   it('追加到末尾，中心主题用默认文案而不是画布名', () => {

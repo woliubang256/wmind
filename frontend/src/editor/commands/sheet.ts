@@ -16,6 +16,52 @@ import { createSheet } from '../model/create';
 import type { Sheet, StructureClass } from '../model/types';
 import { defineCommand, type EditorCommand } from './types';
 
+/** 完整复制画布；先分配 ID，再修复引用，包含主题级与画布级附属结构。 */
+export function copySheetCommand(source: Sheet, id: string, title: string, afterId: string): EditorCommand {
+  const snapshot = structuredClone(source);
+  return defineCommand({
+    type: 'sheet.copy',
+    label: '复制画布',
+    apply(draft, ctx): void {
+      if (draft.sheets.some((sheet) => sheet.id === id)) return;
+      const copy = structuredClone(snapshot);
+      const ids = new Map<string, string>();
+      const topics: Sheet['rootTopic'][] = [];
+      const collect = (topic: Sheet['rootTopic']) => {
+        topics.push(topic);
+        topic.children.attached.forEach(collect);
+        topic.children.detached.forEach(collect);
+      };
+      collect(copy.rootTopic);
+      copy.floatingTopics.forEach(collect);
+      const summaries = [...copy.summaries, ...topics.flatMap((topic) => topic.summaries)];
+      const boundaries = [...copy.boundaries, ...topics.flatMap((topic) => topic.boundaries)];
+      for (const item of [...topics, ...summaries, ...boundaries, ...copy.relationships]) {
+        if (!ids.has(item.id)) ids.set(item.id, ctx.nextId());
+      }
+      const remap = (old: string) => ids.get(old) ?? old;
+      for (const topic of topics) {
+        topic.id = remap(topic.id);
+        if (topic.href.startsWith('xmind:#')) topic.href = `xmind:#${remap(topic.href.slice(7))}`;
+      }
+      for (const item of [...summaries, ...boundaries]) {
+        item.id = remap(item.id);
+        item.range = item.range.map(remap);
+      }
+      for (const summary of summaries) summary.topicId = remap(summary.topicId);
+      for (const relationship of copy.relationships) {
+        relationship.id = remap(relationship.id);
+        relationship.end1Id = remap(relationship.end1Id);
+        relationship.end2Id = remap(relationship.end2Id);
+      }
+      copy.id = id;
+      copy.title = title;
+      const index = draft.sheets.findIndex((sheet) => sheet.id === afterId);
+      draft.sheets.splice(index < 0 ? draft.sheets.length : index + 1, 0, copy);
+    },
+  });
+}
+
 export interface AddSheetInput {
   /** 由调用方生成：它需要在派发之后立刻切到这张新画布。 */
   id: string;
