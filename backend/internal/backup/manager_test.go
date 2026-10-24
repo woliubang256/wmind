@@ -230,6 +230,87 @@ func TestRetentionCleanupWarningRetryAndTargetIsolation(t *testing.T) {
 		t.Fatal("cleaned another target")
 	}
 }
+
+func TestOptionalDedupIgnoresReadingButIncludesBusinessAndSecurity(t *testing.T) {
+	f := newManagerFixture(t)
+	first := runBackup(t, f, "manual")
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" || job.Filename == first.Filename {
+		t.Fatal("default should always upload", job)
+	}
+	c := f.manager.State().Configuration
+	c.SkipUnchanged = true
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	if job := runBackup(t, f, "schedule"); job.Status != "skipped" {
+		t.Fatal("unchanged should skip", job)
+	}
+	queries := []string{
+		`UPDATE users SET last_login_at='2026-10-24T10:00:00Z',updated_at='2026-10-24T10:00:00Z'`,
+		`INSERT INTO refresh_tokens(user_id,token_hash,expires_at) VALUES(1,'new-login-token','2027-01-01T00:00:00Z')`,
+		`INSERT INTO audit_logs(actor_id,action) VALUES(1,'auth.login')`,
+		`INSERT INTO user_two_factor(user_id,state,revision) VALUES(1,'{"Enabled":false,"Secret":"","RecoveryHashes":null,"SessionVersion":"new-session","Challenges":[]}',1) ON CONFLICT(user_id) DO UPDATE SET state=excluded.state,revision=revision+1`,
+	}
+	for _, q := range queries {
+		if _, err := f.db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.manager.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if job := runBackup(t, f, "manual"); job.Status != "skipped" {
+		t.Fatal("login/reading/restart created backup", job)
+	}
+	changes := []string{
+		`UPDATE maps SET title='edited'`,
+		`INSERT INTO share_links(uid,token,map_id,owner_id) VALUES('share','token',1,1)`,
+		`UPDATE share_links SET allow_download=0`,
+		`UPDATE users SET password_hash='new-password-hash'`,
+		`UPDATE user_two_factor SET state='{"Enabled":true,"Secret":"encrypted-secret","RecoveryHashes":["code"]}',revision=revision+1`,
+		`INSERT INTO settings(key,value) VALUES('site.name','"new site"')`,
+	}
+	for _, q := range changes {
+		if _, err := f.db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+		if job := runBackup(t, f, "manual"); job.Status != "succeeded" {
+			t.Fatal("business/security change skipped", q, job)
+		}
+		if job := runBackup(t, f, "schedule"); job.Status != "skipped" {
+			t.Fatal("unchanged version repeated", job)
+		}
+	}
+	if _, err := f.db.Exec(`UPDATE share_links SET view_count=view_count+1,last_viewed_at='2026-10-24T11:00:00Z'`); err != nil {
+		t.Fatal(err)
+	}
+	if job := runBackup(t, f, "manual"); job.Status != "skipped" {
+		t.Fatal("share view changed version", job)
+	}
+	os.WriteFile(filepath.Join(f.uploads, "image.png"), []byte("new-image"), 0600)
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" {
+		t.Fatal("file change skipped", job)
+	}
+	latest := f.manager.State().Current.Filename
+	delete(f.remote.objects, latest)
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" {
+		t.Fatal("missing remote object skipped", job)
+	}
+	c.WebDAV.URL = "https://example.com/new-target"
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" {
+		t.Fatal("new target reused old baseline", job)
+	}
+	c.SkipUnchanged = false
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	if job := runBackup(t, f, "manual"); job.Status != "succeeded" {
+		t.Fatal("disabled dedup still skipped", job)
+	}
+}
 func TestManagerBackupUploadRestoreAndSessions(t *testing.T) {
 	f := newManagerFixture(t)
 	if _, err := f.manager.StartBackup("manual"); err != nil {

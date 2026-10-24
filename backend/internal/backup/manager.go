@@ -21,18 +21,19 @@ var ErrBusy = errors.New("backup operation already in progress")
 var ErrStage = errors.New("restore upload expired or belongs to another user")
 
 type Job struct {
-	ID           string     `json:"id"`
-	Kind         string     `json:"kind"`
-	Trigger      string     `json:"trigger"`
-	Status       string     `json:"status"`
-	Stage        string     `json:"stage"`
-	StartedAt    time.Time  `json:"startedAt"`
-	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
-	Filename     string     `json:"filename,omitempty"`
-	Bytes        int64      `json:"bytes,omitempty"`
-	ErrorCode    string     `json:"errorCode,omitempty"`
-	WarningCode  string     `json:"warningCode,omitempty"`
-	RecoveryFile string     `json:"recoveryFile,omitempty"`
+	ID             string     `json:"id"`
+	Kind           string     `json:"kind"`
+	Trigger        string     `json:"trigger"`
+	Status         string     `json:"status"`
+	Stage          string     `json:"stage"`
+	StartedAt      time.Time  `json:"startedAt"`
+	FinishedAt     *time.Time `json:"finishedAt,omitempty"`
+	Filename       string     `json:"filename,omitempty"`
+	Bytes          int64      `json:"bytes,omitempty"`
+	ErrorCode      string     `json:"errorCode,omitempty"`
+	WarningCode    string     `json:"warningCode,omitempty"`
+	ContentVersion string     `json:"contentVersion,omitempty"`
+	RecoveryFile   string     `json:"recoveryFile,omitempty"`
 }
 type State struct {
 	Configuration  Configuration `json:"configuration"`
@@ -257,7 +258,7 @@ func (m *Manager) launch(kind, trigger string, run func(context.Context, *Job) e
 				job.ErrorCode = "OPERATION_FAILED"
 			}
 			m.cfg.Logger.Warn("backup operation failed", "kind", kind, "stage", job.Stage, "code", job.ErrorCode)
-		} else {
+		} else if job.Status != "skipped" {
 			job.Status = "succeeded"
 			job.Stage = "completed"
 		}
@@ -311,6 +312,27 @@ func (m *Manager) backup(ctx context.Context, job *Job, configuration Configurat
 		job.ErrorCode = "CAPTURE_FAILED"
 		return err
 	}
+	m.stage(job, "checking")
+	fingerprint, err := contentFingerprint(ctx, filepath.Join(dir, "snapshot"), manifest)
+	if err != nil {
+		job.ErrorCode = "CAPTURE_FAILED"
+		return err
+	}
+	job.ContentVersion = fingerprint[:12]
+	if configuration.SkipUnchanged {
+		latest, same, err := m.unchanged(ctx, configuration, fingerprint)
+		if err != nil {
+			job.ErrorCode = "REMOTE_CHECK_FAILED"
+			return err
+		}
+		if same {
+			job.Status = "skipped"
+			job.Stage = "completed"
+			job.Filename = latest.Filename
+			m.pruneBackups(ctx, job, configuration)
+			return nil
+		}
+	}
 	m.stage(job, "compressing")
 	name := fmt.Sprintf("wmind-%s-%s.zip", job.StartedAt.Format("20060102T150405Z"), job.ID[:8])
 	archive := filepath.Join(dir, name)
@@ -333,6 +355,6 @@ func (m *Manager) backup(ctx context.Context, job *Job, configuration Configurat
 		return err
 	}
 	m.stage(job, "cleaning")
-	m.recordBackup(ctx, job, configuration, "")
+	m.recordBackup(ctx, job, configuration, fingerprint)
 	return nil
 }
