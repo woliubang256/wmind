@@ -17,6 +17,7 @@ import { diffSettings, SETTING_GROUPS, type SettingField } from './settings-sche
 import { adminKeys } from './queries';
 import { BackupPanel } from './backup-panel';
 import { mapKeys } from '@/features/maps/queries';
+import { cn } from '@/lib/utils';
 
 export function AdminSettingsPage() {
   const { t } = useTranslation();
@@ -133,7 +134,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
     <form onSubmit={submit} className="space-y-5" noValidate>
       {SETTING_GROUPS.map((group) => (
         <Panel key={group.id} title={t(group.titleKey)}>
-          <div className="divide-y divide-border/70">
+          <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-6">
             {group.fields.map((field) => (
               <SettingRow
                 key={field.key}
@@ -186,10 +187,11 @@ function SettingRow({
   const label = t(field.labelKey);
   const hintText = field.hintKey === undefined ? undefined : t(field.hintKey);
   const hint = error ? <p role="alert" className="mt-1 text-xs text-destructive">{error}</p> : hintText ? <p className="mt-1 text-xs text-muted-foreground">{hintText}</p> : null;
+  const rowClass = cn('min-w-0', field.kind === 'bool' || field.kind === 'text' || field.width === 'full' ? 'sm:col-span-2 xl:col-span-6' : field.width === 'half' ? 'xl:col-span-3' : 'xl:col-span-2');
 
   if (field.kind === 'bool') {
     return (
-      <div className="py-4 first:pt-0 last:pb-0">
+      <div className={rowClass}>
         <Switch
           checked={value === true}
           onCheckedChange={onChange}
@@ -211,7 +213,6 @@ function SettingRow({
         value={String(value ?? '')}
         onChange={onChange}
         aria-label={label}
-        className="max-w-56"
         options={(field.options ?? []).map((option) => ({ value: option.value, label: t(option.labelKey) }))}
       />
     ) : field.kind === 'text' ? (
@@ -247,7 +248,7 @@ function SettingRow({
     );
 
   return (
-    <div className="py-4 first:pt-0 last:pb-0">
+    <div className={rowClass}>
       <label className="block text-sm font-medium">{label}</label>
       <div className="mt-2">{control}</div>
       {hint}

@@ -59,8 +59,9 @@ function BackupForm({ state }: { state: BackupState }) {
       </div>
       <fieldset disabled={disabled} className="space-y-4 border-t border-border/70 pt-4">
         <legend className="sr-only">{t('backup.scheduleTitle')}</legend>
-        <CronEditor value={draft.cron} onChange={(value) => set('cron', value)} disabled={disabled} />
-        <Field label={t('backup.timezone')}><Select value={draft.timezone} onChange={(zone) => set('timezone', zone)} options={timezones} disabled={disabled} aria-label={t('backup.timezone')} search={{ placeholder: t('backup.searchTimezone'), emptyLabel: t('backup.noTimezone') }} /></Field>
+        <CronEditor value={draft.cron} onChange={(value) => set('cron', value)} disabled={disabled}>
+          <Field label={t('backup.timezone')}><Select value={draft.timezone} onChange={(zone) => set('timezone', zone)} options={timezones} disabled={disabled} aria-label={t('backup.timezone')} search={{ placeholder: t('backup.searchTimezone'), emptyLabel: t('backup.noTimezone') }} /></Field>
+        </CronEditor>
         <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs" aria-live="polite">
           <p className="font-medium">{t('backup.upcoming')} <span className="font-normal text-muted-foreground">{draft.timezone}</span></p>
           {preview.isError && scheduleCurrent ? <p role="alert" className="mt-1 text-destructive">{t('backup.invalidSchedule')}</p> : !scheduleCurrent || preview.isFetching ? <LoadingState inline label={t('backup.checkingSchedule')} className="mt-1 text-xs" /> : <ol className="mt-1.5 grid gap-x-6 gap-y-1 text-muted-foreground sm:grid-cols-2">{preview.data?.nextRuns.map((date) => <li key={date}>{formatTime(date)}</li>)}</ol>}

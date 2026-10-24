@@ -21,6 +21,8 @@ export interface SettingField {
   key: string;
   labelKey: string;
   kind: SettingKind;
+  /** 桌面短字段默认三列；长文本、开关整行，成对字段使用半行。 */
+  width?: 'full' | 'half';
   hintKey?: string;
   placeholder?: string;
   min?: number;
@@ -55,9 +57,10 @@ export const SETTING_GROUPS: SettingGroup[] = [
         kind: 'text',
         hintKey: 'admin.settings.hintSiteDescription',
       },
-      { key: 'site.icp', labelKey: 'admin.settings.fieldSiteIcp', kind: 'string', hintKey: 'admin.settings.hintSiteIcp' },
+      { key: 'site.icp', labelKey: 'admin.settings.fieldSiteIcp', kind: 'string', hintKey: 'admin.settings.hintSiteIcp', width: 'half' },
       {
         key: 'site.base_url',
+        width: 'half',
         labelKey: 'admin.settings.fieldSiteBaseUrl',
         kind: 'string',
         hintKey: 'admin.settings.hintSiteBaseUrl',
@@ -75,6 +78,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: 'auth.default_role',
+        width: 'half',
         labelKey: 'admin.settings.fieldDefaultRole',
         kind: 'enum',
         options: [
@@ -84,6 +88,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: 'auth.password_min_length',
+        width: 'half',
         labelKey: 'admin.settings.fieldPasswordMinLength',
         kind: 'int',
         min: 8,
@@ -92,6 +97,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: 'auth.login_max_attempts',
+        width: 'half',
         labelKey: 'admin.settings.fieldLoginMaxAttempts',
         kind: 'int',
         min: 1,
@@ -101,6 +107,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: 'auth.login_lock_minutes',
+        width: 'half',
         labelKey: 'admin.settings.fieldLoginLockMinutes',
         kind: 'int',
         min: 1,
@@ -115,6 +122,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       {
         key: 'limit.maps_per_user',
+        width: 'half',
         labelKey: 'admin.settings.fieldMapsPerUser',
         hintKey: 'admin.settings.hintMapsPerUser',
         kind: 'int',
@@ -124,6 +132,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: 'limit.upload_max_mb',
+        width: 'half',
         labelKey: 'admin.settings.fieldUploadMaxMb',
         kind: 'int',
         min: 1,
@@ -138,6 +147,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       {
         key: 'trash.retention_days',
+        width: 'full',
         labelKey: 'admin.settings.fieldTrashRetentionDays',
         kind: 'int',
         min: 1,
