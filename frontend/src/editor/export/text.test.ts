@@ -171,6 +171,20 @@ describe('Markdown 导出', () => {
     const round = outline(reimportMarkdown(exportMarkdown(docOf(sheet), 'sheet-0')));
     expect(round).toEqual(original);
   });
+
+  it('少量标题加大量列表往返不丢主分支、备注与行首字面量', () => {
+    const sheet = createSheet({ id: 'sheet-0', title: '画布 0' });
+    sheet.rootTopic = createTopic({ id: 'root', title: '长列表' });
+    const branch = createTopic({ id: 'branch', title: '# 主分支' });
+    branch.notes.plain = '主分支备注';
+    branch.children.attached = Array.from({ length: 40 }, (_, index) => {
+      const topic = createTopic({ id: `child-${index}`, title: index === 0 ? '# 字面量' : `项 ${index}` });
+      topic.notes.plain = index === 0 ? '子项备注' : '';
+      return topic;
+    });
+    sheet.rootTopic.children.attached = [branch];
+    expect(detail(reimportMarkdown(exportMarkdown(docOf(sheet), sheet.id)))).toEqual(detail(sheet.rootTopic));
+  });
 });
 
 describe('OPML 导出', () => {

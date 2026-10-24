@@ -223,28 +223,18 @@ export function tokenizeMarkdown(text: string): Token[] {
 
 export type MarkdownMode = 'heading' | 'list';
 
-/** 去掉标题之后的令牌类型（列表模式下标题退化为普通文本）。 */
-type FlatToken = Exclude<Token, { kind: 'heading' }>;
-
-function flattenHeadings(tokens: readonly Token[]): FlatToken[] {
-  const out: FlatToken[] = [];
-  for (const token of tokens) {
-    out.push(token.kind === 'heading' ? { kind: 'text', text: token.text } : token);
-  }
-  return out;
+function modeFromTokens(tokens: readonly Token[]): MarkdownMode {
+  return tokens.some((token) => token.kind === 'heading') ? 'heading' : 'list';
 }
 
 /**
- * 判定依据照抄 docs/06 §2.2 的公式。
+ * 真正的标题必须保留结构，列表再多也不能让标题退化成备注。
  *
- * 直觉：标题够多、且不比列表少太多，就是「标题写的大纲」；否则是「列表写的
- * 大纲」。阈值 2 是为了避免「只有一个 `#` 标题 + 一堆列表」的笔记被当成标题
- * 结构——那种文件用列表层级更贴近原意。
+ * 用分词结果判断，不另扫原文：围栏代码里的 # 和转义的 \# 不是标题。
+ * 无标题时保留纯列表的首个正文行 / 文件名作为根节点的语义。
  */
 export function detectMarkdownMode(text: string): MarkdownMode {
-  const headingCount = (text.match(/^#{1,6}\s+/gm) ?? []).length;
-  const listCount = (text.match(/^(\s*)([-*+]|\d+\.)\s+/gm) ?? []).length;
-  return headingCount >= 2 && headingCount >= listCount / 2 ? 'heading' : 'list';
+  return modeFromTokens(tokenizeMarkdown(text));
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +358,7 @@ function buildHeadingMode(tokens: Token[], fileName: string, state: BuildState):
       }
       case 'item': {
         if (root === null) {
-          // 文件以列表开头但被判成标题模式（比如前面只有一个标题）：兜底成根。
+          // 文件以列表开头、后面才出现标题：前面的列表仍需文件名根节点。
           root = newTopic(state, fileName);
           current = root;
           headingStack.push({ level: 0, topic: root });
@@ -443,14 +433,13 @@ function buildHeadingMode(tokens: Token[], fileName: string, state: BuildState):
 }
 
 function buildListMode(tokens: Token[], fileName: string, state: BuildState): { root: Topic; sheet: Sheet } {
-  // 标题模式以外，`#` 行退化为普通文本（用户可能只是用 `#` 写了个标题）。
-  const flat = flattenHeadings(tokens);
-
   let root: Topic | null = null;
   const listStack: Array<{ indent: number; topic: Topic }> = [];
   let current: Topic | null = null;
 
-  for (const token of flat) {
+  for (const token of tokens) {
+    // 调用方已保证没有标题；保留防御性分支，不允许标题静默写入备注。
+    if (token.kind === 'heading') throw new Error('Markdown headings require heading mode');
     if (token.kind === 'item') {
       if (root === null) {
         // 文件直接以列表开头：中心主题取文件名（docs/06 §2.2）。
@@ -527,8 +516,8 @@ export function markdownTitleFromFileName(fileName: string): string {
 }
 
 export function parseMarkdown(text: string, fileName: string, ctx: ImportContext): WmindDocument {
-  const mode = detectMarkdownMode(text);
   const tokens = tokenizeMarkdown(text);
+  const mode = modeFromTokens(tokens);
   const state: BuildState = { ctx, skippedImages: 0 };
 
   const built = mode === 'heading'

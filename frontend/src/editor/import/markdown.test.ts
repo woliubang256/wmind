@@ -7,8 +7,7 @@
  * 2. 列表层级由**相对缩进**决定，2 空格与 4 空格的文件得到同一棵树；
  * 3. 行内元素（代码 / 图片 / 链接）单次扫描，代码里的 `[a](b)` 不被当链接。
  *
- * 另外把「判定公式」也钉住：docs/06 §2.2 的 `headingCount >= 2 && headingCount
- * >= listCount / 2` 是规范原文，改了就要改文档。
+ * 混合结构必须保留真实标题，不能因为列表更多就把标题丢进备注。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -21,6 +20,8 @@ import {
   tokenizeMarkdown,
 } from './markdown';
 import type { Topic } from '../model/types';
+import { exportMarkdown } from '../export/text';
+import usedCarRequirements from './fixtures/used-car-requirements.md?raw';
 
 function ctxOf(fileName = '笔记.md') {
   const handle = createImportContext({ fileName, limits: resolveLimits() });
@@ -110,6 +111,13 @@ describe('tokenizeMarkdown', () => {
     ]);
   });
 
+  it('转义标题保留为正文，不提升为节点层级', () => {
+    expect(solid('\\# 文本\n\\## 仍是文本\n')).toEqual([
+      { kind: 'text', text: '\\# 文本' },
+      { kind: 'text', text: '\\## 仍是文本' },
+    ]);
+  });
+
   it('未闭合的围栏吃到文末', () => {
     const [token] = solid('```\ncode\n');
     expect(token).toMatchObject({ kind: 'code', lang: '' });
@@ -146,24 +154,33 @@ describe('tokenizeMarkdown', () => {
 // ---------------------------------------------------------------------------
 
 describe('detectMarkdownMode', () => {
-  it('标题够多且不比列表少太多 → 标题模式', () => {
+  it('存在真实标题 → 标题模式', () => {
     expect(detectMarkdownMode('# 甲\n## 乙\n### 丙\n')).toBe('heading');
   });
 
-  it('只有一个标题 + 一堆列表 → 列表模式', () => {
-    // 阈值 2 的用处：`# 待办` 下面挂一串列表，那是列表写的大纲。
-    expect(detectMarkdownMode('# 待办\n- a\n- b\n- c\n')).toBe('list');
+  it('只有一个标题 + 一堆列表也保留标题模式', () => {
+    expect(detectMarkdownMode('# 待办\n- a\n- b\n- c\n')).toBe('heading');
   });
 
   it('完全没有标题 → 列表模式', () => {
     expect(detectMarkdownMode('- a\n  - b\n')).toBe('list');
   });
 
-  it('判定公式与 docs/06 §2.2 一致（边界值）', () => {
-    // headingCount=2, listCount=4 → 2 >= 4/2 成立 → heading。
+  it('列表数量不改变真实标题的语义', () => {
     expect(detectMarkdownMode('# a\n# b\n- 1\n- 2\n- 3\n- 4\n')).toBe('heading');
-    // headingCount=2, listCount=6 → 2 >= 3 不成立 → list。
-    expect(detectMarkdownMode('# a\n# b\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n')).toBe('list');
+    expect(detectMarkdownMode('# a\n# b\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n')).toBe('heading');
+  });
+
+  it('围栏里的伪标题不参与模式判定', () => {
+    expect(detectMarkdownMode('```md\n# a\n## b\n```\n- 实际列表\n')).toBe('list');
+  });
+
+  it('转义的标题是字面量，不盲目删除反斜杠后判定', () => {
+    expect(detectMarkdownMode('\\# a\n\\## b\n- 实际列表\n')).toBe('list');
+  });
+
+  it('模式判定使用同一分词换行规则', () => {
+    expect(detectMarkdownMode('# 根\r## 分支\r- 列表\r')).toBe('heading');
   });
 });
 
@@ -172,6 +189,61 @@ describe('detectMarkdownMode', () => {
 // ---------------------------------------------------------------------------
 
 describe('标题模式建树', () => {
+  it('用户九模块需求保留全部标题、小节和列表，不按列表占比丢层级', () => {
+    const { root } = parse(usedCarRequirements, '业务需求.md');
+    expect(root.title).toBe('二手车综合业务平台功能需求');
+    expect(root.children.attached.map((topic) => topic.title)).toEqual([
+      '一、用户与权限管理模块', '二、核心业务管理模块', '三、分销系统模块',
+      '四、入驻与代理管理模块', '五、系统对接模块', '六、内容管理模块',
+      '七、数据统计与分析模块', '八、门店与工厂管理模块', '九、通用功能模块',
+    ]);
+    let listDepth = 0;
+    const expectedOutline = usedCarRequirements.split('\n').flatMap((line) => {
+      const heading = /^(#{1,3}) (.+)$/.exec(line);
+      if (heading) {
+        listDepth = heading[1]!.length;
+        return [`${'  '.repeat(listDepth - 1)}${heading[2]}`];
+      }
+      const item = /^( *)- (.+)$/.exec(line);
+      if (!item) return [];
+      return [`${'  '.repeat(listDepth + item[1]!.length / 2)}${item[2]}`];
+    });
+    expect(outline(root)).toEqual(expectedOutline);
+    expect(outline(root)).toHaveLength(192);
+    const visit = (topic: Topic): void => {
+      expect(topic.notes.plain).toBe('');
+      topic.children.attached.forEach(visit);
+    };
+    visit(root);
+  });
+
+  it('大量列表混合标题导出后重新导入仍保留完整结构', () => {
+    const original = parse(usedCarRequirements).doc;
+    const exported = exportMarkdown(original, original.sheets[0]!.id);
+    expect(outline(parse(exported).root)).toEqual(outline(original.sheets[0]!.rootTopic));
+  });
+
+  it('单标题与长列表使用同一根节点，文档标题不受文件名影响', () => {
+    const { root, doc } = parse('# 真正的标题\n' + Array.from({ length: 40 }, (_, i) => `- 项 ${i}`).join('\n'), '不同文件名.md');
+    expect(root.title).toBe('真正的标题');
+    expect(doc.title).toBe('真正的标题');
+    expect(root.children.attached).toHaveLength(40);
+    expect(root.notes.plain).toBe('');
+  });
+
+  it('长列表之间的标题跳级仍挂最近上级，列表栈不串到下个标题', () => {
+    const { root } = parse('# 根\n### 深\n- a\n  - a1\n- b\n- c\n## 中\n- d\n- e\n- f\n');
+    expect(outline(root)).toEqual(['根', '  深', '    a', '      a1', '    b', '    c', '  中', '    d', '    e', '    f']);
+  });
+
+  it('真实标题之间的围栏伪标题和转义标题不产生额外分支', () => {
+    const { root } = parse('# 根\n## 分支\n- a\n```md\n## 伪标题\n### 也不是\n```\n\\## 字面量\n## 次分支\n- b\n');
+    expect(root.children.attached.map((topic) => topic.title)).toEqual(['分支', '次分支']);
+    const code = root.children.attached[0]!.children.attached[0]!.children.attached[0]!;
+    expect(code.title).toBe('代码块 (md)');
+    expect(code.notes.plain).toBe('## 伪标题\n### 也不是\n\\## 字面量');
+  });
+
   it('层级跳跃不补空节点', () => {
     // `#` 之后直接 `###`：新节点挂到 `#`，不造空白的 `##`。
     const { root } = parse('# 根\n\n### 深\n\n## 中\n');
@@ -248,8 +320,7 @@ describe('列表模式建树', () => {
     expect(todo!.markers.map((marker) => marker.markerId)).toEqual(['task-start']);
   });
 
-  it('标题在列表模式下退化为普通文本', () => {
-    // 只有一个 `#` 且列表更多 → 列表模式，`#` 行不该凭空造出一层。
+  it('单标题加列表不凭空造出一层', () => {
     const { root } = parse('# 待办\n- a\n- b\n- c\n', '待办.md');
     expect(root.title).toBe('待办');
     expect(outline(root)).toEqual(['待办', '  a', '  b', '  c']);
