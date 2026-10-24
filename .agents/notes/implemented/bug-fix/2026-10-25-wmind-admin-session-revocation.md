@@ -12,6 +12,8 @@ Status: implemented
 
 注册签发、登录、刷新和第二因子操作取得安全行锁后重新校验用户存在性、状态和密码快照，拒绝等待期间已经失效的身份。共用撤销入口的管理员重置密码也按相同事务协议处理，不再忽略撤销错误。
 
+前端只把 AUTH_ACCOUNT_DISABLED 的专用 403 当作会话终止，普通权限不足保留当前登录；刷新后仍返回 401 也终止会话。每次显式安装或清空令牌推进内存会话代数，旧请求不能退出新登录，在途刷新不能复活已经退出的会话，也不能覆盖新登录。刷新单飞限定在同一代会话中，暂时网络和 5xx 故障仍保留令牌并允许重试。
+
 ## Related decisions
 
 按禁用、缓存、会话、安全版本检索后，[认证会话](../../implemented/architecture/2026-10-17-wmind-auth-session.md)和[管理后台](../../implemented/architecture/2026-10-17-wmind-admin-backend.md)部分重叠，本篇替代其进程内缓存主动失效的即时性前提，保留其密码、Cookie、审计和最后管理员保护决策。[双因素认证](../../implemented/feature/2026-10-23-wmind-two-factor.md)继续持有安全行和版本格式，本篇复用该契约。[启动恢复](../../implemented/bug-fix/2026-10-25-wmind-session-bootstrap.md)的内存令牌、单飞刷新及暂时故障不退出约束保持不变。其他备份、分享和限流笔记不决定账号令牌撤销，无需替代或归档。
@@ -30,6 +32,7 @@ Status: implemented
 - 等待安全行锁的登录与刷新不能在禁用后签发有效会话。
 - `go test ./internal/integration -run '^TestAdminSessions' -count=1`：真实临时 SQLite、两个独立连接和服务实例，覆盖多设备访问/刷新、重新启用、撤销和版本保存失败回滚、等待中的登录和刷新以及 2FA 配置保留与挑战清理。
 - 受影响的 service、httpapi、backup 与 cmd/server 定向回归；集成测试另跑 race 检查。
+- 前端 client/auth 单测覆盖专用禁用 403、普通权限 403、不带认证的登录失败、并发退出仅通知一次、重试 401、迟到刷新与旧请求不影响新登录；session-bootstrap 浏览器夹具验证禁用/删除下一次请求跳转登录且无持久化令牌。
 
 ## Consequences
 

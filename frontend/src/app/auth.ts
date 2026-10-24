@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { api, getAccessToken, refreshSession, setAccessToken, type CurrentUser } from '@/lib/api/client';
+import { api, getAccessToken, refreshSession, type CurrentUser } from '@/lib/api/client';
+import { ApiError } from '@/lib/api/errors';
 
 export const authKeys = {
   currentUser: ['auth', 'me'] as const,
@@ -12,8 +13,7 @@ export async function loadCurrentUser(): Promise<CurrentUser | null> {
     // 页面内已有令牌时正常查询，过期仍由 apiRequest 单飞刷新并重试一次。
     return await api.get<CurrentUser>('/auth/me');
   } catch (error) {
-    if (error instanceof Error && 'status' in error && (error.status === 401 || error.status === 403)) {
-      setAccessToken(null);
+    if (error instanceof ApiError && (error.status === 401 || error.code === 'AUTH_ACCOUNT_DISABLED')) {
       return null;
     }
     throw error;

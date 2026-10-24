@@ -70,4 +70,11 @@ describe('页面会话初始化', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(503, { error: { code: 'SERVICE_UNAVAILABLE', message: 'unavailable' } })));
     await expect(loadCurrentUser()).rejects.toMatchObject({ status: 503 });
   });
+
+  it('普通权限不足不伪装为退出登录', async () => {
+    setAccessToken('existing-token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(403, { error: { code: 'AUTH_FORBIDDEN', message: 'forbidden' } })));
+    await expect(loadCurrentUser()).rejects.toMatchObject({ status: 403, code: 'AUTH_FORBIDDEN' });
+    expect(getAccessToken()).toBe('existing-token');
+  });
 });

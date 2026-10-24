@@ -6,9 +6,18 @@ const API_BASE = '/api/v1';
 let accessToken: string | null = null;
 let onUnauthorized: (() => void) | undefined;
 let refreshInFlight: Promise<AuthSession | null> | null = null;
+let sessionGeneration = 0;
 
 export function setAccessToken(token: string | null) {
+  sessionGeneration += 1;
+  refreshInFlight = null;
   accessToken = token;
+}
+
+function endSession(generation: number) {
+  if (generation !== sessionGeneration) return;
+  setAccessToken(null);
+  onUnauthorized?.();
 }
 
 export function getAccessToken() {
@@ -41,13 +50,15 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
  */
 export async function refreshSession(): Promise<AuthSession | null> {
   if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
+  const generation = sessionGeneration;
+  const pending = (async () => {
     try {
       const session = await apiRequest<AuthSession>('/auth/refresh', {
         method: 'POST',
         auth: false,
         retryAuth: false,
       });
+      if (generation !== sessionGeneration) return null;
       if (typeof session?.accessToken !== 'string' || session.accessToken.length === 0
         || typeof session.user?.uid !== 'string' || session.user.uid.length === 0) {
         throw new Error(i18n.t('network.invalidBody'));
@@ -55,6 +66,7 @@ export async function refreshSession(): Promise<AuthSession | null> {
       accessToken = session.accessToken;
       return session;
     } catch (error) {
+      if (generation !== sessionGeneration) return null;
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         accessToken = null;
         return null;
@@ -62,10 +74,11 @@ export async function refreshSession(): Promise<AuthSession | null> {
       // 断网、5xx 和响应损坏不等于会话失效，不清令牌或跳转登录。
       throw error;
     } finally {
-      refreshInFlight = null;
+      if (generation === sessionGeneration) refreshInFlight = null;
     }
   })();
-  return refreshInFlight;
+  refreshInFlight = pending;
+  return pending;
 }
 
 function isBodyInit(body: RequestOptions['body']): body is BodyInit {
@@ -93,6 +106,7 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
     requestBody = JSON.stringify(body);
   }
   const requestToken = auth ? accessToken : null;
+  const generation = sessionGeneration;
   if (requestToken) headers.set('Authorization', `Bearer ${requestToken}`);
 
   let response: Response;
@@ -107,16 +121,17 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
     throw new Error(i18n.t('network.offline'), { cause });
   }
 
-  if (response.status === 401 && auth && retryAuth && path !== '/auth/refresh') {
-    // 较慢的旧请求可能在刷新完成后才返回 401，直接复用新令牌，不再轮换。
-    const token = accessToken && accessToken !== requestToken
-      ? accessToken
-      : (await refreshSession())?.accessToken;
-    if (token) {
-      return requestEnvelope<T>(path, { ...options, retryAuth: false });
+  if (response.status === 401 && auth) {
+    if (retryAuth && path !== '/auth/refresh' && generation === sessionGeneration) {
+      // 较慢的旧请求可能在刷新完成后才返回 401，直接复用新令牌，不再轮换。
+      const token = accessToken && accessToken !== requestToken
+        ? accessToken
+        : (await refreshSession())?.accessToken;
+      if (token && generation === sessionGeneration) {
+        return requestEnvelope<T>(path, { ...options, retryAuth: false });
+      }
     }
-    accessToken = null;
-    onUnauthorized?.();
+    endSession(generation);
   }
 
   if (response.status === 204) return { data: undefined as T };
@@ -130,6 +145,9 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
 
   if (!response.ok) {
     const errorPayload = payload as ApiErrorEnvelope;
+    if (auth && response.status === 403 && errorPayload?.error?.code === 'AUTH_ACCOUNT_DISABLED') {
+      endSession(generation);
+    }
     if (errorPayload?.error?.code && errorPayload.error.message) {
       throw new ApiError(errorPayload, response.status);
     }

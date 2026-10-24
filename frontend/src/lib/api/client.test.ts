@@ -170,11 +170,90 @@ describe('apiRequest', () => {
     });
 
   it('does not loop if the retried request is still unauthorized', async () => {
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/auth/refresh')
       ? json(200, { data: session('fresh-token') })
       : json(401, { error: { code: 'AUTH_TOKEN_INVALID', message: 'invalid' } }));
     vi.stubGlobal('fetch', fetchMock);
     await expect(apiRequest('/private')).rejects.toMatchObject({ status: 401 });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(getAccessToken()).toBeNull();
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
+  it('ends a disabled account session immediately without attempting refresh', async () => {
+    setAccessToken('disabled-token');
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    const fetchMock = vi.fn().mockResolvedValue(json(403, { error: { code: 'AUTH_ACCOUNT_DISABLED', message: 'disabled' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(apiRequest('/maps')).rejects.toMatchObject({ status: 403, code: 'AUTH_ACCOUNT_DISABLED' });
+    expect(getAccessToken()).toBeNull();
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not end a session for ordinary forbidden responses or unauthenticated login failures', async () => {
+    setAccessToken('valid-token');
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json(403, { error: { code: 'AUTH_FORBIDDEN', message: 'forbidden' } }))
+      .mockResolvedValueOnce(json(403, { error: { code: 'AUTH_ACCOUNT_DISABLED', message: 'disabled' } })));
+    await expect(apiRequest('/admin/users')).rejects.toMatchObject({ status: 403 });
+    await expect(apiRequest('/auth/login', { method: 'POST', auth: false })).rejects.toMatchObject({ status: 403 });
+    expect(getAccessToken()).toBe('valid-token');
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('notifies once when concurrent requests report the account disabled', async () => {
+    setAccessToken('disabled-token');
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    vi.stubGlobal('fetch', vi.fn(async () => json(403, { error: { code: 'AUTH_ACCOUNT_DISABLED', message: 'disabled' } })));
+    await Promise.allSettled([apiRequest('/maps'), apiRequest('/account')]);
+    expect(getAccessToken()).toBeNull();
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
+  it('cannot reinstall a late refresh response after the account was disabled', async () => {
+    setAccessToken('old-token');
+    let finishRefresh!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => String(input).endsWith('/auth/refresh')
+      ? new Promise<Response>((resolve) => { finishRefresh = resolve; })
+      : Promise.resolve(json(403, { error: { code: 'AUTH_ACCOUNT_DISABLED', message: 'disabled' } }))));
+    const pending = refreshSession();
+    await expect(apiRequest('/maps')).rejects.toMatchObject({ code: 'AUTH_ACCOUNT_DISABLED' });
+    finishRefresh(json(200, { data: session('late-token') }));
+    await expect(pending).resolves.toBeNull();
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it('ignores a previous session rejection after a new login and does not share its pending refresh', async () => {
+    setAccessToken('old-token');
+    let finishOld!: (response: Response) => void;
+    let finishRejection!: (response: Response) => void;
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    let refreshes = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith('/auth/refresh')) {
+        if (++refreshes === 1) return new Promise<Response>((resolve) => { finishOld = resolve; });
+        return Promise.resolve(json(200, { data: session('new-refreshed-token') }));
+      }
+      return new Promise<Response>((resolve) => { finishRejection = resolve; });
+    }));
+    const oldRefresh = refreshSession();
+    const oldRequest = apiRequest('/maps').catch((error: unknown) => error);
+    setAccessToken('new-login-token');
+    const newRefresh = refreshSession();
+    finishOld(json(200, { data: session('old-refreshed-token') }));
+    finishRejection(json(403, { error: { code: 'AUTH_ACCOUNT_DISABLED', message: 'disabled' } }));
+    await expect(oldRefresh).resolves.toBeNull();
+    await expect(oldRequest).resolves.toMatchObject({ code: 'AUTH_ACCOUNT_DISABLED' });
+    await expect(newRefresh).resolves.toEqual(session('new-refreshed-token'));
+    expect(getAccessToken()).toBe('new-refreshed-token');
+    expect(onUnauthorized).not.toHaveBeenCalled();
   });
 });

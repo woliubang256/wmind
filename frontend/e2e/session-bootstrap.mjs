@@ -29,6 +29,7 @@ async function fixture(page, state) {
     }
     if (path === '/site/config') return route.fulfill({ json: { data: site } });
     if (request.headers().authorization !== `Bearer ${state.token}`) return fail(401, 'AUTH_TOKEN_EXPIRED');
+    if (path.startsWith('/session-probe') && state.deniedCode) return fail(state.deniedStatus, state.deniedCode);
     const data = path === '/auth/me' ? user : path.startsWith('/session-probe') ? { ok: true } : [];
     return route.fulfill({ json: { data, pagination: { page: 1, pageSize: 20, total: 0, totalPages: 1 } } });
   });
@@ -76,6 +77,33 @@ run(async () => {
         await page.getByLabel('用户名或邮箱', { exact: true }).waitFor();
         check(`失效或禁用会话 ${status} 正常回到登录且无 me 请求`, new URL(page.url()).pathname === '/login' && !state.requests.some((request) => request.path === '/auth/me') && errors.length === 0);
         await anonymous.close();
+      }
+
+      for (const action of ['disabled', 'deleted']) {
+        const context = await newContext(browser);
+        const { page, errors } = await newPage(browser, { context });
+        const state = {};
+        await fixture(page, state);
+        await page.goto(`${BASE}/trash`);
+        await page.getByRole('heading', { name: '回收站', exact: true }).waitFor();
+        state.deniedStatus = 403;
+        state.deniedCode = 'AUTH_FORBIDDEN';
+        await page.evaluate(async () => {
+          const { api } = await import('/src/lib/api/client.ts');
+          await api.get('/session-probe/forbidden').catch(() => {});
+        });
+        check(`${action} 场景中普通 403 保持登录且不刷新`, new URL(page.url()).pathname === '/trash' && state.refreshes === 1);
+        state.deniedStatus = action === 'disabled' ? 403 : 401;
+        state.deniedCode = action === 'disabled' ? 'AUTH_ACCOUNT_DISABLED' : 'AUTH_TOKEN_INVALID';
+        state.authenticated = false;
+        await page.evaluate(async () => {
+          const { api } = await import('/src/lib/api/client.ts');
+          await api.get('/session-probe/revoked').catch(() => {});
+        });
+        await page.getByLabel('用户名或邮箱', { exact: true }).waitFor();
+        check(`${action} 下一次请求退出登录并清理内存令牌`, new URL(page.url()).pathname === '/login' && await page.evaluate(async () => (await import('/src/lib/api/client.ts')).getAccessToken() === null));
+        check(`${action} 退出过程无页面异常且不写入浏览器存储`, errors.length === 0 && await page.evaluate(() => !JSON.stringify({ ...localStorage, ...sessionStorage }).includes('restored-')));
+        await context.close();
       }
     }
 
