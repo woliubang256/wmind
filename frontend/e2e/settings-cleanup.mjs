@@ -69,7 +69,7 @@ run(async () => {
         check('有正文的表单弹窗保留正文和分隔', await formDialog.evaluate((node) => node.children.length === 3 && getComputedStyle(node.children[0]).borderBottomWidth === '1px' && getComputedStyle(node.children[2]).borderTopWidth === '1px'));
         await page.keyboard.press('Escape');
       }
-      if (path === '/admin/settings') check('网站设置保留影响提示', await page.getByText('部分设置会影响已登录用户，请留意提示。', { exact: true }).count() === 1);
+      if (path === '/admin/settings') check('网站设置不展示泛化提醒', await page.getByText('部分设置会影响已登录用户，请留意提示。', { exact: true }).count() === 0);
     }
 
     await page.goto(`${BASE}/shares`);

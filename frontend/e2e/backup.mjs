@@ -53,6 +53,8 @@ run(async () => {
     const pick = async (name, option) => { await panel.getByRole('combobox', { name, exact: true }).click(); await page.getByRole('option', { name: option, exact: true }).click(); };
     const expression = panel.getByLabel('Cron 表达式', { exact: true });
     await pick('备份频率', '每周一凌晨 03:00');
+    check('预设频率不展开高级 Cron 控件', await expression.count() === 0);
+    await pick('备份频率', '自定义');
     check('预设生成标准五段表达式', await expression.inputValue() === '0 3 * * 1');
     await pick('分钟规则', '按间隔');
     await panel.getByLabel('分钟间隔', { exact: true }).fill('15');

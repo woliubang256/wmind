@@ -24,7 +24,7 @@ export function AdminSettingsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('admin.settings.title')} description={t('admin.settings.description')} />
+      <PageHeader title={t('admin.settings.title')} />
       <div role="tablist" aria-label={t('backup.sections')} className="flex gap-1 border-b border-border">
         {(['general', 'backup'] as const).map((key) => <button key={key} type="button" role="tab" id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} onKeyDown={(event) => {
           const next = event.key === 'Home' ? 'general' : event.key === 'End' ? 'backup' : event.key === 'ArrowRight' || event.key === 'ArrowLeft' ? (key === 'general' ? 'backup' : 'general') : undefined;
@@ -131,7 +131,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
   return (
     <form onSubmit={submit} className="space-y-5" noValidate>
       {SETTING_GROUPS.map((group) => (
-        <Panel key={group.id} title={t(group.titleKey)} description={t(group.descriptionKey)}>
+        <Panel key={group.id} title={t(group.titleKey)}>
           <div className="divide-y divide-border/70">
             {group.fields.map((field) => (
               <SettingRow
@@ -262,24 +262,15 @@ function SettingRow({
  */
 function GroupWarning({ groupId, draft }: { groupId: string; draft: SettingsMap }) {
   const { t } = useTranslation();
-  const warningKey = (() => {
-    if (groupId === 'auth' && draft['auth.default_role'] === 'admin') {
-      return 'admin.settings.warnDefaultAdmin';
-    }
-    if (groupId === 'auth' && draft['auth.registration_enabled'] === false) {
-      return 'admin.settings.warnRegistrationClosed';
-    }
-    if (groupId === 'share' && draft['share.public_link_enabled'] === false) {
-      return 'admin.settings.warnShareDisabled';
-    }
-    return null;
-  })();
+  const warningKeys: string[] = [];
+  if (groupId === 'auth' && draft['auth.default_role'] === 'admin') warningKeys.push('admin.settings.warnDefaultAdmin');
+  if (groupId === 'auth' && draft['auth.registration_enabled'] === false) warningKeys.push('admin.settings.warnRegistrationClosed');
+  if (groupId === 'share' && draft['share.public_link_enabled'] === false) warningKeys.push('admin.settings.warnShareDisabled');
 
-  if (warningKey === null) return null;
-  return (
-    <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-400">
+  return warningKeys.map((warningKey) => (
+    <p key={warningKey} className="mt-4 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-400">
       <Icon name="alert" className="mt-0.5 size-3.5 shrink-0" />
       {t(warningKey)}
     </p>
-  );
+  ));
 }

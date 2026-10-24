@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -9,13 +10,16 @@ export function CronEditor({ value, onChange, disabled }: Props) {
   const { t } = useTranslation();
   const fields = value.trim().split(/\s+/);
   const preset = Object.entries(CRON_PRESETS).find(([, expression]) => expression === value)?.[0] ?? 'custom';
+  const [customizing, setCustomizing] = useState(false);
+  const advanced = customizing || preset === 'custom';
   return (
     <div className="space-y-3">
       <label className="block space-y-1.5 text-xs font-medium">
         <span>{t('backup.frequency')}</span>
-        <Select aria-label={t('backup.frequency')} value={preset} disabled={disabled} onChange={(key) => { if (CRON_PRESETS[key]) onChange(CRON_PRESETS[key]); }}
+        <Select aria-label={t('backup.frequency')} value={advanced ? 'custom' : preset} disabled={disabled} onChange={(key) => { setCustomizing(key === 'custom'); if (CRON_PRESETS[key]) onChange(CRON_PRESETS[key]); }}
           options={[...Object.keys(CRON_PRESETS), 'custom'].map((key) => ({ value: key, label: t(`backup.presets.${key}`) }))} />
       </label>
+      {advanced && <>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {fields.length === 5 && CRON_FIELDS.map((field, index) => {
           const model = parseCronField(fields[index], field.min, field.max);
@@ -57,6 +61,7 @@ export function CronEditor({ value, onChange, disabled }: Props) {
         <Input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={t('backup.expression')} className="font-mono text-xs" spellCheck={false} />
       </label>
       <p className="text-xs leading-5 text-muted-foreground">{t('backup.cronHint')}</p>
+      </>}
     </div>
   );
 }

@@ -46,13 +46,13 @@ function BackupForm({ state }: { state: BackupState }) {
   const set = <K extends keyof BackupConfiguration>(key: K, value: BackupConfiguration[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const setDAV = (key: keyof BackupConfiguration['webdav'], value: string) => setDraft((current) => ({ ...current, webdav: { ...current.webdav, [key]: value } }));
   const setS3 = (key: keyof BackupConfiguration['s3'], value: string | boolean) => setDraft((current) => ({ ...current, s3: { ...current.s3, [key]: value } }));
-  const secretHint = (hasSecret?: boolean) => hasSecret ? t('backup.secretRetained') : t('backup.secretNeeded');
+  const credentialsSet = draft.target === 'webdav' ? draft.webdav.passwordSet : draft.s3.accessKeySet || draft.s3.secretKeySet || draft.s3.sessionTokenSet;
   const formatTime = (raw: string) => new Intl.DateTimeFormat(i18n.resolvedLanguage, { timeZone: schedule.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(raw));
   return <Panel title={t('backup.backupTitle')} description={t('backup.backupDescription')}>
     <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (!disabled && scheduleValid && retentionValid) save.mutate(); }}>
       <Switch checked={draft.enabled} disabled={disabled} onCheckedChange={(value) => set('enabled', value)} label={t('backup.enabled')} description={t('backup.enabledHint')} />
       <div className="space-y-4 border-t border-border/70 pt-4">
-        <div className="max-w-sm"><Field label={t('backup.retainCount')} hint={t('backup.retainCountHint')}><Input type="number" min={1} max={1000} step={1} required disabled={disabled} value={draft.retainCount || ''} onChange={(event) => set('retainCount', Number(event.target.value))} aria-label={t('backup.retainCount')} aria-invalid={!retentionValid} /></Field></div>
+        <div className="max-w-sm"><Field label={t('backup.retainCount')} hint={t('backup.retainCountHint')}><Input type="number" min={1} max={1000} step={1} required disabled={disabled} value={draft.retainCount || ''} onChange={(event) => set('retainCount', Number(event.target.value))} aria-label={t('backup.retainCount')} aria-invalid={!retentionValid} /></Field>{!retentionValid && <p role="alert" className="mt-1 text-xs text-destructive">{t('backup.invalidRetainCount')}</p>}</div>
         <Switch checked={draft.skipUnchanged} disabled={disabled} onCheckedChange={(value) => set('skipUnchanged', value)} label={t('backup.skipUnchanged')} description={t('backup.skipUnchangedHint')} />
       </div>
       <fieldset disabled={disabled} className="space-y-4 border-t border-border/70 pt-4">
@@ -70,18 +70,19 @@ function BackupForm({ state }: { state: BackupState }) {
         {draft.target === 'webdav' ? <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><Field label={t('backup.davURL')} hint={t('backup.davURLHint')}><Input value={draft.webdav.url} onChange={(e) => setDAV('url', e.target.value)} aria-label={t('backup.davURL')} placeholder="https://dav.example.com/backups/wmind" type="url" spellCheck={false} /></Field></div>
           <Field label={t('backup.davUsername')}><Input value={draft.webdav.username} onChange={(e) => setDAV('username', e.target.value)} aria-label={t('backup.davUsername')} autoComplete="off" /></Field>
-          <Field label={t('backup.davPassword')} hint={secretHint(draft.webdav.passwordSet)}><Input type="password" value={draft.webdav.password ?? ''} onChange={(e) => setDAV('password', e.target.value)} aria-label={t('backup.davPassword')} autoComplete="new-password" placeholder={draft.webdav.passwordSet ? '••••••••' : ''} /></Field>
+          <Field label={t('backup.davPassword')}><Input type="password" value={draft.webdav.password ?? ''} onChange={(e) => setDAV('password', e.target.value)} aria-label={t('backup.davPassword')} autoComplete="new-password" placeholder={draft.webdav.passwordSet ? '••••••••' : ''} /></Field>
         </div> : <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Endpoint" hint={t('backup.endpointHint')}><Input value={draft.s3.endpoint} onChange={(e) => setS3('endpoint', e.target.value)} aria-label="S3 Endpoint" placeholder="https://s3.example.com" type="url" spellCheck={false} /></Field>
           <Field label={t('backup.region')}><Input value={draft.s3.region} onChange={(e) => setS3('region', e.target.value)} aria-label={t('backup.region')} placeholder="us-east-1" /></Field>
           <Field label={t('backup.bucket')}><Input value={draft.s3.bucket} onChange={(e) => setS3('bucket', e.target.value)} aria-label={t('backup.bucket')} /></Field>
           <Field label={t('backup.prefix')}><Input value={draft.s3.prefix} onChange={(e) => setS3('prefix', e.target.value)} aria-label={t('backup.prefix')} placeholder="wmind" /></Field>
-          <Field label="Access Key" hint={secretHint(draft.s3.accessKeySet)}><Input type="password" value={draft.s3.accessKey ?? ''} onChange={(e) => setS3('accessKey', e.target.value)} aria-label="S3 Access Key" autoComplete="new-password" placeholder={draft.s3.accessKeySet ? '••••••••' : ''} /></Field>
-          <Field label="Secret Key" hint={secretHint(draft.s3.secretKeySet)}><Input type="password" value={draft.s3.secretKey ?? ''} onChange={(e) => setS3('secretKey', e.target.value)} aria-label="S3 Secret Key" autoComplete="new-password" placeholder={draft.s3.secretKeySet ? '••••••••' : ''} /></Field>
+          <Field label="Access Key"><Input type="password" value={draft.s3.accessKey ?? ''} onChange={(e) => setS3('accessKey', e.target.value)} aria-label="S3 Access Key" autoComplete="new-password" placeholder={draft.s3.accessKeySet ? '••••••••' : ''} /></Field>
+          <Field label="Secret Key"><Input type="password" value={draft.s3.secretKey ?? ''} onChange={(e) => setS3('secretKey', e.target.value)} aria-label="S3 Secret Key" autoComplete="new-password" placeholder={draft.s3.secretKeySet ? '••••••••' : ''} /></Field>
           <div className="sm:col-span-2"><Field label={t('backup.sessionToken')} hint={t('backup.sessionTokenHint')}><Input type="password" value={draft.s3.sessionToken ?? ''} onChange={(e) => setS3('sessionToken', e.target.value)} aria-label={t('backup.sessionToken')} autoComplete="new-password" placeholder={draft.s3.sessionTokenSet ? '••••••••' : ''} /></Field></div>
           {draft.s3.sessionTokenSet && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={draft.s3.clearSessionToken ?? false} onChange={(e) => setS3('clearSessionToken', e.target.checked)} />{t('backup.clearSessionToken')}</label>}
           <div className="sm:col-span-2"><Switch checked={draft.s3.pathStyle} onCheckedChange={(value) => setS3('pathStyle', value)} disabled={disabled} label={t('backup.pathStyle')} description={t('backup.pathStyleHint')} /></div>
         </div>}
+        {credentialsSet && <p className="text-xs text-muted-foreground">{t('backup.secretRetained')}</p>}
       </fieldset>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
         <div className="flex flex-wrap gap-2">
@@ -104,7 +105,7 @@ function RestorePanel({ busy, maxBytes }: { busy: boolean; maxBytes: number }) {
   const [uploadError, setUploadError] = useState('');
   const inspect = useMutation({ mutationFn: backupApi.inspect, onSuccess: (data) => { setPreview(data); setConfirmed(false); }, onError: (error) => { setUploadError(errorMessage(error)); toast.error(errorMessage(error)); } });
   const restore = useMutation({ mutationFn: () => backupApi.restore(preview!.id), onSuccess: () => { setPreview(undefined); setConfirmed(false); void queryClient.invalidateQueries({ queryKey: backupKeys.state }); toast.success(t('backup.restoreStarted')); }, onError: (error) => toast.error(errorMessage(error)) });
-  return <Panel title={t('backup.restoreTitle')} description={t('backup.restoreDescription')}>
+  return <Panel title={t('backup.restoreTitle')}>
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-4">
         <Icon name="upload" className="size-5 shrink-0 text-muted-foreground" />

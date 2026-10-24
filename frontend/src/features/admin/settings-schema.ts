@@ -32,7 +32,6 @@ export interface SettingField {
 export interface SettingGroup {
   id: string;
   titleKey: string;
-  descriptionKey: string;
   fields: SettingField[];
 }
 
@@ -40,7 +39,6 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: 'site',
     titleKey: 'admin.settings.groupSiteTitle',
-    descriptionKey: 'admin.settings.groupSiteDescription',
     fields: [
       { key: 'site.name', labelKey: 'admin.settings.fieldSiteName', kind: 'string', placeholder: 'wmind' },
       {
@@ -69,19 +67,16 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: 'auth',
     titleKey: 'admin.settings.groupAuthTitle',
-    descriptionKey: 'admin.settings.groupAuthDescription',
     fields: [
       {
         key: 'auth.registration_enabled',
         labelKey: 'admin.settings.fieldRegistrationEnabled',
         kind: 'bool',
-        hintKey: 'admin.settings.hintRegistrationEnabled',
       },
       {
         key: 'auth.default_role',
         labelKey: 'admin.settings.fieldDefaultRole',
         kind: 'enum',
-        hintKey: 'admin.settings.hintDefaultRole',
         options: [
           { value: 'user', labelKey: 'admin.settings.roleUser' },
           { value: 'admin', labelKey: 'admin.settings.roleAdmin' },
@@ -117,11 +112,11 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: 'limit',
     titleKey: 'admin.settings.groupLimitTitle',
-    descriptionKey: 'admin.settings.groupLimitDescription',
     fields: [
       {
         key: 'limit.maps_per_user',
         labelKey: 'admin.settings.fieldMapsPerUser',
+        hintKey: 'admin.settings.hintMapsPerUser',
         kind: 'int',
         min: 0,
         max: 1000000,
@@ -140,7 +135,6 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: 'trash',
     titleKey: 'admin.settings.groupTrashTitle',
-    descriptionKey: 'admin.settings.groupTrashDescription',
     fields: [
       {
         key: 'trash.retention_days',
@@ -156,7 +150,6 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: 'feature',
     titleKey: 'admin.settings.groupFeatureTitle',
-    descriptionKey: 'admin.settings.groupFeatureDescription',
     fields: [
       { key: 'feature.import_enabled', labelKey: 'admin.settings.fieldImportEnabled', kind: 'bool' },
       { key: 'feature.export_enabled', labelKey: 'admin.settings.fieldExportEnabled', kind: 'bool' },
@@ -166,7 +159,6 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: 'share',
     titleKey: 'admin.settings.groupShareTitle',
-    descriptionKey: 'admin.settings.groupShareDescription',
     fields: [
       { key: 'share.public_link_enabled', labelKey: 'admin.settings.fieldPublicLinkEnabled', kind: 'bool' },
       {
