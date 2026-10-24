@@ -184,7 +184,7 @@ export interface ExportOptions {
   /**
    * 品牌标识的文字。
    *
-   * 默认值来自站点设置 `site.brand`（导出对话框打开时套用），但**允许当场改**：
+   * 默认值来自站点设置 `site.brand`（导出对话框打开时套用），内部导出允许当场改：
    * 同一份导图可能要发给两个客户，各自落款不同。空串等于「不打印」——
    * 勾着开关却写空，页脚那一行就不该占位，见 `buildExportContext`。
    */
@@ -193,7 +193,7 @@ export interface ExportOptions {
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   scope: 'current',
-  format: 'svg',
+  format: 'jpeg',
   scale: 2,
   padding: 40,
   aspect: 'auto',
@@ -203,6 +203,13 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   brand: true,
   brandText: 'wmind',
 };
+
+/** 分享图形导出的有效选项；预览、整图和拆分必须共用，不能只隐藏设置控件。 */
+export function resolveExportOptions(options: ExportOptions, lockedBrand?: string): ExportOptions {
+  // 文本与 XMind 不是图片，不增加水印节点或改变它们的内容。
+  if (lockedBrand === undefined || isDocumentFormat(options.format)) return options;
+  return { ...options, brand: true, brandText: lockedBrand.trim() || DEFAULT_EXPORT_OPTIONS.brandText };
+}
 
 /** 多画布纵向排列时的间距。 */
 export const SHEET_GAP = 48;

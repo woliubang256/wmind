@@ -99,7 +99,7 @@ describe('导出上下文', () => {
 
   it('透明时没有背景色，否则取主题背景', () => {
     const doc = docWith();
-    expect(buildExportContext(doc, 'sheet-0', opts({ transparent: true })).background).toBeNull();
+    expect(buildExportContext(doc, 'sheet-0', opts({ format: 'svg', transparent: true })).background).toBeNull();
     expect(buildExportContext(doc, 'sheet-0', opts()).background)
       .toBe(doc.theme.palette.backgroundColor);
   });
@@ -155,7 +155,7 @@ describe('SVG 序列化', () => {
   it('透明背景不画背景 rect', () => {
     const opaque = buildExportSvg(buildExportContext(docWith(), 'sheet-0', opts()));
     const transparent = buildExportSvg(
-      buildExportContext(docWith(), 'sheet-0', opts({ transparent: true })),
+      buildExportContext(docWith(), 'sheet-0', opts({ format: 'svg', transparent: true })),
     );
     expect(opaque).toContain('<rect x="0" y="0"');
     expect(transparent).not.toContain('<rect x="0" y="0"');

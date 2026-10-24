@@ -14,6 +14,8 @@ Status: implemented
 
 ## Decision
 
+本篇的可覆盖行为只用于内部编辑者。[分享图形导出策略](../../implemented/feature/2026-10-25-wmind-share-export-policy.md)对公开分享入口另行约束：不展示品牌设置，图形导出固定站点品牌；内部为不同客户定制落款的原理由仍然成立。
+
 ### `site.brand` 存空串，回退在读取时做
 
 设置项加在 `site.name` 旁边（`KindString`、`Public`、`MaxRunes: 64`），默认 `""`。
@@ -34,9 +36,9 @@ func (s *Snapshot) BrandName() string {
 
 ### `brand: boolean` → `brandText: string`
 
-`ExportOptions` / `ExportContext` 里原来的 `brand: boolean` 换成一个字符串，
-勾选框只管「印不印」，旁边的输入框管「印什么」。页脚高度条件同步改成
-`options.date || options.brandText !== ''`——否则「勾了但清空文字」会留一条空白页脚，
+`ExportOptions` / `ExportContext` 同时保留 `brand: boolean` 与 `brandText: string`，
+勾选框只管「印不印」，旁边的输入框管「印什么」。页脚高度条件是
+`options.date || (options.brand && options.brandText.trim() !== '')`——否则「勾了但清空文字」会留一条空白页脚，
 看起来像排版坏了。
 
 `export-canvas.tsx` 里原来写死的 `wmind` 改成 `ctx.brandText`。

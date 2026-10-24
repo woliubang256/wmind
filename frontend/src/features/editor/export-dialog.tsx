@@ -34,6 +34,7 @@ import {
   isDocumentFormat,
   isTextFormat,
   presetHasFill,
+  resolveExportOptions,
   type AspectRatioId,
   type BorderStyleId,
   type ExportFormat,
@@ -61,6 +62,8 @@ export interface ExportDialogProps {
   document: WmindDocument;
   /** 当前画布 id；为空时按第一张处理。 */
   sheetId: string | null;
+  /** 分享访客的图形导出固定使用站点品牌，不显示修改入口。 */
+  brandLocked?: boolean;
   onClose(): void;
 }
 
@@ -163,7 +166,7 @@ function toPdf(jpeg: Uint8Array, title: string, logicalWidth: number, logicalHei
   });
 }
 
-export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDialogProps) {
+export function ExportDialog({ open, document: doc, sheetId, brandLocked = false, onClose }: ExportDialogProps) {
   const { t } = useTranslation();
   const [options, setOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
 
@@ -174,8 +177,8 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   // 「打开时套用、但用户改过就不再套」：配置是异步来的，登录后第一次打开对话框
   // 时它可能还没落地；无脑同步会把用户刚敲的字覆盖掉，而只在挂载时同步又会让
   // 第一次打开拿到空串。用一个「碰过没有」的标记把两种时序都盖住。
-  const { config } = useSiteConfig();
-  const siteBrand = config.brand.trim() === '' ? config.siteName : config.brand;
+  const { config, isLoading: configLoading } = useSiteConfig();
+  const siteBrand = config.brand.trim() || config.siteName.trim() || DEFAULT_EXPORT_OPTIONS.brandText;
   const brandTouched = useRef(false);
 
   useEffect(() => {
@@ -188,7 +191,11 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
     setOptions((current) => (current.brandText === siteBrand ? current : { ...current, brandText: siteBrand }));
   }, [open, siteBrand]);
 
-  const baseCtx = useMemo(() => buildExportContext(doc, sheetId, options), [doc, sheetId, options]);
+  const effectiveOptions = useMemo(
+    () => resolveExportOptions(options, brandLocked ? siteBrand : undefined),
+    [options, brandLocked, siteBrand],
+  );
+  const baseCtx = useMemo(() => buildExportContext(doc, sheetId, effectiveOptions), [doc, sheetId, effectiveOptions]);
 
   // 三个开关而不是一个，因为这三件事互不重叠：
   // - `plainText`：产出是字符串（md / opml），预览换成等宽文本；
@@ -344,6 +351,8 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
   );
 
   const download = async () => {
+    // 配置晚到时不能把兜底品牌抢先当作站点正式落款导出去。
+    if (brandLocked && visual && configLoading) return;
     if (textContent !== null) {
       // 文本是同步生成的字符串，没有异步失败路径，所以不必包 try/catch。
       // 带上 charset：不带的话 Windows 上的编辑器会按 GBK 打开，中文全成乱码。
@@ -377,7 +386,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       setBusy(true);
       try {
         const rasterFormat = options.format === 'png' ? 'png' : 'jpeg';
-        const result = await exportBranches(doc, sheetId, options, format.ext, {
+        const result = await exportBranches(doc, sheetId, effectiveOptions, format.ext, {
           // 图片内嵌对拆分同样有效：每张分支图也要把 `/uploads/…` 换成 data URL，
           // 否则打出来的 zip 里全是指回本机的死链。
           //
@@ -519,7 +528,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
               size="sm"
               onClick={() => void download()}
               loading={busy}
-              disabled={busy || rasterVerdict.kind === 'too-large'}
+              disabled={busy || rasterVerdict.kind === 'too-large' || (brandLocked && visual && configLoading)}
             >
               {busy
                 ? t('editor.export.generating')
@@ -680,7 +689,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                   ['transparent', t('editor.export.transparent')],
                   ['date', t('editor.export.date')],
                   ['brand', t('editor.export.brand')],
-                ] as const).map(([key, label]) => (
+                ] as const).filter(([key]) => !brandLocked || key !== 'brand').map(([key, label]) => (
                   <Checkbox
                     key={key}
                     label={label}
@@ -693,7 +702,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
                 {/* 品牌文字：默认套用站点设置，但允许当场改——同一份图可能要发给
                     两个客户，各自落款不同。只勾了「品牌标识」才出现，否则屏幕上
                     会多一个永远用不到的输入框。 */}
-                {options.brand ? (
+                {!brandLocked && options.brand ? (
                   <label className="flex flex-col gap-1 pl-6 text-[11px] font-normal text-muted-foreground">
                     {t('editor.export.brandText')}
                     <input
