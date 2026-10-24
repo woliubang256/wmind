@@ -48,7 +48,7 @@ import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import { topicElementId } from '@/editor/viewer/a11y-ids';
 import type { Viewport } from '@/editor/viewer/viewer-types';
-import type { StructureClass, Topic } from '@/editor/model/types';
+import type { Topic } from '@/editor/model/types';
 import type { Style, Theme } from '@/editor/model/types';
 import {
   applyThemeCommand,
@@ -266,19 +266,6 @@ function EditorSkeleton({ label }: { label: string }) {
   );
 }
 
-/** 工具栏里可选的结构。八种都有真实几何，不再有「选了会退回 mindmap」的坑。 */
-const STRUCTURES: StructureClass[] = [
-  'mindmap',
-  'logic-right',
-  'logic-left',
-  'tree-right',
-  'org-chart',
-  'timeline',
-  'fishbone',
-  'brace',
-  'tree-table',
-];
-
 interface WorkspaceProps {
   uid: string;
   enabled: boolean;
@@ -310,6 +297,11 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const [draft, setDraft] = useState<LocalDraft | null>(initialDraft);
   const [conflictOpen, setConflictOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
+  const panelToggleRef = useRef<HTMLButtonElement>(null);
+  const togglePanel = () => {
+    setPanelOpen((value) => !value);
+    requestAnimationFrame(() => panelToggleRef.current?.focus({ preventScroll: true }));
+  };
   const [panelTab, setPanelTab] = useState<PanelTab>('style');
   /**
    * 面板里正在编辑的附属结构（概要 / 边界 / 联系）。
@@ -1011,38 +1003,6 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               </ToolbarButton>
             </div>
 
-            {/* 结构入口复用图标提示，选项、键盘与焦点仍交给共享 Select。 */}
-            {!preview ? (
-              <Select
-                aria-label={t('editor.structure')}
-                size="sm"
-                renderTrigger={(props) => (
-                  <ToolbarButton {...props} variant="ghost" size="icon" className="gap-0.5"
-                    hint={`${t('editor.structure')}: ${t(`editor.structures.${sheet.structure}`)}`}>
-                    <Icon name="mindmap" className="size-4" /><Icon name="chevron-down" className="size-3" />
-                  </ToolbarButton>
-                )}
-                menuMinWidth={200}
-                value={sheet.structure}
-                options={STRUCTURES.map((value) => ({ value, label: t(`editor.structures.${value}`) }))}
-                onChange={(next) =>
-                  store.getState().dispatch(changeStructureCommand(next as StructureClass))
-                }
-              />
-            ) : null}
-
-            {!preview ? (
-              <ToolbarButton
-                variant="ghost"
-                size="icon"
-                aria-label={panelOpen ? t('editor.panel.hide') : t('editor.panel.show')}
-                aria-pressed={panelOpen}
-                onClick={() => setPanelOpen((value) => !value)}
-              >
-                <Icon name={panelOpen ? 'panel-right-close' : 'panel-right-open'} className="size-4" />
-              </ToolbarButton>
-            ) : null}
-
             {/*
               视图切换（画布 / 大纲）与 ZEN。三个都是「看同一份文档的不同方式」，
               因此统一放在界面分组，且都只在编辑态出现。
@@ -1146,7 +1106,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
       <p id="editor-canvas-hint" className="sr-only">
         {t('editor.a11y.canvasHint')}
       </p>
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         {view === 'outline' && !preview ? (
           <OutlineView
             doc={doc}
@@ -1253,7 +1213,8 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               <CanvasPanel
                 tab={panelTab}
                 onTab={setPanelTab}
-                onClose={() => setPanelOpen(false)}
+                onClose={togglePanel}
+                toggleRef={panelToggleRef}
                 label={t('editor.panel.label')}
                 tabLabel={(key) => t(key)}
               >
@@ -1302,17 +1263,15 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                     }}
                   />
                 ) : null}
-                {panelTab === 'speaker' ? (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-semibold text-foreground">
-                      {t('editor.panel.speaker.title')}
-                    </span>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      {t('editor.panel.speaker.body')}
-                    </p>
-                  </div>
-                ) : null}
               </CanvasPanel>
+            ) : null}
+            {!preview && !panelOpen && !zen ? (
+              <ToolbarButton ref={panelToggleRef} variant="ghost" size="icon"
+                aria-label={t('editor.panel.show')} aria-expanded={false} aria-controls="editor-canvas-panel"
+                onClick={togglePanel}
+                className="absolute right-1.5 top-1 z-20 size-7 rounded-full border border-border bg-card shadow-sm">
+                <Icon name="panel-right-open" className="size-4" />
+              </ToolbarButton>
             ) : null}
           </>
         ) : (

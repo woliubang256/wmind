@@ -14,10 +14,11 @@ run(async () => {
     assert.equal(await toolbar.locator('button').evaluateAll((buttons) => buttons.every((button) => !button.textContent.trim() && !!button.getAttribute('aria-label'))), true);
     for (const name of ['编辑', '界面', '操作']) await toolbar.getByRole('group', { name, exact: true }).waitFor();
     check('工具栏按编辑、界面、操作分组，所有入口仅显示图标并保留可访问名称', true);
-    const structure = toolbar.getByRole('combobox', { name: '结构', exact: true });
+    assert.equal(await toolbar.getByRole('combobox', { name: '结构', exact: true }).count(), 0);
+    assert.equal(await toolbar.getByRole('button', { name: /隐藏面板|显示面板/ }).count(), 0);
+    const structure = page.locator('#editor-canvas-panel').getByRole('combobox', { name: '结构', exact: true });
     const initialStructure = await structure.getAttribute('data-value');
     await structure.focus();
-    assert.match(await page.getByRole('tooltip').textContent(), /思维导图/);
     await structure.press('ArrowDown');
     await page.getByRole('listbox').press('End');
     await page.getByRole('listbox').press('Enter');
@@ -25,11 +26,11 @@ run(async () => {
     assert.equal(await structure.evaluate((node) => node === document.activeElement), true);
     await toolbar.getByRole('button', { name: '撤销', exact: true }).click();
     assert.equal(await structure.getAttribute('data-value'), initialStructure);
-    check('图标结构入口显示当前结构提示，支持键盘切换、返回焦点和撤销', true);
-    const panel = toolbar.getByRole('button', { name: '隐藏面板', exact: true });
+    check('结构入口只在侧栏，支持键盘切换、返回焦点和撤销', true);
+    const panel = page.getByRole('button', { name: '隐藏面板', exact: true });
     await panel.click();
-    await toolbar.getByRole('button', { name: '显示面板', exact: true }).click();
-    check('侧栏图标可以隐藏并恢复面板', true);
+    await page.getByRole('button', { name: '显示面板', exact: true }).click();
+    check('右上角唯一入口可以隐藏并恢复面板', true);
     for (const width of [375, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       assert.equal(await toolbar.locator('button').evaluateAll((buttons) => buttons.every((button) => {

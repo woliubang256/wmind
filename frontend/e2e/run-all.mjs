@@ -39,6 +39,7 @@ const SUITE = [
   ['a11y', '画布无障碍'],
   ['annotations', '概要 / 边界 / 联系'],
   ['toolbar', '操作提示 / 独立主题按钮'],
+  ['panel-controls', '面板唯一入口 / 悬浮展开 / 结构选择'],
   ['drag-return', '拖拽回归 / 取消脱离'],
   ['insert-content', 'Insert 内容编辑与导出'],
   ['summary-endpoints', '概要选中与联系端点'],
