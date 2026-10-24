@@ -185,7 +185,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
         />
       </Section>
 
-      <Section title={t('editor.panel.canvas.rainbowSection')}>
+      <section className="flex flex-col gap-2 border-t border-border/60 pt-3">
         <ToggleField
           label={t('editor.panel.canvas.rainbowBranch')}
           checked={theme.rainbowBranch}
@@ -217,7 +217,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
             </button>
           </Field>
         ) : null}
-      </Section>
+      </section>
 
       <Section title={t('editor.panel.canvas.layoutSection')}>
         {LAYOUT_KEYS.map((key) => (

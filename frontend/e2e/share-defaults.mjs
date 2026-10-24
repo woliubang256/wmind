@@ -51,7 +51,7 @@ try {
   assert.equal(await switches.nth(0).getAttribute('aria-checked'), 'true');
   assert.equal(await switches.nth(1).getAttribute('aria-checked'), 'true');
   await dialog.getByRole('button', { name: '创建链接', exact: true }).click();
-  await dialog.getByText('链接已创建，复制它发给对方：', { exact: true }).waitFor();
+  await dialog.getByText('链接已创建', { exact: true }).waitFor();
   assert.deepEqual(requests.at(-1), { password: 'draft-password', expiresInDays: 30, allowDownload: true, showNotes: true });
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await page.getByRole('button', { name: '分享', exact: true }).click();
@@ -62,10 +62,10 @@ try {
   assert.equal(await dialog.getByRole('switch', { name: '显示主题备注', exact: true }).count(), 1);
   await dialog.locator('li').filter({ hasText: '/s/existing-token' }).getByText('永久', { exact: true }).waitFor();
   const copy = await dialog.textContent();
-  for (const removed of ['设了密码后', '不是访问控制', '服务端被剥掉', '响应里', '开发者工具']) assert.ok(!copy.includes(removed));
+  for (const removed of ['设了密码后', '不是访问控制', '服务端被剥掉', '响应里', '开发者工具', '关闭后分享页不显示下载入口。']) assert.ok(!copy.includes(removed));
   await page.screenshot({ path: '/tmp/wmind-share-defaults.png' });
   await dialog.getByRole('button', { name: '创建链接', exact: true }).click();
-  await dialog.getByText('链接已创建，复制它发给对方：', { exact: true }).waitFor();
+  await dialog.getByText('链接已创建', { exact: true }).waitFor();
   assert.deepEqual(requests.at(-1), { password: '', expiresInDays: 7, allowDownload: false, showNotes: false });
   // 显式管理员配置仍生效，异步默认只更新未编辑字段。
   config.shareDefaultExpireDays = 30;

@@ -17,6 +17,7 @@ async function fixture(page) {
   };
   const state = () => ({ configuration, nextRuns, history: [], busy: false, maxUploadBytes: 2 * 1024 ** 3 });
   const saved = [];
+  const shares = [];
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
     const request = route.request();
@@ -35,6 +36,13 @@ async function fixture(page) {
       data = { nextRuns };
     }
     if (path === '/admin/backups/restore/preview') data = { id: 'preview-copy', createdAt: nextRuns[0], database: { driver: 'sqlite', schema: 1 }, files: 3, bytes: 1024 };
+    if (path === '/shares' || path === '/maps/demo/shares') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON();
+        data = { ...input, uid: 'copy-share', url: '/s/copy-share', mapUid: 'demo', mapTitle: '产品规划', createdAt: nextRuns[0], expiresAt: nextRuns[1], viewCount: 0 };
+        shares.push(data);
+      } else data = shares;
+    }
     await route.fulfill({ json: { data, pagination: { page: 1, pageSize: 20, total: 0, totalPages: 1 } } });
   });
   return { saved };
@@ -103,6 +111,52 @@ async function adminChecks(page, t, locale, saved) {
   await page.screenshot({ path: `/tmp/wmind-copy-backup-${locale}.png`, fullPage: true });
 }
 
+async function editorChecks(page, t, locale) {
+  const verify = (name, pass) => check(`${locale} ${name}`, pass);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${BASE}/maps/demo`);
+  await page.locator('g.wmind-topic').first().waitFor();
+  const panel = page.locator('#editor-canvas-panel');
+  verify('全画布与选中主题的作用范围仍明确', await panel.getByRole('heading', { name: t('editor.panel.style.shapeSectionCanvas'), exact: true }).isVisible() && await panel.getByText(t('editor.panel.style.single'), { exact: true }).isVisible());
+  await panel.getByRole('tab', { name: t('editor.panel.tabs.palette'), exact: true }).click();
+  const rainbow = panel.getByRole('checkbox', { name: t('editor.panel.canvas.rainbowBranch'), exact: true });
+  const before = await rainbow.getAttribute('aria-checked');
+  verify('彩虹分支只保留一处开关标签', await rainbow.count() === 1 && !(await panel.getByRole('heading').allTextContents()).includes(locale === 'zh-CN' ? '彩虹分支' : 'Rainbow branches'));
+  await rainbow.click();
+  await page.locator('[data-editor-toolbar]').getByRole('button', { name: t('editor.undo'), exact: true }).click();
+  verify('去掉重复标题不影响开关与撤销', await rainbow.getAttribute('aria-checked') === before);
+  await panel.getByRole('tab', { name: t('editor.panel.tabs.structure'), exact: true }).click();
+  const canvas = page.locator('svg[data-read-only="false"]').first();
+  await canvas.click({ position: { x: 12, y: 12 } });
+  const relationship = panel.locator('section').filter({ has: page.getByRole('heading', { name: t('editor.annotation.relationship'), exact: true }) });
+  verify('无有效选区时说明新建要求', await relationship.getByText(t('editor.annotation.relationshipHint'), { exact: true }).isVisible() && await relationship.getByRole('button', { name: t('editor.annotation.add'), exact: true }).isDisabled());
+  const selectPair = async () => {
+    await canvas.click({ position: { x: 12, y: 12 } });
+    await page.locator('g.wmind-topic').filter({ hasText: '用户研究' }).first().click();
+    await page.locator('g.wmind-topic').filter({ hasText: '功能设计' }).first().click({ modifiers: ['Shift'] });
+  };
+  await selectPair();
+  verify('已有联系且选区有效时不重复教程', await relationship.getByText(t('editor.annotation.relationshipHint'), { exact: true }).count() === 0 && await relationship.locator('li').count() === 1);
+  const summaries = panel.locator('section').filter({ has: page.getByRole('heading', { name: t('editor.annotation.summary'), exact: true }) });
+  await summaries.getByRole('button', { name: t('editor.annotation.add'), exact: true }).click();
+  await summaries.locator('li').waitFor();
+  await selectPair();
+  verify('创建概要后保留范围摘要且不显示多余引导', await summaries.getByText(t('editor.annotation.summaryHint'), { exact: true }).count() === 0 && (await summaries.locator('li').innerText()).includes('用户研究'));
+  await canvas.click({ position: { x: 12, y: 12 } });
+  verify('清空选区后按需恢复禁用原因', await summaries.getByText(t('editor.annotation.summaryHint'), { exact: true }).isVisible() && await summaries.getByRole('button', { name: t('editor.annotation.add'), exact: true }).isDisabled());
+  await page.getByRole('button', { name: t('share.action'), exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: t('share.title', { title: '产品规划' }), exact: true });
+  await dialog.waitFor();
+  verify('分享保留密码限制而不复述下载开关', await dialog.getByText(t('share.create.passwordHint'), { exact: true }).isVisible() && !/关闭后分享页不显示下载入口|When off, the share page hides/.test(await dialog.innerText()));
+  await dialog.getByRole('button', { name: t('share.create.submit'), exact: true }).click();
+  await dialog.getByText(t('share.create.done'), { exact: true }).waitFor();
+  verify('创建结果保留链接与复制入口', await dialog.locator('code').first().textContent() !== '' && await dialog.getByRole('button', { name: t('share.copy'), exact: true }).count() > 0);
+  await page.setViewportSize({ width: 375, height: 900 });
+  verify('窄屏分享弹窗不溢出', await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth));
+  await page.screenshot({ path: `/tmp/wmind-copy-share-${locale}.png` });
+  await dialog.getByRole('button', { name: t('common.close'), exact: true }).click();
+}
+
 run(async () => {
   const browser = await launchBrowser();
   try {
@@ -114,6 +168,7 @@ run(async () => {
       const { saved } = await fixture(page);
       try {
         await adminChecks(page, i18n.t.bind(i18n), locale, saved);
+        await editorChecks(page, i18n.t.bind(i18n), locale);
       } catch (error) {
         console.error('页面异常：', errors, await page.locator('body').innerText());
         throw error;

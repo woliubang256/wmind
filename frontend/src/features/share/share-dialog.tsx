@@ -189,7 +189,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
             </div>
 
             <div className="space-y-3">
-              <Switch checked={allowDownload} onCheckedChange={(value) => { editedDefaults.current.download = true; setAllowDownload(value); }} label={t('share.create.allowDownload')} description={t('share.create.allowDownloadHint')} />
+              <Switch checked={allowDownload} onCheckedChange={(value) => { editedDefaults.current.download = true; setAllowDownload(value); }} label={t('share.create.allowDownload')} />
               <Switch checked={showNotes} onCheckedChange={setShowNotes} label={t('share.create.showNotes')} />
             </div>
 

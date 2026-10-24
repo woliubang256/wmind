@@ -103,6 +103,7 @@ export function StructureTab({
         icon="summary"
         title={t('editor.annotation.summary')}
         hint={t('editor.annotation.summaryHint')}
+        canCreate={hasSelection}
         action={
           <Button size="sm" variant="outline" disabled={!hasSelection} onClick={onAddSummary}>
             <Icon name="plus" className="mr-1 size-3.5" />
@@ -115,13 +116,13 @@ export function StructureTab({
         onActivate={onActivate}
         onRename={onRename}
         onRemove={onRemove}
-        empty={t('editor.annotation.summaryEmpty')}
       />
 
       <Section
         icon="boundary"
         title={t('editor.annotation.boundary')}
         hint={t('editor.annotation.boundaryHint')}
+        canCreate={hasSelection}
         action={
           <Button size="sm" variant="outline" disabled={!hasSelection} onClick={onAddBoundary}>
             <Icon name="plus" className="mr-1 size-3.5" />
@@ -134,13 +135,13 @@ export function StructureTab({
         onActivate={onActivate}
         onRename={onRename}
         onRemove={onRemove}
-        empty={t('editor.annotation.boundaryEmpty')}
       />
 
       <Section
         icon="relationship"
         title={t('editor.annotation.relationship')}
         hint={t('editor.annotation.relationshipHint')}
+        canCreate={pairSelection}
         action={
           <Button size="sm" variant="outline" disabled={!pairSelection} onClick={onAddRelationship}>
             <Icon name="plus" className="mr-1 size-3.5" />
@@ -153,7 +154,6 @@ export function StructureTab({
         onActivate={onActivate}
         onRename={onRename}
         onRemove={onRemove}
-        empty={t('editor.annotation.relationshipEmpty')}
         renderDetails={(row) => {
           const relationship = sheet.relationships.find((item) => item.id === row.id);
           return relationship ? <RelationshipStyleFields onResetRouting={() => onResetRelationshipRouting(row.id)} relationship={relationship} theme={theme} onPatch={(patch) => onPatchRelationship(row.id, patch)} /> : null;
@@ -167,6 +167,7 @@ function Section({
   icon,
   title,
   hint,
+  canCreate,
   action,
   rows,
   kind,
@@ -174,12 +175,12 @@ function Section({
   onActivate,
   onRename,
   onRemove,
-  empty,
   renderDetails,
 }: {
   icon: IconName;
   title: string;
   hint: string;
+  canCreate: boolean;
   action: ReactNode;
   rows: AnnotationRow[];
   kind: AnnotationKind;
@@ -187,7 +188,6 @@ function Section({
   onActivate: (kind: AnnotationKind, id: string | null) => void;
   onRename: (kind: AnnotationKind, id: string, title: string) => void;
   onRemove: (kind: AnnotationKind, id: string) => void;
-  empty: string;
   renderDetails?: (row: AnnotationRow) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -198,13 +198,12 @@ function Section({
         <h3 className="text-xs font-semibold text-foreground">{title}</h3>
         <span className="ml-auto">{action}</span>
       </div>
-      <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
-
-      {rows.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border/70 px-2.5 py-2 text-[11px] text-muted-foreground">
-          {empty}
+      {!canCreate ? (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          {hint}
         </p>
-      ) : (
+      ) : null}
+      {rows.length > 0 ? (
         <ul className="flex flex-col gap-1.5">
           {rows.map((row) => (
             <li key={row.id}>
@@ -239,7 +238,7 @@ function Section({
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </section>
   );
 }
