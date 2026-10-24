@@ -38,6 +38,7 @@ function BackupForm({ state }: { state: BackupState }) {
   const scheduleCurrent = schedule.cron === draft.cron && schedule.timezone === draft.timezone;
   const scheduleValid = scheduleCurrent && preview.isSuccess;
   const dirty = JSON.stringify(draft) !== JSON.stringify(state.configuration);
+  const retentionValid = Number.isInteger(draft.retainCount) && draft.retainCount >= 1 && draft.retainCount <= 1000;
   const save = useMutation({ mutationFn: () => backupApi.save(draft), onSuccess: (updated) => { queryClient.setQueryData(backupKeys.state, updated); setDraft(updated.configuration); toast.success(t('backup.saved')); }, onError: (error) => toast.error(errorMessage(error)) });
   const test = useMutation({ mutationFn: () => backupApi.test(draft), onSuccess: () => toast.success(t('backup.testPassed')), onError: (error) => toast.error(errorMessage(error)) });
   const run = useMutation({ mutationFn: backupApi.run, onSuccess: () => { void queryClient.invalidateQueries({ queryKey: backupKeys.state }); toast.success(t('backup.started')); }, onError: (error) => toast.error(errorMessage(error)) });
@@ -48,8 +49,12 @@ function BackupForm({ state }: { state: BackupState }) {
   const secretHint = (hasSecret?: boolean) => hasSecret ? t('backup.secretRetained') : t('backup.secretNeeded');
   const formatTime = (raw: string) => new Intl.DateTimeFormat(i18n.resolvedLanguage, { timeZone: schedule.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(raw));
   return <Panel title={t('backup.backupTitle')} description={t('backup.backupDescription')}>
-    <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (!disabled && scheduleValid) save.mutate(); }}>
+    <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (!disabled && scheduleValid && retentionValid) save.mutate(); }}>
       <Switch checked={draft.enabled} disabled={disabled} onCheckedChange={(value) => set('enabled', value)} label={t('backup.enabled')} description={t('backup.enabledHint')} />
+      <div className="space-y-4 border-t border-border/70 pt-4">
+        <div className="max-w-sm"><Field label={t('backup.retainCount')} hint={t('backup.retainCountHint')}><Input type="number" min={1} max={1000} step={1} required disabled={disabled} value={draft.retainCount || ''} onChange={(event) => set('retainCount', Number(event.target.value))} aria-label={t('backup.retainCount')} aria-invalid={!retentionValid} /></Field></div>
+        <Switch checked={draft.skipUnchanged} disabled={disabled} onCheckedChange={(value) => set('skipUnchanged', value)} label={t('backup.skipUnchanged')} description={t('backup.skipUnchangedHint')} />
+      </div>
       <fieldset disabled={disabled} className="space-y-4 border-t border-border/70 pt-4">
         <legend className="sr-only">{t('backup.scheduleTitle')}</legend>
         <CronEditor value={draft.cron} onChange={(value) => set('cron', value)} disabled={disabled} />
@@ -80,8 +85,8 @@ function BackupForm({ state }: { state: BackupState }) {
       </fieldset>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" size="sm" disabled={disabled || !dirty || !scheduleValid}><Icon name="save" className="size-3.5" />{save.isPending ? t('common.saving') : t('backup.save')}</Button>
-          <Button size="sm" variant="outline" disabled={disabled} onClick={() => test.mutate()}>{test.isPending ? t('backup.testing') : t('backup.test')}</Button>
+          <Button type="submit" size="sm" disabled={disabled || !dirty || !scheduleValid || !retentionValid}><Icon name="save" className="size-3.5" />{save.isPending ? t('common.saving') : t('backup.save')}</Button>
+          <Button size="sm" variant="outline" disabled={disabled || !retentionValid} onClick={() => test.mutate()}>{test.isPending ? t('backup.testing') : t('backup.test')}</Button>
         </div>
         <Button size="sm" variant="outline" disabled={disabled || dirty} title={dirty ? t('backup.saveFirst') : undefined} onClick={() => run.mutate()}><Icon name="upload" className="size-3.5" />{t('backup.run')}</Button>
       </div>
@@ -140,11 +145,13 @@ function JobHistory({ state }: { state: BackupState }) {
   const jobs = state.current?.status === 'running' ? [state.current, ...state.history] : state.history;
   return <Panel title={t('backup.historyTitle')} description={t('backup.historyDescription')}>
     {jobs.length === 0 ? <p className="text-xs text-muted-foreground">{t('backup.noHistory')}</p> : <div className="divide-y divide-border/70">{jobs.map((job: BackupJob) => <div key={job.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0" role={job.status === 'running' ? 'status' : undefined}>
-      <Icon name={job.status === 'failed' ? 'alert' : job.status === 'running' ? 'clock' : 'check'} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <Icon name={job.status === 'failed' || job.warningCode ? 'alert' : job.status === 'running' ? 'clock' : 'check'} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1 space-y-1"><div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"><p className="text-xs font-medium">{t(`backup.kind.${job.kind}`)} <span className="font-normal text-muted-foreground">· {t(`backup.trigger.${job.trigger}`)}</span></p><span className="text-xs text-muted-foreground">{t(`backup.status.${job.status}`)}{job.status === 'running' ? ` · ${t(`backup.stages.${job.stage}`)}` : ''}</span></div>
         <p className="text-[11px] text-muted-foreground">{new Date(job.startedAt).toLocaleString(i18n.resolvedLanguage)}{job.bytes ? ` · ${size(job.bytes)}` : ''}</p>
-        {job.filename && <p className="break-all text-[11px] text-muted-foreground">{job.filename}</p>}
+        {job.contentVersion && <p className="break-all text-[11px] text-muted-foreground">{t('backup.contentVersion', { version: job.contentVersion })}</p>}
+        {job.filename && <p className="break-all text-[11px] text-muted-foreground">{job.status === 'skipped' ? t('backup.reusedFile', { filename: job.filename }) : job.filename}</p>}
         {job.errorCode && <p className="text-xs text-destructive">{t(`backup.jobErrors.${job.errorCode}`, { defaultValue: t('backup.operationFailed') })}</p>}
+        {job.warningCode && <p role="status" className="text-xs text-amber-700 dark:text-amber-400">{t(`backup.jobWarnings.${job.warningCode}`)}</p>}
         {job.recoveryFile && <p className="break-all text-[11px] text-muted-foreground">{t('backup.recoveryFile', { filename: job.recoveryFile })}</p>}
       </div>
     </div>)}</div>}

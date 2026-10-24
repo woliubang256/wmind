@@ -1201,6 +1201,12 @@
     "backupDescription": "将完整站点打包为 ZIP，上传到 WebDAV 或 S3。",
     "enabled": "启用定时备份",
     "enabledHint": "关闭后仍可手动备份；服务器停机期间错过的任务不补跑。",
+    "retainCount": "保留份数",
+    "retainCountHint": "默认 30，支持 1–1000 份。手动与定时合计，下一次备份后清理超额副本；未登记的旧文件不自动删除。",
+    "skipUnchanged": "仅在数据变化时备份",
+    "skipUnchangedHint": "默认关闭，每次生成完整备份。开启后，无内容变化就跳过；登录、查看脑图和分享浏览不视为内容变化。",
+    "contentVersion": "内容版本：{{version}}",
+    "reusedFile": "沿用备份：{{filename}}",
     "frequency": "备份频率",
     "scheduleTitle": "执行时间",
     "presets": {
@@ -1291,7 +1297,7 @@
     "startingRestore": "正在启动恢复…",
     "restoreStarted": "恢复已开始，完成后需要重新登录查看结果。",
     "historyTitle": "最近任务",
-    "historyDescription": "保留最近 20 次结果。备份与恢复任务逐个执行。",
+    "historyDescription": "显示最近 20 次任务结果，与实际备份保留份数分别计算。",
     "noHistory": "尚无备份或恢复记录。",
     "kind": {
       "backup": "备份",
@@ -1304,11 +1310,14 @@
     "status": {
       "running": "执行中",
       "succeeded": "已完成",
-      "failed": "失败"
+      "failed": "失败",
+      "skipped": "数据未变化，已跳过"
     },
     "stages": {
       "preparing": "准备中",
       "capturing": "生成快照",
+      "checking": "检查内容版本",
+      "cleaning": "清理超额备份",
       "compressing": "压缩中",
       "uploading": "上传中",
       "safety_backup": "保留恢复前副本",
@@ -1321,10 +1330,15 @@
       "CAPTURE_FAILED": "生成快照失败，请检查数据库、文件权限与可用空间。",
       "ARCHIVE_FAILED": "压缩失败，请检查数据大小和磁盘空间。",
       "UPLOAD_FAILED": "上传失败，请检查存储连接、凭据和写入权限。",
+      "REMOTE_CHECK_FAILED": "无法确认已有备份是否存在，本次未跳过。请检查存储连接与读取权限后重试。",
       "INCOMPATIBLE_ARCHIVE": "数据库版本已改变，请重新上传校验。",
       "SAFETY_BACKUP_FAILED": "无法保留恢复前副本，尚未执行恢复。",
       "RESTORE_FAILED": "恢复失败，已尝试回退。恢复前副本仍保留在服务器。",
       "RESTORE_RELOAD_FAILED": "数据已恢复，但配置刷新失败，请重启后端并重新登录。"
+    },
+    "jobWarnings": {
+      "CLEANUP_FAILED": "备份已保留，但旧副本清理失败，实际份数可能超出设置。请检查删除权限，下次备份会重试。",
+      "CATALOG_FAILED": "备份已上传，但清单保存失败；为保护旧副本，未继续清理。请检查数据库并重试。"
     },
     "operationFailed": "操作失败，请检查服务器日志。",
     "recoveryFile": "服务器保留的恢复前副本：{{filename}}",

@@ -1201,6 +1201,12 @@
     "backupDescription": "Archive the entire site as a ZIP and upload it to WebDAV or S3.",
     "enabled": "Enable scheduled backups",
     "enabledHint": "Manual backups remain available when disabled. Missed runs during downtime are skipped.",
+    "retainCount": "Backups to retain",
+    "retainCountHint": "Default 30; accepts 1–1000. Manual and scheduled backups share the limit. Excess copies are removed after the next backup; untracked older files are left untouched.",
+    "skipUnchanged": "Back up only when data changes",
+    "skipUnchangedHint": "Off by default: every run creates a full backup. When on, unchanged content is skipped. Signing in, reading maps, and viewing shares do not count as content changes.",
+    "contentVersion": "Content version: {{version}}",
+    "reusedFile": "Existing backup: {{filename}}",
     "frequency": "Backup frequency",
     "scheduleTitle": "Schedule",
     "presets": {
@@ -1291,7 +1297,7 @@
     "startingRestore": "Starting restoration…",
     "restoreStarted": "Restoration started. Sign in again when it finishes to view the result.",
     "historyTitle": "Recent jobs",
-    "historyDescription": "The most recent 20 results. Backup and restore jobs run one at a time.",
+    "historyDescription": "The most recent 20 job results, separate from the number of backup copies retained.",
     "noHistory": "No backup or restore jobs yet.",
     "kind": {
       "backup": "Backup",
@@ -1304,11 +1310,14 @@
     "status": {
       "running": "Running",
       "succeeded": "Completed",
-      "failed": "Failed"
+      "failed": "Failed",
+      "skipped": "Unchanged data — skipped"
     },
     "stages": {
       "preparing": "Preparing",
       "capturing": "Capturing snapshot",
+      "checking": "Checking content version",
+      "cleaning": "Cleaning up excess backups",
       "compressing": "Compressing",
       "uploading": "Uploading",
       "safety_backup": "Saving recovery copy",
@@ -1321,10 +1330,15 @@
       "CAPTURE_FAILED": "Snapshot failed. Check the database, file permissions, and free space.",
       "ARCHIVE_FAILED": "Compression failed. Check data size and free disk space.",
       "UPLOAD_FAILED": "Upload failed. Check the destination, credentials, and write permissions.",
+      "REMOTE_CHECK_FAILED": "Could not verify the existing backup. The job was not skipped. Check the connection and read permissions, then retry.",
       "INCOMPATIBLE_ARCHIVE": "The database schema changed. Upload and validate the backup again.",
       "SAFETY_BACKUP_FAILED": "Could not save a recovery copy. Restoration has not started.",
       "RESTORE_FAILED": "Restoration failed and rollback was attempted. The recovery copy remains on the server.",
       "RESTORE_RELOAD_FAILED": "Data was restored, but settings could not reload. Restart the backend and sign in again."
+    },
+    "jobWarnings": {
+      "CLEANUP_FAILED": "The backup is retained, but older copies could not be removed. The limit may be exceeded. Check delete permissions; cleanup will retry on the next backup.",
+      "CATALOG_FAILED": "The backup was uploaded, but its inventory could not be saved. Older copies were kept safe. Check the database and retry."
     },
     "operationFailed": "Operation failed. Check the server logs.",
     "recoveryFile": "Recovery copy retained on the server: {{filename}}",

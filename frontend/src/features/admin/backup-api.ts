@@ -2,6 +2,8 @@ import { api } from '@/lib/api/client';
 
 export interface BackupConfiguration {
   enabled: boolean;
+  retainCount: number;
+  skipUnchanged: boolean;
   cron: string;
   timezone: string;
   target: 'webdav' | 's3';
@@ -14,9 +16,9 @@ export interface BackupConfiguration {
 }
 export interface BackupJob {
   id: string; kind: 'backup' | 'restore'; trigger: 'manual' | 'schedule';
-  status: 'running' | 'succeeded' | 'failed'; stage: string;
+  status: 'running' | 'succeeded' | 'failed' | 'skipped'; stage: string;
   startedAt: string; finishedAt?: string; filename?: string; bytes?: number;
-  errorCode?: string; recoveryFile?: string;
+  errorCode?: string; warningCode?: string; contentVersion?: string; recoveryFile?: string;
 }
 export interface BackupState {
   configuration: BackupConfiguration; nextRuns: string[]; current?: BackupJob;
