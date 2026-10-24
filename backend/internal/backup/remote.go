@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,7 +23,80 @@ import (
 type Remote interface {
 	Test(context.Context, Configuration) error
 	Upload(context.Context, Configuration, string, string) error
+	Exists(context.Context, Configuration, string) (bool, error)
+	Delete(context.Context, Configuration, string) error
 }
+
+var backupObjectName = regexp.MustCompile(`^wmind-[0-9]{8}T[0-9]{6}Z-[A-Z2-7]{8}\.zip$`)
+
+func missingObject(err error) bool {
+	var response interface{ HTTPStatusCode() int }
+	return errors.As(err, &response) && response.HTTPStatusCode() == http.StatusNotFound
+}
+
+// Callers must prove ownership in addition to these basename checks.
+func (r *RemoteStorage) Exists(ctx context.Context, c Configuration, name string) (bool, error) {
+	if !backupObjectName.MatchString(name) {
+		return false, errors.New("invalid backup object name")
+	}
+	if err := c.Validate(true); err != nil {
+		return false, err
+	}
+	if c.Target == "s3" {
+		_, err := r.s3Client(c).HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(c.S3.Bucket), Key: aws.String(s3Key(c, name))})
+		if missingObject(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, errors.New("S3 object check failed")
+		}
+		return true, nil
+	}
+	target, err := url.JoinPath(c.WebDAV.URL, name)
+	if err != nil {
+		return false, errors.New("invalid WebDAV URL")
+	}
+	status, err := r.dav(ctx, c, "HEAD", target, nil, 0)
+	if err != nil {
+		return false, err
+	}
+	if status == http.StatusNotFound {
+		return false, nil
+	}
+	if status < 200 || status >= 300 {
+		return false, fmt.Errorf("WebDAV object check returned HTTP %d", status)
+	}
+	return true, nil
+}
+
+func (r *RemoteStorage) Delete(ctx context.Context, c Configuration, name string) error {
+	if !backupObjectName.MatchString(name) {
+		return errors.New("invalid backup object name")
+	}
+	if err := c.Validate(true); err != nil {
+		return err
+	}
+	if c.Target == "s3" {
+		_, err := r.s3Client(c).DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(c.S3.Bucket), Key: aws.String(s3Key(c, name))})
+		if err != nil && !missingObject(err) {
+			return errors.New("S3 backup cleanup failed; check delete permission")
+		}
+		return nil
+	}
+	target, err := url.JoinPath(c.WebDAV.URL, name)
+	if err != nil {
+		return errors.New("invalid WebDAV URL")
+	}
+	status, err := r.dav(ctx, c, "DELETE", target, nil, 0)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusNotFound && (status < 200 || status >= 300) {
+		return fmt.Errorf("WebDAV backup cleanup returned HTTP %d", status)
+	}
+	return nil
+}
+
 type RemoteStorage struct{ client *http.Client }
 
 func NewRemoteStorage() *RemoteStorage {

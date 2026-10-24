@@ -22,16 +22,34 @@ import (
 )
 
 type remoteStub struct {
-	mu      sync.Mutex
-	data    []byte
-	block   chan struct{}
-	entered chan struct{}
-	fail    bool
-	count   int
+	mu         sync.Mutex
+	data       []byte
+	block      chan struct{}
+	entered    chan struct{}
+	fail       bool
+	count      int
+	objects    map[string]bool
+	deleted    []string
+	deleteFail bool
 }
 
 func (r *remoteStub) Test(context.Context, backup.Configuration) error { return nil }
-func (r *remoteStub) Upload(ctx context.Context, _ backup.Configuration, _, filename string) error {
+func (r *remoteStub) Exists(_ context.Context, _ backup.Configuration, name string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.objects[name], nil
+}
+func (r *remoteStub) Delete(_ context.Context, _ backup.Configuration, name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.deleteFail {
+		return errors.New("delete denied")
+	}
+	delete(r.objects, name)
+	r.deleted = append(r.deleted, name)
+	return nil
+}
+func (r *remoteStub) Upload(ctx context.Context, _ backup.Configuration, name, filename string) error {
 	if r.entered != nil {
 		close(r.entered)
 	}
@@ -49,6 +67,10 @@ func (r *remoteStub) Upload(ctx context.Context, _ backup.Configuration, _, file
 	r.mu.Lock()
 	r.data = data
 	r.count++
+	if r.objects == nil {
+		r.objects = make(map[string]bool)
+	}
+	r.objects[name] = true
 	r.mu.Unlock()
 	return err
 }
