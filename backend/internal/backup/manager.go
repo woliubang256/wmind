@@ -31,6 +31,7 @@ type Job struct {
 	Filename     string     `json:"filename,omitempty"`
 	Bytes        int64      `json:"bytes,omitempty"`
 	ErrorCode    string     `json:"errorCode,omitempty"`
+	WarningCode  string     `json:"warningCode,omitempty"`
 	RecoveryFile string     `json:"recoveryFile,omitempty"`
 }
 type State struct {
@@ -60,6 +61,7 @@ type Manager struct {
 	mu            sync.RWMutex
 	configuration Configuration
 	history       []Job
+	catalog       []backupObject
 	current       *Job
 	staged        map[string]stagedRestore
 	jobMu         sync.Mutex
@@ -136,6 +138,7 @@ func (m *Manager) Reload(ctx context.Context) error {
 	}
 	configuration := DefaultConfiguration()
 	history := []Job{}
+	catalog := []backupObject{}
 	for _, row := range rows {
 		switch row.Key {
 		case "backup.config":
@@ -150,6 +153,10 @@ func (m *Manager) Reload(ctx context.Context) error {
 			if err = json.Unmarshal([]byte(row.Value), &history); err != nil {
 				return errors.New("invalid backup history")
 			}
+		case "backup.catalog":
+			if catalog, err = decodeCatalog(row.Value); err != nil {
+				return err
+			}
 		}
 	}
 	if len(history) > 20 {
@@ -158,6 +165,7 @@ func (m *Manager) Reload(ctx context.Context) error {
 	m.mu.Lock()
 	m.configuration = configuration
 	m.history = history
+	m.catalog = catalog
 	m.mu.Unlock()
 	return nil
 }
@@ -324,5 +332,7 @@ func (m *Manager) backup(ctx context.Context, job *Job, configuration Configurat
 		job.ErrorCode = "UPLOAD_FAILED"
 		return err
 	}
+	m.stage(job, "cleaning")
+	m.recordBackup(ctx, job, configuration, "")
 	return nil
 }

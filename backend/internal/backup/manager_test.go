@@ -144,6 +144,92 @@ func waitJob(t *testing.T, m *backup.Manager) backup.Job {
 	}
 	return *state.Current
 }
+
+func runBackup(t *testing.T, f *managerFixture, trigger string) backup.Job {
+	t.Helper()
+	if _, err := f.manager.StartBackup(trigger); err != nil {
+		t.Fatal(err)
+	}
+	return waitJob(t, f.manager)
+}
+
+func TestRetentionCountsSuccessfulManualAndScheduledObjectsBeyondHistory(t *testing.T) {
+	f := newManagerFixture(t)
+	c := f.manager.State().Configuration
+	c.RetainCount = 30
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	f.remote.objects = map[string]bool{"unrelated.zip": true}
+	for i := 0; i < 33; i++ {
+		trigger := "manual"
+		if i%2 == 1 {
+			trigger = "schedule"
+		}
+		if job := runBackup(t, f, trigger); job.Status != "succeeded" || job.WarningCode != "" {
+			t.Fatal(job)
+		}
+	}
+	if len(f.manager.State().History) != 20 || len(f.remote.objects) != 31 || len(f.remote.deleted) != 3 || !f.remote.objects["unrelated.zip"] {
+		t.Fatal("bad retention", len(f.remote.objects), len(f.remote.deleted))
+	}
+	if err := f.manager.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	c.RetainCount = 2
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.remote.objects) != 31 {
+		t.Fatal("saving settings deleted objects")
+	}
+	f.remote.fail = true
+	if job := runBackup(t, f, "manual"); job.Status != "failed" {
+		t.Fatal(job)
+	}
+	if len(f.remote.objects) != 31 {
+		t.Fatal("failed upload deleted old backups")
+	}
+	f.remote.fail = false
+	if job := runBackup(t, f, "schedule"); job.WarningCode != "" {
+		t.Fatal(job)
+	}
+	if len(f.remote.objects) != 3 {
+		t.Fatal("history truncation/reload lost catalog", len(f.remote.objects))
+	}
+}
+
+func TestRetentionCleanupWarningRetryAndTargetIsolation(t *testing.T) {
+	f := newManagerFixture(t)
+	c := f.manager.State().Configuration
+	c.RetainCount = 1
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	first := runBackup(t, f, "manual")
+	f.remote.deleteFail = true
+	second := runBackup(t, f, "manual")
+	if second.Status != "succeeded" || second.WarningCode != "CLEANUP_FAILED" || len(f.remote.objects) != 2 {
+		t.Fatal(second)
+	}
+	f.remote.deleteFail = false
+	if job := runBackup(t, f, "schedule"); job.WarningCode != "" || len(f.remote.objects) != 1 {
+		t.Fatal(job, len(f.remote.objects))
+	}
+	if f.remote.objects[first.Filename] {
+		t.Fatal("old backup survived successful cleanup")
+	}
+	previous := f.manager.State().Current.Filename
+	c.WebDAV.URL = "https://example.com/other"
+	if err := f.manager.Save(t.Context(), c, nil); err != nil {
+		t.Fatal(err)
+	}
+	runBackup(t, f, "manual")
+	runBackup(t, f, "manual")
+	if len(f.remote.objects) != 2 || !f.remote.objects[previous] {
+		t.Fatal("cleaned another target")
+	}
+}
 func TestManagerBackupUploadRestoreAndSessions(t *testing.T) {
 	f := newManagerFixture(t)
 	if _, err := f.manager.StartBackup("manual"); err != nil {
