@@ -1818,13 +1818,15 @@ components:
         id: { type: string }
         kind: { type: string, enum: [backup, restore] }
         trigger: { type: string, enum: [manual, schedule] }
-        status: { type: string, enum: [running, succeeded, failed] }
+        status: { type: string, enum: [running, succeeded, failed, skipped] }
         stage: { type: string }
         startedAt: { type: string, format: date-time }
         finishedAt: { type: string, format: date-time }
         filename: { type: string }
         bytes: { type: integer }
         errorCode: { type: string }
+        warningCode: { type: string, description: 上传成功但清理或清单登记失败时的警告 }
+        contentVersion: { type: string, description: 业务内容摘要的短版本号，去重比较使用完整 SHA-256 }
         recoveryFile: { type: string, description: 服务器本地恢复前 ZIP 的文件名 }
     BackupState:
       type: object
