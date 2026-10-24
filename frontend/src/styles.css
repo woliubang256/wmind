@@ -86,6 +86,39 @@ body {
 /* 表单字体继承由 Tailwind base 层的 preflight 提供；层外重置会覆盖 text-xs/font-semibold。 */
 ::selection { background: color-mix(in srgb, var(--primary) 24%, transparent); }
 
+/* 灰色折带 W：只平移裁剪层内的亮带，不闪烁整个标志。 */
+.wmind-loading-mark {
+  --loading-mark-edge: #cbd0d7;
+  --loading-mark-face: #aeb6c2;
+  --loading-mark-fold: #858f9e;
+  display: block;
+  width: 4.5rem;
+  height: auto;
+  flex-shrink: 0;
+}
+
+.dark .wmind-loading-mark {
+  --loading-mark-edge: #7d8798;
+  --loading-mark-face: #657183;
+  --loading-mark-fold: #424e60;
+}
+
+.wmind-loading-mark__shine {
+  animation: wmind-loading-sweep 2.4s ease-in-out infinite;
+}
+
+@keyframes wmind-loading-sweep {
+  0%, 12% { transform: translateX(-200px); }
+  72%, 100% { transform: translateX(1600px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wmind-loading-mark__shine {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* 滚动条                                                              */
 /* ------------------------------------------------------------------ */
