@@ -35,6 +35,7 @@ const SUITE = [
   ['editor-appearance', '控件字号 / 全画布形状 / 分支连线'],
   ['zoom-presets', '底部快捷缩放 / 中心锚点 / 键盘'],
   ['canvas', '多画布 / 大纲 / ZEN'],
+  ['canvas-navigation', '单行底栏 / 画布菜单 / 滚动条 / 中心定位'],
   ['a11y', '画布无障碍'],
   ['annotations', '概要 / 边界 / 联系'],
   ['toolbar', '操作提示 / 独立主题按钮'],

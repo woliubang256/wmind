@@ -257,7 +257,8 @@ async function main() {
     // 删有内容的画布要确认；先取消。
     await page.locator('[data-sheet-tab]').nth(1).click();
     await page.waitForTimeout(150);
-    await page.getByRole('button', { name: '删除画布' }).click();
+    await page.locator('[data-sheet-tab][aria-selected="true"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '删除画布' }).click();
     const dialog = page.locator('dialog[open]').filter({ hasText: '删除画布' });
     await dialog.waitFor({ timeout: 5000 });
     check('IE-M5-23 删除有内容的画布要二次确认', await dialog.isVisible());
@@ -266,7 +267,8 @@ async function main() {
     check('IE-M5-24 取消后画布还在', (await tabLabels(page)).length === 2);
 
     // 确认删除，然后撤销。
-    await page.getByRole('button', { name: '删除画布' }).click();
+    await page.locator('[data-sheet-tab][aria-selected="true"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '删除画布' }).click();
     const dialog2 = page.locator('dialog[open]').filter({ hasText: '删除画布' });
     await dialog2.waitFor({ timeout: 5000 });
     await dialog2.getByRole('button', { name: '删除画布' }).click();
@@ -280,15 +282,17 @@ async function main() {
     await page.waitForTimeout(250);
     labels = await tabLabels(page);
     check('IE-M5-26 ⌘Z 撤销能恢复被删的画布', labels.length === 2 && labels.includes('技术方案'), labels.join('|'));
-    // 只剩一张时没有删除按钮。
+    // 只剩一张时菜单删除项禁用。
     await page.locator('[data-sheet-tab]').nth(1).click();
-    await page.getByRole('button', { name: '删除画布' }).click();
+    await page.locator('[data-sheet-tab][aria-selected="true"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '删除画布' }).click();
     const dialog3 = page.locator('dialog[open]').filter({ hasText: '删除画布' });
     await dialog3.waitFor({ timeout: 5000 });
     await dialog3.getByRole('button', { name: '删除画布' }).click();
     await page.waitForTimeout(250);
-    const deleteButtons = await page.getByRole('button', { name: '删除画布' }).count();
-    check('IE-M5-27 只剩一张画布时没有删除入口', deleteButtons === 0, `count=${deleteButtons}`);
+    await page.locator('[data-sheet-tab][aria-selected="true"]').click({ button: 'right' });
+    check('IE-M5-27 只剩一张画布时禁止删除', await page.getByRole('menuitem', { name: '删除画布' }).isDisabled());
+    await page.keyboard.press('Escape');
 
     // ── 持久化：刷新后两张画布与内容都在 ────────────────────────────────
     await page.getByRole('button', { name: '新建画布' }).click();

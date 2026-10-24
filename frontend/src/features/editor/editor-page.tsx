@@ -95,6 +95,8 @@ import {
   renameSheetCommand,
 } from '@/editor/commands/sheet';
 import { SheetTabs } from './sheet-tabs';
+import { CanvasScrollbars } from './canvas-scrollbars';
+import { centeredViewport } from './canvas-navigation';
 import { downloadBlob } from '@/editor/export/download';
 import type { Sheet } from '@/editor/model/types';
 import { OutlineView, indentTarget, outdentTarget } from './outline-view';
@@ -579,8 +581,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     const root = layout.boxes.get(sheet.rootTopic.id);
     if (!element || !root) return;
     const rect = element.getBoundingClientRect();
-    setViewport((prev) => ({ ...prev, x: rect.width / 2 - (root.x + root.width / 2) * prev.zoom,
-      y: rect.height / 2 - (root.y + root.height / 2) * prev.zoom }));
+    setViewport((prev) => centeredViewport(prev, root, rect));
   };
 
   /** Ctrl+S：跳过防抖，立刻落盘。 */
@@ -1182,7 +1183,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
               }}
               className="relative min-h-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
-              <div className="h-full w-full" onClickCapture={contentClick} onKeyDownCapture={contentKeyDown}>
+              <div id="editor-canvas-surface" className="h-full w-full" onClickCapture={contentClick} onKeyDownCapture={contentKeyDown}>
               <MindMapViewer
                 sheet={sheet}
                 theme={doc.theme}
@@ -1241,6 +1242,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                 }}
               />
               </div>
+              <CanvasScrollbars canvasRef={canvasRef} bounds={contentBounds} viewport={viewport} onChange={setViewport} />
             </div>
 
             {/*
