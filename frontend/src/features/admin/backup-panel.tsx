@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { EmptyState, Panel } from '@/components/ui/panel';
@@ -19,7 +20,7 @@ export function BackupPanel() {
   const { t } = useTranslation();
   const query = useQuery({ queryKey: backupKeys.state, queryFn: backupApi.get, refetchInterval: (state) => state.state.data?.busy ? 2000 : 15000 });
   if (query.isError) return <EmptyState icon="alert" title={t('backup.loadFailed')} description={errorMessage(query.error)} action={<Button size="sm" variant="outline" onClick={() => void query.refetch()}>{t('common.retry')}</Button>} />;
-  if (!query.data) return <EmptyState icon="clock" title={t('backup.loading')} />;
+  if (!query.data) return <LoadingState label={t('backup.loading')} className="min-h-64" />;
   return <div className="space-y-5"><BackupForm state={query.data} /><RestorePanel busy={query.data.busy} maxBytes={query.data.maxUploadBytes} /><JobHistory state={query.data} /></div>;
 }
 
@@ -61,7 +62,7 @@ function BackupForm({ state }: { state: BackupState }) {
         <Field label={t('backup.timezone')}><Input value={draft.timezone} onChange={(event) => set('timezone', event.target.value)} aria-label={t('backup.timezone')} list={timezonesId} spellCheck={false} /><datalist id={timezonesId}>{['Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Asia/Singapore', 'UTC', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles', 'Australia/Sydney'].map((zone) => <option key={zone} value={zone} />)}</datalist></Field>
         <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs" aria-live="polite">
           <p className="font-medium">{t('backup.upcoming')} <span className="font-normal text-muted-foreground">{draft.timezone}</span></p>
-          {preview.isError && scheduleCurrent ? <p role="alert" className="mt-1 text-destructive">{t('backup.invalidSchedule')}</p> : !scheduleCurrent || preview.isFetching ? <p className="mt-1 text-muted-foreground">{t('backup.checkingSchedule')}</p> : <ol className="mt-1.5 grid gap-x-6 gap-y-1 text-muted-foreground sm:grid-cols-2">{preview.data?.nextRuns.map((date) => <li key={date}>{formatTime(date)}</li>)}</ol>}
+          {preview.isError && scheduleCurrent ? <p role="alert" className="mt-1 text-destructive">{t('backup.invalidSchedule')}</p> : !scheduleCurrent || preview.isFetching ? <LoadingState inline label={t('backup.checkingSchedule')} className="mt-1 text-xs" /> : <ol className="mt-1.5 grid gap-x-6 gap-y-1 text-muted-foreground sm:grid-cols-2">{preview.data?.nextRuns.map((date) => <li key={date}>{formatTime(date)}</li>)}</ol>}
         </div>
       </fieldset>
       <fieldset disabled={disabled} className="space-y-4 border-t border-border/70 pt-4">
@@ -120,7 +121,7 @@ function RestorePanel({ busy, maxBytes }: { busy: boolean; maxBytes: number }) {
             }} />
         </label>
       </div>
-      {inspect.isPending && <p role="status" className="text-xs text-muted-foreground">{t('backup.validating')}</p>}
+      {inspect.isPending && <LoadingState inline label={t('backup.validating')} className="text-xs" />}
       {uploadError && <p role="alert" className="text-xs text-destructive">{uploadError}</p>}
       <p className="text-xs leading-5 text-muted-foreground">{t('backup.restoreHint', { size: size(maxBytes) })}</p>
     </div>

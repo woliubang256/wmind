@@ -17,6 +17,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { templateApi } from '@/lib/api/templates';
@@ -152,7 +154,9 @@ export function TemplatePicker({ open, onClose, onCreateBlank }: TemplatePickerP
           </p>
         ) : null}
 
-        {filteredBuiltin.length > 0 || filteredMine.length > 0 ? (
+        {config.userTemplateEnabled && tab === 'user' && mine.isPending ? (
+          <LoadingState small className="min-h-44" />
+        ) : filteredBuiltin.length > 0 || filteredMine.length > 0 ? (
           <div className="grid max-h-[52vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
             {filteredBuiltin.map(({ def, document }) => (
               <TemplateCard
@@ -166,7 +170,7 @@ export function TemplatePicker({ open, onClose, onCreateBlank }: TemplatePickerP
                     <TemplatePreview document={document} width={PREVIEW_WIDTH} height={PREVIEW_HEIGHT} label={t(def.nameKey)} />
                   ) : (
                     <div style={{ height: PREVIEW_HEIGHT }} className="grid place-items-center text-xs text-muted-foreground">
-                      {t('common.loading')}
+                      <LoadingState small tone="soft" />
                     </div>
                   )
                 }
@@ -182,7 +186,7 @@ export function TemplatePicker({ open, onClose, onCreateBlank }: TemplatePickerP
                 onPick={() => createFromMine(item)}
                 preview={
                   item.thumbnailUrl ? (
-                    <img src={item.thumbnailUrl} alt="" className="object-contain" style={{ height: PREVIEW_HEIGHT, width: '100%' }} />
+                    <LoadingImage src={item.thumbnailUrl} alt="" containerClassName="w-full" containerStyle={{ height: PREVIEW_HEIGHT }} className="size-full object-contain" />
                   ) : (
                     <TemplatePlaceholder height={PREVIEW_HEIGHT} />
                   )

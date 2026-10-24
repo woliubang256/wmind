@@ -11,6 +11,8 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { LoadingState } from '@/components/ui/loading-state';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -102,7 +104,7 @@ export function TemplatesPage() {
                   <TemplatePreview document={document} width={PREVIEW_WIDTH} height={PREVIEW_HEIGHT} label={t(def.nameKey)} />
                 ) : (
                   <div style={{ height: PREVIEW_HEIGHT }} className="grid place-items-center text-xs text-muted-foreground">
-                    {t('common.loading')}
+                    <LoadingState small tone="soft" />
                   </div>
                 )
               }
@@ -127,11 +129,7 @@ export function TemplatesPage() {
             description={t('templates.disabled.body')}
           />
         ) : mine.isPending ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="h-[168px] animate-pulse rounded-2xl border border-border/70 bg-muted/30" />
-            ))}
-          </div>
+          <LoadingState className="min-h-44" />
         ) : items.length === 0 ? (
           <EmptyState icon="waypoints" title={t('templates.empty.title')} />
         ) : (
@@ -145,7 +143,7 @@ export function TemplatesPage() {
                 onPick={() => createFromMine(item)}
                 preview={
                   item.thumbnailUrl ? (
-                    <img src={item.thumbnailUrl} alt="" className="object-contain" style={{ height: PREVIEW_HEIGHT, width: '100%' }} />
+                    <LoadingImage src={item.thumbnailUrl} alt="" containerClassName="w-full" containerStyle={{ height: PREVIEW_HEIGHT }} className="size-full object-contain" />
                   ) : (
                     <TemplatePlaceholder height={PREVIEW_HEIGHT} />
                   )
