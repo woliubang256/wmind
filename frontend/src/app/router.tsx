@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router';
+import { LoadingState } from '@/components/ui/loading-state';
 import { AuthLayout, PublicLayout, RequireAdmin, RequireAuth } from './layouts';
 import { RouteCrash } from '@/components/error-boundary';
 import { LoginPage } from '@/features/auth/login-page';
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       的英文堆栈页上。
     */
     errorElement: <RouteCrash />,
+    hydrateFallbackElement: <LoadingState className="min-h-svh" />,
     children: [
       {
         element: <AuthLayout />,

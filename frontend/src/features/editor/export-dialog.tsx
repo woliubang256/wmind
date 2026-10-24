@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -517,6 +518,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
             <Button
               size="sm"
               onClick={() => void download()}
+              loading={busy}
               disabled={busy || rasterVerdict.kind === 'too-large'}
             >
               {busy
@@ -552,9 +554,10 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
           }
         >
           {previewText === null ? (
-            <img
+            <LoadingImage
               src={dataUrl}
               alt={t('editor.export.previewAlt')}
+              containerClassName="min-h-24"
               className="max-h-[46vh] max-w-full object-contain"
             />
           ) : (
