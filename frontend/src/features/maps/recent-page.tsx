@@ -344,7 +344,8 @@ export function RecentPage() {
                 if (renaming === null) return;
                 rename.mutate({ uid: renaming.uid, title: renameTitle });
               }}
-              disabled={rename.isPending || renameTitle.trim() === ''}
+              loading={rename.isPending}
+              disabled={renameTitle.trim() === ''}
             >
               {t('common.save')}
             </Button>

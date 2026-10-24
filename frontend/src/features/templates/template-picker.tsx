@@ -193,6 +193,7 @@ export function TemplatePicker({ open, onClose, onCreateBlank }: TemplatePickerP
                 }
               />
             ))}
+            {config.userTemplateEnabled && tab !== 'basic' && mine.isPending ? <LoadingState small className="py-6 sm:col-span-2" /> : null}
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-border/70 p-8 text-center">

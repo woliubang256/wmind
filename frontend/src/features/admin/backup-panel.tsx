@@ -90,7 +90,7 @@ function BackupForm({ state }: { state: BackupState }) {
           <Button loading={save.isPending} type="submit" size="sm" disabled={disabled || !dirty || !scheduleValid || !retentionValid}><Icon name="save" className="size-3.5" />{save.isPending ? t('common.saving') : t('backup.save')}</Button>
           <Button loading={test.isPending} size="sm" variant="outline" disabled={disabled || !retentionValid} onClick={() => test.mutate()}>{test.isPending ? t('backup.testing') : t('backup.test')}</Button>
         </div>
-        <Button size="sm" variant="outline" disabled={disabled || dirty} title={dirty ? t('backup.saveFirst') : undefined} onClick={() => run.mutate()}><Icon name="upload" className="size-3.5" />{t('backup.run')}</Button>
+        <Button loading={run.isPending} size="sm" variant="outline" disabled={disabled || dirty} title={dirty ? t('backup.saveFirst') : undefined} onClick={() => run.mutate()}><Icon name="upload" className="size-3.5" />{t('backup.run')}</Button>
       </div>
       <p className="text-xs leading-5 text-muted-foreground">{dirty ? t('backup.saveFirst') : t('backup.testHint')}</p>
     </form>
