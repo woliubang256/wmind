@@ -39,7 +39,7 @@ export function InsertFileDialog({ action, topics, onSave, onClose }: { action: 
   const remove = () => { try { onSave(image ? { image: null } : action === 'attachment' ? { content: { attachments: undefined } } : { href: '', content: { localLink: undefined } }); } catch (error) { fail(error); } };
   const attrs = folder ? { webkitdirectory: '', directory: '' } as InputHTMLAttributes<HTMLInputElement> : {};
   return <Modal open title={t(`editor.content.${action}`)} description={image ? t('editor.content.imageLimit') : t('editor.content.fileLimit')} onClose={onClose} dismissible={!busy}
-    footer={<><Button variant="ghost" disabled={busy} onClick={remove}>{t('editor.content.remove')}</Button><Button variant="outline" disabled={busy} onClick={onClose}>{t('common.cancel')}</Button><Button disabled={busy} onClick={() => void save()}>{t(busy ? 'editor.content.saving' : 'common.save')}</Button></>}>
+    footer={<><Button variant="ghost" disabled={busy} onClick={remove}>{t('editor.content.remove')}</Button><Button variant="outline" disabled={busy} onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} onClick={() => void save()}>{t(busy ? 'editor.content.saving' : 'common.save')}</Button></>}>
     <div className="space-y-4">
       {image && first.image ? <LoadingImage src={first.image.src} alt={first.title} containerClassName="min-h-16" className="max-h-48 max-w-full rounded-lg object-contain" /> : null}
       {!image && first.content?.localLink && action !== 'attachment' ? <button className="text-sm text-primary underline" onClick={() => downloadEmbedded(first.content!.localLink!)}>{first.content.localLink.name}</button> : null}

@@ -12,6 +12,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/ui/icon';
+import { LoadingMark } from '@/components/ui/loading-mark';
 import type { SaveState } from '@/editor/store/editor-store';
 
 export interface SaveIndicatorProps {
@@ -26,7 +27,7 @@ export function SaveIndicator({ save, onRetry, onResolveConflict }: SaveIndicato
   if (save.status === 'saving') {
     return (
       <span className="inline-flex items-center gap-1.5" aria-live="polite">
-        <span className="size-2 animate-pulse rounded-full bg-primary" />
+        <LoadingMark size="inline" />
         {t('editor.save.saving')}
       </span>
     );

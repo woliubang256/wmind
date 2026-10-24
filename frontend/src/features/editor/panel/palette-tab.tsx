@@ -12,6 +12,8 @@
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LoadingMark } from '@/components/ui/loading-mark';
+import { LoadingState } from '@/components/ui/loading-state';
 import type { Theme, ThemeLayout } from '@/editor/model/types';
 import { themeFromCustomConfig, themeSwatchColors } from '@/editor/theme/custom';
 import { FONT_DEFINITIONS, FONT_IDS } from '@/editor/theme/fonts';
@@ -80,8 +82,10 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
                   type="button"
                   disabled={themeName.trim().length === 0 || custom.saving}
                   onClick={() => void saveTheme()}
-                  className="inline-flex h-8 shrink-0 items-center rounded-md border border-input bg-background px-2 text-xs text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+                  aria-busy={custom.saving || undefined}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-2 text-xs text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
                 >
+                  {custom.saving ? <LoadingMark size="inline" /> : null}
                   {custom.saving
                     ? t('editor.panel.canvas.customSaving')
                     : t('editor.panel.canvas.customSave')}
@@ -95,7 +99,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
               </p>
             ) : null}
 
-            {custom.themes.length === 0 && !custom.loading && !custom.error ? (
+            {custom.loading ? <LoadingState small className="py-4" /> : custom.themes.length === 0 && !custom.error ? (
               <p className="text-[11px] leading-snug text-muted-foreground/80">
                 {t('editor.panel.canvas.customEmpty')}
               </p>
