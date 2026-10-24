@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { LoadingState } from '@/components/ui/loading-state';
 import { TextField } from '@/components/ui/input';
 import { ApiError } from '@/lib/api/errors';
 import {
@@ -116,7 +117,7 @@ function PasswordGate({ token, onGranted }: { token: string; onGranted: (accessT
           error={error || undefined}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <Button type="submit" disabled={pending || password === ''}>
+        <Button type="submit" loading={pending} disabled={password === ''}>
           {pending ? t('share.public.submitting') : t('share.public.submit')}
         </Button>
       </form>
@@ -171,12 +172,12 @@ function ShareCanvas({ share }: { share: PublicShare }) {
             className="size-full"
           />
         ) : (
-          <div className="grid size-full place-items-center text-sm text-muted-foreground">{t('common.loading')}</div>
+          <LoadingState className="size-full" />
         )}
       </div>
 
       {canExport && exportOpen ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<LoadingState className="fixed inset-0 z-40 bg-background/90" />}>
           <ExportDialog open={exportOpen} document={document} sheetId={sheet.id} onClose={() => setExportOpen(false)} />
         </Suspense>
       ) : null}
@@ -225,7 +226,7 @@ export function PublicSharePage() {
 
   if (query.isPending) {
     return (
-      <div className="grid h-[60svh] place-items-center text-sm text-muted-foreground">{t('common.loading')}</div>
+      <LoadingState className="h-[60svh]" />
     );
   }
 

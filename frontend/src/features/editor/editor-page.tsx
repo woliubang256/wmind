@@ -21,6 +21,7 @@
  */
 
 import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -258,10 +259,7 @@ const PENDING_LAYOUT: LayoutResult = {
 function EditorSkeleton({ label }: { label: string }) {
   return (
     <div className="grid h-full min-h-0 flex-1 place-items-center bg-card">
-      <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
-        <span className="size-6 animate-spin rounded-full border-2 border-border border-t-primary" />
-        {label}
-      </div>
+      <LoadingState label={label} />
     </div>
   );
 }
@@ -1388,7 +1386,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
         topics={insertState.ids.map((id) => findTopicInSheet(sheet, id)!.topic)} doc={doc} onSave={saveInsert}
         onClose={() => { setInsertState(null); canvasRef.current?.focus({ preventScroll: true }); }} /> : null}
       {exportOpen ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<LoadingState className="fixed inset-0 z-40 bg-background/90" />}>
           <ExportDialog
             open
             document={doc}

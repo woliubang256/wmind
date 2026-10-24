@@ -19,6 +19,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { LoadingMark } from '@/components/ui/loading-mark';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -286,7 +287,7 @@ export function ImportDialog({ open, onClose, initialFiles, onFilesConsumed }: I
 
             {phase.kind === 'parsing' ? (
               <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/40 px-5 py-8">
-                <span className="size-5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <LoadingMark size="small" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{phase.fileName}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{t('import.dialog.parsing')}{phase.totalFiles > 1 ? ` ${phase.index}/${phase.totalFiles}` : ''}</p>
@@ -297,7 +298,7 @@ export function ImportDialog({ open, onClose, initialFiles, onFilesConsumed }: I
             {phase.kind === 'uploading' ? (
               <div className="space-y-3 rounded-2xl border border-border bg-card/40 px-5 py-6">
                 <div className="flex items-center gap-3">
-                  <span className="size-5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <LoadingMark size="small" tone="soft" />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{phase.fileName}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
