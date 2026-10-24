@@ -100,40 +100,35 @@ const ASPECT_LABELS: Record<AspectRatioId, string> = {
  * 位图之后、文本之前——它是**可再编辑**的，比 md/opml 保真得多；文本格式垫底，
  * 因为它们丢样式——不该出现在第一眼看到的位置。
  *
- * `descriptionKey` 单独给而不是共用一句：SVG 说「可无损缩放」，PNG 说「按倍率
- * 栅格化」，JPEG 说「不支持透明」——三句话回答的是三个不同的问题，共用一句
- * 就等于两句是错的。
+ * 不为每种格式附通用介绍；格式限制在对应控件旁说明，PDF 的位图文字限制
+ * 保留在弹窗标题下，避免下载后才发现文字不可选中。
  */
 const FORMATS: {
   id: ExportFormat;
   labelKey: string;
-  descriptionKey: string;
   ext: string;
   /** 文本格式下载时用的 MIME；矢量/位图走各自的分支，这里留空。 */
   mime?: string;
 }[] = [
-  { id: 'svg', labelKey: 'editor.export.formatSvg', descriptionKey: 'editor.export.description', ext: 'svg' },
-  { id: 'png', labelKey: 'editor.export.formatPng', descriptionKey: 'editor.export.descriptionPng', ext: 'png' },
-  { id: 'jpeg', labelKey: 'editor.export.formatJpeg', descriptionKey: 'editor.export.descriptionJpeg', ext: 'jpg' },
-  { id: 'pdf', labelKey: 'editor.export.formatPdf', descriptionKey: 'editor.export.descriptionPdf', ext: 'pdf' },
+  { id: 'svg', labelKey: 'editor.export.formatSvg', ext: 'svg' },
+  { id: 'png', labelKey: 'editor.export.formatPng', ext: 'png' },
+  { id: 'jpeg', labelKey: 'editor.export.formatJpeg', ext: 'jpg' },
+  { id: 'pdf', labelKey: 'editor.export.formatPdf', ext: 'pdf' },
   {
     id: 'xmind',
     labelKey: 'editor.export.formatXmind',
-    descriptionKey: 'editor.export.descriptionXmind',
     ext: 'xmind',
     mime: 'application/zip',
   },
   {
     id: 'md',
     labelKey: 'editor.export.formatMd',
-    descriptionKey: 'editor.export.descriptionMd',
     ext: 'md',
     mime: 'text/markdown;charset=utf-8',
   },
   {
     id: 'opml',
     labelKey: 'editor.export.formatOpml',
-    descriptionKey: 'editor.export.descriptionOpml',
     ext: 'opml',
     mime: 'text/x-opml;charset=utf-8',
   },
@@ -458,7 +453,7 @@ export function ExportDialog({ open, document: doc, sheetId, onClose }: ExportDi
       onClose={onClose}
       size="lg"
       title={t('editor.export.title')}
-      description={t(format.descriptionKey)}
+      description={options.format === 'pdf' ? t('editor.export.descriptionPdf') : undefined}
       footer={
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 text-xs text-muted-foreground">

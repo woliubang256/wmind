@@ -110,7 +110,6 @@ export function TemplatePicker({ open, onClose, onCreateBlank }: TemplatePickerP
     <Modal
       open={open}
       title={t('templates.picker.title')}
-      description={t('templates.picker.subtitle')}
       size="lg"
       onClose={onClose}
     >

@@ -212,7 +212,7 @@ export function ImportDialog({ open, onClose, initialFiles, onFilesConsumed }: I
       open={open}
       size="lg"
       title={phase.kind === 'ready' ? t('import.dialog.summaryTitle') : t('import.dialog.title')}
-      description={phase.kind === 'ready' ? t('import.dialog.summaryDescription') : t('import.dialog.description')}
+      description={phase.kind === 'ready' ? t('import.dialog.summaryDescription') : undefined}
       onClose={close}
       dismissible={!creating}
       footer={footer}

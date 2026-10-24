@@ -18,12 +18,19 @@ async function fixture(page) {
   const state = () => ({ configuration, nextRuns, history: [], busy: false, maxUploadBytes: 2 * 1024 ** 3 });
   const saved = [];
   const shares = [];
+  const maps = new Map();
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
     const request = route.request();
     let data = [];
     if (path === '/auth/me') data = { uid: 'copy-admin', username: 'admin', nickname: '', email: 'copy@example.test', role: 'admin', status: 'active', settings: {} };
-    if (path === '/site/config') data = { siteName: 'wmind', passwordMinLength: 8, registrationEnabled: true, shareEnabled: true, importEnabled: true, exportEnabled: true, userTemplateEnabled: true };
+    if (path === '/site/config') data = { siteName: 'wmind', brand: 'wmind', logoUrl: '', description: '', icp: '', version: '1.0.0', passwordMinLength: 8, registrationEnabled: true, shareEnabled: true, shareDefaultExpireDays: 7, shareDefaultAllowDownload: false, importEnabled: true, exportEnabled: true, userTemplateEnabled: true };
+    if (path === '/maps' && request.method() === 'POST') {
+      const input = request.postDataJSON();
+      data = { ...input, uid: `copy-map-${maps.size + 1}`, version: 1, nodeCount: 5, sizeBytes: 1024, deleted: false, createdAt: nextRuns[0], updatedAt: nextRuns[0], thumbnailUrl: '' };
+      maps.set(data.uid, data);
+    }
+    if (path.startsWith('/maps/copy-map-')) data = maps.get(path.split('/')[2]);
     if (path === '/admin/settings') data = { 'auth.registration_enabled': true, 'auth.default_role': 'user', 'share.public_link_enabled': true, 'limit.maps_per_user': 0, 'limit.upload_max_mb': 10 };
     if (path === '/admin/backups') data = state();
     if (path === '/admin/backups/config') {
@@ -157,6 +164,82 @@ async function editorChecks(page, t, locale) {
   await dialog.getByRole('button', { name: t('common.close'), exact: true }).click();
 }
 
+async function transferChecks(page, t, locale) {
+  const verify = (name, pass) => check(`${locale} ${name}`, pass);
+  const fits = (dialog) => dialog.evaluate((node) => node.scrollWidth <= node.clientWidth && node.getBoundingClientRect().right <= innerWidth);
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto(BASE);
+  await page.getByRole('button', { name: t('import.dialog.title'), exact: true }).click();
+  const importing = page.getByRole('dialog', { name: t('import.dialog.title'), exact: true });
+  await importing.waitFor();
+  verify('导入格式上限仅在上传区出现一次且没有空副标题', await importing.getAttribute('aria-describedby') === null && (await importing.innerText()).split('XMind / Markdown / OPML').length === 2 && await fits(importing));
+  await importing.locator('input[type=file]').setInputFiles({ name: 'copy.md', mimeType: 'text/markdown', buffer: Buffer.from('# Copy test\n## Branch') });
+  const parsed = page.getByRole('dialog', { name: t('import.dialog.summaryTitle'), exact: true });
+  await parsed.waitFor();
+  verify('导入保留摘要确认与创建入口', await parsed.getByText(t('import.dialog.summaryDescription'), { exact: true }).isVisible() && await parsed.getByRole('button', { name: t('import.dialog.create'), exact: true }).isEnabled());
+  await parsed.getByRole('button', { name: t('common.cancel'), exact: true }).click();
+
+  await page.getByRole('button', { name: t('maps.create'), exact: true }).first().click();
+  const picker = page.getByRole('dialog', { name: t('templates.picker.title'), exact: true });
+  await picker.waitFor();
+  verify('模板无泛化副标题但保留点击后果', await picker.getAttribute('aria-describedby') === null && await picker.getByText(t('templates.picker.hint'), { exact: true }).isVisible() && await fits(picker));
+  const search = picker.getByRole('textbox', { name: t('templates.picker.search'), exact: true });
+  await search.fill(t('templates.builtin.fishbone'));
+  const template = picker.getByRole('button').filter({ hasText: t('templates.builtin.fishbone') });
+  await template.locator('svg text').first().waitFor();
+  verify('模板搜索与实际预览仍有效', await template.count() === 1 && await template.locator('svg text').count() >= 5);
+  await template.click();
+  await page.waitForURL('**/maps/copy-map-*');
+  await page.locator('g.wmind-topic').first().waitFor();
+  verify('选择模板仍直接创建并进入编辑器', await page.getByRole('dialog').count() === 0 && await page.locator('g.wmind-topic').count() >= 5);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${BASE}/maps/demo`);
+  await page.locator('g.wmind-topic').first().waitFor();
+  await page.getByRole('button', { name: t('templates.saveAs'), exact: true }).click();
+  const saving = page.getByRole('dialog', { name: t('templates.saveAs'), exact: true });
+  await saving.waitFor();
+  verify('另存模板保留副本独立性而不展示实现细节', await saving.getByText(t('templates.saveAsHint'), { exact: true }).isVisible() && !/缩略图|thumbnail/.test(await saving.innerText()) && await saving.getByRole('button', { name: t('common.save'), exact: true }).isEnabled());
+  await saving.getByRole('button', { name: t('common.cancel'), exact: true }).click();
+
+  const openExport = async () => {
+    await page.getByRole('button', { name: t('editor.exportEntry'), exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: t('editor.export.title'), exact: true });
+    await dialog.waitFor();
+    return dialog;
+  };
+  let exporting = await openExport();
+  await page.setViewportSize({ width: 375, height: 900 });
+  for (const format of ['Svg', 'Png', 'Jpeg', 'Pdf', 'Xmind', 'Md', 'Opml']) {
+    await exporting.getByRole('radio', { name: t(`editor.export.format${format}`), exact: true }).click();
+    verify(`${format} 无重复通用介绍且窄屏不溢出`, (await exporting.getAttribute('aria-describedby') !== null) === (format === 'Pdf') && !/预览即最终结果|preview is exactly what you get/i.test(await exporting.innerText()) && await fits(exporting));
+    if (format === 'Pdf') {
+      verify('PDF明确提示位图文字不可选中', await exporting.getByText(t('editor.export.descriptionPdf'), { exact: true }).isVisible());
+      await page.screenshot({ path: `/tmp/wmind-copy-export-${locale}.png` });
+    }
+    if (format === 'Jpeg') {
+      const transparent = exporting.getByRole('checkbox', { name: t('editor.export.transparent'), exact: true });
+      if (await transparent.getAttribute('aria-checked') !== 'true') await transparent.click();
+      verify('JPEG透明冲突按需提示', await exporting.getByText(t('editor.export.jpegOpaque'), { exact: true }).isVisible());
+    }
+    if (format === 'Md' || format === 'Opml') verify(`${format} 保留样式丢失警告`, await exporting.getByText(t('editor.export.textWarning'), { exact: true }).isVisible());
+    if (format === 'Xmind') verify('XMind保留范围说明与真实大纲预览', await exporting.getByText(t('editor.export.xmindNote'), { exact: true }).isVisible() && (await exporting.getByTestId('export-text-preview').innerText()).includes('产品规划'));
+  }
+  await exporting.getByRole('button', { name: t('editor.export.cancel'), exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const format of ['Svg', 'Pdf']) {
+    exporting = await openExport();
+    await exporting.getByRole('radio', { name: t(`editor.export.format${format}`), exact: true }).click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60000 }),
+      exporting.getByRole('button', { name: t('editor.export.downloadAs', { format: t(`editor.export.format${format}`) }), exact: true }).click(),
+    ]);
+    const bytes = readFileSync(await download.path());
+    verify(`${format} 实际下载仍有效`, format === 'Pdf' ? bytes.subarray(0, 5).toString() === '%PDF-' : bytes.toString().includes('<svg') && bytes.toString().includes('产品规划'));
+    await exporting.waitFor({ state: 'hidden' });
+  }
+}
+
 run(async () => {
   const browser = await launchBrowser();
   try {
@@ -169,6 +252,7 @@ run(async () => {
       try {
         await adminChecks(page, i18n.t.bind(i18n), locale, saved);
         await editorChecks(page, i18n.t.bind(i18n), locale);
+        await transferChecks(page, i18n.t.bind(i18n), locale);
       } catch (error) {
         console.error('页面异常：', errors, await page.locator('body').innerText());
         throw error;
