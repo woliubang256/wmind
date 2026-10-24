@@ -9,6 +9,24 @@ import { stagePackage } from '../scripts/release.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const config = readFileSync(join(root, 'deploy/nginx.conf'), 'utf8');
 
+function backupContract(source) {
+  const root = /location\s+=\s+\/api\/v1\/admin\/backups\s*\{([^}]+)\}/.exec(source)?.[1];
+  assert.ok(root, '不带末尾斜线的备份接口必须精确代理，不能触发 Nginx 自动 301');
+  assert.match(root, /proxy_pass\s+http:\/\/api:8080\s*;/, '保持后端不带斜线的接口路径');
+  assert.doesNotMatch(root, /return\s+30[1278]|rewrite|try_files/);
+  const children = /location\s+\^~\s+\/api\/v1\/admin\/backups\/\s*\{([^}]+)\}/.exec(source)?.[1];
+  assert.ok(children, '恢复上传仍有独立备份子路径');
+  assert.match(children, /client_max_body_size\s+2g\s*;/);
+  assert.match(children, /proxy_read_timeout\s+900s\s*;/);
+  const api = /location\s+\/api\/\s*\{([^}]+)\}/.exec(source)?.[1];
+  assert.ok(api);
+  assert.doesNotMatch(api, /client_max_body_size\s+2g/, '不能扩大普通 API 的上传限制');
+}
+
+test('备份根接口不重定向，恢复子接口保留独立上传限制', () => {
+  backupContract(config);
+});
+
 function uploadsContract(source) {
   // ^~ keeps uploaded file extensions out of regex static-file locations.
   const uploads = /location\s+\^~\s+\/uploads\/\s*\{([^}]+)\}/.exec(source)?.[1];
@@ -47,6 +65,7 @@ test('部署包保留与 Web 镜像相同的上传代理配置', t => {
   const packaged = readFileSync(join(destination, 'deploy/nginx.conf'), 'utf8');
   assert.equal(packaged, config);
   uploadsContract(packaged);
+  backupContract(packaged);
   const dockerfile = readFileSync(join(root, 'deploy/Dockerfile.frontend'), 'utf8');
   assert.match(dockerfile, /COPY\s+deploy\/nginx\.conf\s+\/etc\/nginx\/conf\.d\/default\.conf/);
 });

@@ -219,6 +219,11 @@ jobs:
             const { data } = JSON.parse(readFileSync(process.argv[1], "utf8"));
             if (data.version !== process.env.GITHUB_REF_NAME) throw new Error("Runtime version mismatch");
           ' "$site_config"
+          backup_headers="$RUNNER_TEMP/wmind-smoke-backup-headers.txt"
+          backup_status=$(curl --silent --show-error --dump-header "$backup_headers" --output /dev/null --write-out '%{http_code}' \
+            "$base/api/v1/admin/backups")
+          test "$backup_status" = '401'
+          ! grep -qi '^location:' "$backup_headers"
           compose exec -T api sh -ec 'printf "%s" "wmind-upload-probe" > /data/uploads/wmind-release-upload-smoke.txt'
           uploaded=$(curl --fail --silent --show-error "$base/uploads/wmind-release-upload-smoke.txt")
           test "$uploaded" = 'wmind-upload-probe'
