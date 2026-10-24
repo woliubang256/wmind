@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
+import { LoadingMark } from '@/components/ui/loading-mark';
 import { LocaleSwitcher } from '@/components/locale-switcher';
 import { UserMenu } from '@/components/user-menu';
 import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
@@ -14,7 +15,14 @@ import { authKeys, useCurrentUser } from './auth';
 
 function LoadingPage() {
   const { t } = useTranslation();
-  return <main className="grid min-h-svh place-items-center text-sm text-muted-foreground">{t('common.loading')}</main>;
+  return (
+    <main className="grid min-h-svh place-items-center text-sm text-muted-foreground">
+      <div role="status" className="flex flex-col items-center gap-4">
+        <LoadingMark />
+        <p>{t('common.loading')}</p>
+      </div>
+    </main>
+  );
 }
 
 export function RequireAuth() {
