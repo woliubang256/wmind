@@ -1,6 +1,7 @@
 import { useRef, useState, type InputHTMLAttributes } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { Modal } from '@/components/ui/modal';
 import { Field } from '@/components/ui/input';
 import { fileApi } from '@/lib/api/files';
@@ -40,7 +41,7 @@ export function InsertFileDialog({ action, topics, onSave, onClose }: { action: 
   return <Modal open title={t(`editor.content.${action}`)} description={image ? t('editor.content.imageLimit') : t('editor.content.fileLimit')} onClose={onClose} dismissible={!busy}
     footer={<><Button variant="ghost" disabled={busy} onClick={remove}>{t('editor.content.remove')}</Button><Button variant="outline" disabled={busy} onClick={onClose}>{t('common.cancel')}</Button><Button disabled={busy} onClick={() => void save()}>{t(busy ? 'editor.content.saving' : 'common.save')}</Button></>}>
     <div className="space-y-4">
-      {image && first.image ? <img src={first.image.src} alt={first.title} className="max-h-48 max-w-full rounded-lg object-contain" /> : null}
+      {image && first.image ? <LoadingImage src={first.image.src} alt={first.title} containerClassName="min-h-16" className="max-h-48 max-w-full rounded-lg object-contain" /> : null}
       {!image && first.content?.localLink && action !== 'attachment' ? <button className="text-sm text-primary underline" onClick={() => downloadEmbedded(first.content!.localLink!)}>{first.content.localLink.name}</button> : null}
       <Field label={t('editor.content.chooseFile')} htmlFor="insert-file"><input ref={input} id="insert-file" type="file" className="block w-full rounded-lg border border-input p-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-2" disabled={busy} accept={image ? 'image/png,image/jpeg,image/gif,image/webp' : undefined} multiple={action === 'attachment' || folder} {...attrs}
         onChange={(event) => { setFiles([...event.target.files ?? []]); setError(''); }} /></Field>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/loading-state';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { Modal } from '@/components/ui/modal';
 import { Field, Textarea } from '@/components/ui/input';
 import type { ContentPatch } from '@/editor/commands/content';
@@ -30,10 +32,10 @@ export function InsertVisualDialog({ action, topics, onSave, onClose }: { action
   return <Modal open title={t(`editor.content.${action}`)} onClose={onClose} size={equation ? 'lg' : 'md'} description={topics.length > 1 ? t('editor.content.batch', { count: topics.length }) : first.title}
     footer={<><Button variant="ghost" onClick={() => save(true)}>{t('editor.content.remove')}</Button><Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button><Button disabled={equation ? busy || !preview : !value} onClick={() => save()}>{t('common.save')}</Button></>}>
     {equation ? <div className="space-y-4"><Field label="LaTeX" htmlFor="insert-equation" hint={t('editor.content.equationHint')}><Textarea id="insert-equation" autoFocus value={value} rows={4} maxLength={2000} onChange={(event) => { setValue(event.target.value); setPreview(undefined); }} /></Field>
-      <div aria-label={t('editor.content.preview')} className="flex min-h-28 items-center justify-center overflow-auto rounded-xl border border-border bg-white p-5">{preview ? <img src={preview.src} alt={value} className="max-h-48 max-w-full" /> : <span className="text-sm text-neutral-500">{t(busy ? 'editor.content.rendering' : 'editor.content.preview')}</span>}</div></div> :
+      <div aria-label={t('editor.content.preview')} className="flex min-h-28 items-center justify-center overflow-auto rounded-xl border border-border bg-white p-5">{preview ? <LoadingImage src={preview.src} alt={value} containerClassName="min-h-16" className="max-h-48 max-w-full" /> : busy ? <LoadingState small tone="soft" label={t('editor.content.rendering')} /> : <span className="text-sm text-neutral-500">{t('editor.content.preview')}</span>}</div></div> :
       <div role="group" aria-label={t(`editor.content.${action}`)} className={action === 'sticker' ? 'grid grid-cols-4 gap-3' : 'grid grid-cols-2 gap-3'}>{ids.map((id) => <button key={id} type="button" aria-label={t(`editor.content.art.${id}`)} aria-pressed={value === id}
         className="flex flex-col items-center gap-2 rounded-xl border border-border p-3 text-xs hover:bg-accent aria-pressed:border-primary aria-pressed:ring-2 aria-pressed:ring-primary/20"
-        onClick={() => setValue(id)}><img src={artwork(action as 'sticker' | 'illustration', id)!.src} alt="" className={action === 'sticker' ? 'size-12' : 'h-20 w-full object-contain'} />{t(`editor.content.art.${id}`)}</button>)}</div>}
+        onClick={() => setValue(id)}><LoadingImage src={artwork(action as 'sticker' | 'illustration', id)!.src} alt="" containerClassName={action === 'sticker' ? 'size-12' : 'h-20 w-full'} className="size-full object-contain" />{t(`editor.content.art.${id}`)}</button>)}</div>}
     {error ? <p role="alert" className="mt-3 text-sm text-destructive">{error}</p> : null}
   </Modal>;
 }

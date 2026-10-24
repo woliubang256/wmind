@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { avatarFallback, gravatarUrl, type AvatarUser } from '@/lib/avatar';
 import { cn } from '@/lib/utils';
+import { LoadingImage } from '@/components/ui/loading-image';
 
 export function UserAvatar({ user, className }: { user: AvatarUser; className?: string }) {
   const email = user.email.trim().toLowerCase();
@@ -21,7 +22,7 @@ export function UserAvatar({ user, className }: { user: AvatarUser; className?: 
     className={cn('relative inline-grid size-8 shrink-0 place-items-center overflow-hidden rounded-full align-middle text-sm font-medium text-white ring-1 ring-black/5', className)}
     style={{ backgroundColor: fallback.background }}>
     <span>{fallback.initial}</span>
-    {source ? <img key={source} src={source} alt="" referrerPolicy="no-referrer" className="absolute inset-0 size-full object-cover"
+    {source ? <LoadingImage key={source} src={source} alt="" referrerPolicy="no-referrer" containerClassName="absolute inset-0 size-full bg-muted" className="size-full object-cover"
       onError={() => setFailed((urls) => urls.includes(source) ? urls : [...urls, source])} /> : null}
   </span>;
 }
