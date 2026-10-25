@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/woliubang256/wmind/backend/internal/domain"
 	"github.com/woliubang256/wmind/backend/internal/imageproc"
 	"github.com/woliubang256/wmind/backend/internal/pkg/apperr"
 	"github.com/woliubang256/wmind/backend/internal/pkg/id"
@@ -43,6 +44,8 @@ type UploadedFile struct {
 // FileServiceConfig 是 FileService 的依赖。
 type FileServiceConfig struct {
 	Store     storage.Store
+	Maps      domain.MapRepo
+	Templates domain.TemplateRepo
 	MaxBytes  int64
 	MaxPixels int
 }
@@ -54,6 +57,8 @@ type FileServiceConfig struct {
 // 而且一张带透明通道的 PNG 转成 JPEG 会变成黑底。
 type FileService struct {
 	store     storage.Store
+	maps      domain.MapRepo
+	templates domain.TemplateRepo
 	maxBytes  int64
 	maxPixels int
 }
@@ -69,18 +74,21 @@ func NewFileService(cfg FileServiceConfig) (*FileService, error) {
 	if cfg.MaxPixels <= 0 {
 		cfg.MaxPixels = maxFilePixels
 	}
-	return &FileService{store: cfg.Store, maxBytes: cfg.MaxBytes, maxPixels: cfg.MaxPixels}, nil
+	return &FileService{store: cfg.Store, maps: cfg.Maps, templates: cfg.Templates, maxBytes: cfg.MaxBytes, maxPixels: cfg.MaxPixels}, nil
 }
 
 // MaxBytes 返回单文件上限，供 HTTP 层提前卡住请求体。
 func (s *FileService) MaxBytes() int64 { return s.maxBytes }
 
-// Upload 校验并保存一张图片，返回可公开访问的地址。
+// Upload 校验并保存一张图片，返回需要会话或分享授权的地址。
 //
 // 判定「是不是图片」靠解码而不是 Content-Type 或扩展名：后两者都由客户端
 // 提供，可以随便写。落盘扩展名也取自解码结果，否则「.png 结尾的 HTML」
 // 会被静态目录以 `image/png` 之外的类型回放。
-func (s *FileService) Upload(ctx context.Context, data []byte) (*UploadedFile, error) {
+func (s *FileService) Upload(ctx context.Context, ownerID int64, data []byte) (*UploadedFile, error) {
+	if ownerID <= 0 {
+		return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
+	}
 	if len(data) == 0 {
 		return nil, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
 			"file": "请选择图片文件",
@@ -103,10 +111,9 @@ func (s *FileService) Upload(ctx context.Context, data []byte) (*UploadedFile, e
 		return nil, apperr.Wrap(apperr.CodeFileTypeNotAllowed, imageproc.ErrUnsupportedImage)
 	}
 
-	// 文件名用纯随机量而不是 ULID：ULID 前 48 位是时间戳，同一毫秒内的
-	// 文件可以按时间猜出来，而这里的 URL 是**唯一**的访问凭证。
+	// 属主来自认证上下文；随机量避免枚举，不能代替读取时的权限检查。
 	uid := id.Random()
-	key := fmt.Sprintf("file_%s%s", uid, ext)
+	key := fmt.Sprintf("file_%d_%s%s", ownerID, uid, ext)
 	url, err := s.store.Save(ctx, key, data)
 	if err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)

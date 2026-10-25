@@ -60,7 +60,7 @@ func redactedQuery(raw string) string {
 		return "[REDACTED]"
 	}
 	for key := range values {
-		if strings.EqualFold(key, "psw") {
+		if strings.EqualFold(key, "psw") || strings.EqualFold(key, "share") || strings.EqualFold(key, "access") {
 			values.Set(key, "[REDACTED]")
 		}
 	}

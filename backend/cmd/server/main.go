@@ -226,7 +226,7 @@ func run() error {
 
 	// 通用图片上传复用同一个存储实现（同一个目录、同一个 /uploads 前缀）：
 	// 头像与导入图片的差别只在「要不要裁剪」，落盘方式一模一样。
-	fileSvc, err := service.NewFileService(service.FileServiceConfig{Store: avatarStore})
+	fileSvc, err := service.NewFileService(service.FileServiceConfig{Store: avatarStore, Maps: mapRepo, Templates: templateRepo})
 	if err != nil {
 		return err
 	}
@@ -241,7 +241,7 @@ func run() error {
 	}
 
 	mapSvc, err := service.NewMapService(service.MapServiceConfig{
-		Maps: mapRepo, Limits: settingsSvc, TrashPolicy: settingsSvc,
+		Maps: mapRepo, Limits: settingsSvc, TrashPolicy: settingsSvc, Assets: fileSvc,
 	})
 	if err != nil {
 		return err
@@ -339,6 +339,7 @@ func run() error {
 		Themes:           handler.NewThemeHandler(themeSvc),
 		Templates:        handler.NewTemplateHandler(templateSvc),
 		Files:            handler.NewFileHandler(fileSvc),
+		Media:            handler.NewMediaHandler(fileSvc, authSvc, shareSvc, cfg.Storage.Dir),
 		Shares:           handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
 	srv := &http.Server{

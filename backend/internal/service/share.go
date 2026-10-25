@@ -332,6 +332,10 @@ func (s *ShareService) Revoke(ctx context.Context, shareUID string, ownerID int6
 // 失效四态（令牌不存在 / 已撤销 / 已过期 / 导图已删除）返回**同一个**
 // 404 SHARE_NOT_FOUND，不区分原因：区分了就等于告诉外人「这个令牌曾经存在」。
 func (s *ShareService) ReadPublic(ctx context.Context, token, accessToken, ip string) (*PublicShare, error) {
+	return s.readPublic(ctx, token, accessToken, ip, true)
+}
+
+func (s *ShareService) readPublic(ctx context.Context, token, accessToken, ip string, countView bool) (*PublicShare, error) {
 	if err := s.requireEnabled(); err != nil {
 		return nil, err
 	}
@@ -363,7 +367,7 @@ func (s *ShareService) ReadPublic(ctx context.Context, token, accessToken, ip st
 	//
 	// 计数失败不影响这次访问：访客要的是内容，不是统计的准确性。刻意吞掉
 	// 错误也不打日志——一条每 30 分钟最多出现一次的写失败不值得污染日志。
-	if s.views == nil || s.views.Mark(shareViewKey(share.Token, ip)) {
+	if countView && (s.views == nil || s.views.Mark(shareViewKey(share.Token, ip))) {
 		_ = s.shares.RecordView(ctx, share.ID, now)
 	}
 

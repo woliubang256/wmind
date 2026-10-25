@@ -30,6 +30,8 @@ info, err := imageproc.Inspect(data, maxPixels)   // image.DecodeConfig
 
 ### 后端：文件名用 128 位随机串，不用 ULID
 
+此处的公开读取理由由[私有媒体授权](../../implemented/bug-fix/2026-10-26-wmind-private-media-access.md)部分取代：随机量继续防枚举，新文件额外绑定服务端属主，读取逐次鉴权；保留下面的历史取舍，不能再用“随机不可猜”代替授权。
+
 `/uploads` 是公开可读的（图片要能在 `<image href>` 里直接用，不能带 cookie），URL 本身就是唯一的凭证。ULID 前 48 位是时间戳，同毫秒内生成的 ID 前缀相同，剩下的随机位不足以当凭证用。`id.Random()` 用 `crypto/rand` 出 32 位十六进制，128 位全随机。
 
 ### 部署：上传路径由 API 提供，Nginx 保留完整 URI 转发

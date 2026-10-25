@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -45,6 +46,7 @@ type authTestServer struct {
 	// uploads 是头像落盘的目录，测试用来断言「文件真的写出来了」。
 	uploads string
 	backups *backup.Manager
+	db      *sql.DB
 }
 
 func newAuthTestServer(t *testing.T) *authTestServer {
@@ -121,8 +123,14 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 
 	// 导图服务：Limits 传真实 settings，这样「导图数量上限」也是真的从
 	// 站点设置里读出来的（默认 0 = 不限），测试不会因为上限差异而漂移。
+	fileSvc, err := service.NewFileService(service.FileServiceConfig{
+		Store: avatarStore, Maps: sqlite.NewMapRepository(db), Templates: sqlite.NewTemplateRepository(db),
+	})
+	if err != nil {
+		t.Fatalf("NewFileService: %v", err)
+	}
 	mapSvc, err := service.NewMapService(service.MapServiceConfig{
-		Maps: sqlite.NewMapRepository(db), Limits: settingsSvc, TrashPolicy: settingsSvc,
+		Maps: sqlite.NewMapRepository(db), Limits: settingsSvc, TrashPolicy: settingsSvc, Assets: fileSvc,
 	})
 	if err != nil {
 		t.Fatalf("NewMapService: %v", err)
@@ -141,11 +149,6 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	})
 	if err != nil {
 		t.Fatalf("NewTemplateService: %v", err)
-	}
-
-	fileSvc, err := service.NewFileService(service.FileServiceConfig{Store: avatarStore})
-	if err != nil {
-		t.Fatalf("NewFileService: %v", err)
 	}
 
 	// 分享服务：Policy 传真实 settings，这样「关闭分享」这类站点开关在测试里
@@ -211,6 +214,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Themes:           handler.NewThemeHandler(themeSvc),
 		Templates:        handler.NewTemplateHandler(templateSvc),
 		Files:            handler.NewFileHandler(fileSvc),
+		Media:            handler.NewMediaHandler(fileSvc, svc, shareSvc, uploads),
 		Shares:           handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
 
@@ -222,7 +226,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("创建 Cookie jar: %v", err)
 	}
 	return &authTestServer{
-		t: t, server: server, router: router, uploads: uploads, backups: backups,
+		t: t, server: server, router: router, uploads: uploads, backups: backups, db: db,
 		client: &http.Client{Jar: jar, Timeout: 10 * time.Second},
 	}
 }

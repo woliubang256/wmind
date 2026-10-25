@@ -21,12 +21,12 @@ import (
 //     生成器会在客户端那侧才炸；
 //  3. 每个 path 都在 `/api/v1` 下，不带查询串。
 //
-// 静态文件路由（`/uploads/*filepath`）不算 API：它由静态中间件直接回文件，
+// 媒体文件路由（`/uploads/:key`）不算 API：它按权限直接回文件，
 // 不进信封、不参与版本化。
 
 const specPath = "../../../docs/openapi.yaml"
 
-// apiOperationCount 是 OpenAPI 文档里声明的接口数量（不含 `/uploads/*filepath`）。
+// apiOperationCount 是 OpenAPI 文档里声明的接口数量（不含 `/uploads/:key`）。
 //
 // 钉住它是为了让「加了接口忘了改文档」多一道拦网：真加了一个接口，改这个
 // 常量时手会停一下，多半就会顺手去更新 docs/04 §5 与 docs/openapi.yaml。
@@ -34,7 +34,7 @@ const apiOperationCount = 66
 
 // notAPI 是不进 OpenAPI 的路由。
 var notAPI = map[string]bool{
-	"/uploads/*filepath": true,
+	"/uploads/:key": true,
 }
 
 // httpVerbs 是 OpenAPI 里表示操作的键。同一个 path 下还有 `parameters`、

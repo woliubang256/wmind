@@ -545,8 +545,13 @@ func TestMapThumbnailRoundTrip(t *testing.T) {
 		}
 	}
 
+	uploadStatus, uploaded := s.uploadFile(token, "file", "thumb.png", "image/png", pngBytes(t, 4, 4))
+	if uploadStatus != http.StatusOK {
+		t.Fatalf("upload thumbnail = %d", uploadStatus)
+	}
+	thumbnail := uploaded.Data["url"].(string)
 	status, body := s.do(http.MethodPut, "/api/v1/maps/"+uid+"/thumbnail", token, map[string]any{
-		"thumbnailUrl": "/uploads/thumb.png",
+		"thumbnailUrl": thumbnail,
 	})
 	if status != http.StatusNoContent {
 		t.Fatalf("设置缩略图 = %d %#v", status, body.Error)
@@ -563,7 +568,7 @@ func TestMapThumbnailRoundTrip(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("读取 = %d %#v", status, body.Error)
 	}
-	if got, _ := body.Data["thumbnailUrl"].(string); got != "/uploads/thumb.png" {
+	if got, _ := body.Data["thumbnailUrl"].(string); got != thumbnail {
 		t.Fatalf("保存后缩略图 = %q; 期望原样保留", got)
 	}
 

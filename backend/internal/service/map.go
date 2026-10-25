@@ -126,6 +126,11 @@ type TrashPolicy interface {
 	TrashRetentionDays() int
 }
 
+type MapAssets interface {
+	ValidateDocument(context.Context, int64, []byte) error
+	ValidateURL(context.Context, int64, string) error
+}
+
 // MapServiceConfig 是 MapService 的依赖。
 type MapServiceConfig struct {
 	Maps             domain.MapRepo
@@ -133,6 +138,7 @@ type MapServiceConfig struct {
 	TrashPolicy      TrashPolicy
 	Now              Clock
 	MaxDocumentBytes int64
+	Assets           MapAssets
 }
 
 // MapService 处理导图的增删改查。
@@ -145,6 +151,7 @@ type MapService struct {
 	trashPolicy      TrashPolicy
 	now              Clock
 	maxDocumentBytes int64
+	assets           MapAssets
 }
 
 // NewMapService 构造导图服务。
@@ -160,7 +167,7 @@ func NewMapService(cfg MapServiceConfig) (*MapService, error) {
 	}
 	return &MapService{
 		maps: cfg.Maps, limits: cfg.Limits, trashPolicy: cfg.TrashPolicy, now: cfg.Now,
-		maxDocumentBytes: cfg.MaxDocumentBytes,
+		maxDocumentBytes: cfg.MaxDocumentBytes, assets: cfg.Assets,
 	}, nil
 }
 
@@ -230,6 +237,11 @@ func (s *MapService) Create(ctx context.Context, ownerID int64, in CreateMapInpu
 	if err != nil {
 		return nil, err
 	}
+	if s.assets != nil {
+		if err := s.assets.ValidateDocument(ctx, ownerID, in.Document); err != nil {
+			return nil, err
+		}
+	}
 
 	title := normalizeTitle(in.Title)
 	now := s.now()
@@ -268,12 +280,22 @@ func (s *MapService) Get(ctx context.Context, uid string, ownerID int64) (*domai
 // details，前端据此显示「你的版本 v12、服务器 v15」。不回读的话前端只知道
 // 「冲突了」，不知道差多少，也就无法判断该覆盖还是该另存。
 func (s *MapService) Save(ctx context.Context, uid string, ownerID int64, in SaveMapInput) (*domain.Map, error) {
+	if s.assets != nil {
+		if _, err := s.Get(ctx, uid, ownerID); err != nil {
+			return nil, err
+		}
+	}
 	if int64(len(in.Document)) > s.maxDocumentBytes {
 		return nil, apperr.New(apperr.CodeDocumentTooLarge, "").WithDetail("maxBytes", s.maxDocumentBytes)
 	}
 	nodeCount, err := validateDocument(in.Document)
 	if err != nil {
 		return nil, err
+	}
+	if s.assets != nil {
+		if err := s.assets.ValidateDocument(ctx, ownerID, in.Document); err != nil {
+			return nil, err
+		}
 	}
 
 	saved, err := s.maps.UpdateWithVersion(ctx, domain.UpdateMapInput{
@@ -325,6 +347,11 @@ const maxThumbnailURLRunes = 512
 // 让它只能指向本站，是成本最低的一条防线。`//evil.com/x.png` 这种协议相对
 // URL 一并拒掉，它同样会指到站外。
 func (s *MapService) UpdateThumbnail(ctx context.Context, uid string, ownerID int64, thumbnailURL string) error {
+	if s.assets != nil {
+		if _, err := s.Get(ctx, uid, ownerID); err != nil {
+			return err
+		}
+	}
 	thumbnailURL = strings.TrimSpace(thumbnailURL)
 	if thumbnailURL != "" {
 		if !strings.HasPrefix(thumbnailURL, "/") || strings.HasPrefix(thumbnailURL, "//") {
@@ -336,6 +363,11 @@ func (s *MapService) UpdateThumbnail(ctx context.Context, uid string, ownerID in
 			return apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
 				"thumbnailUrl": "地址过长",
 			})
+		}
+	}
+	if s.assets != nil {
+		if err := s.assets.ValidateURL(ctx, ownerID, thumbnailURL); err != nil {
+			return err
 		}
 	}
 	return mapMapError(s.maps.UpdateThumbnail(ctx, uid, ownerID, thumbnailURL, s.now()))

@@ -11,6 +11,7 @@
 
 import i18n from '@/lib/i18n';
 import type { Sheet, Topic, WmindDocument } from '../model/types';
+import { withoutShareCredentials } from './assets';
 
 /** 一层缩进。两格：Markdown 里 2 空格足以区分层级，4 格会让深层内容跑得很远。 */
 const INDENT = '  ';
@@ -48,7 +49,7 @@ function inlineOf(topic: Topic): string {
   if (topic.href !== null && topic.href !== '') {
     parts.push(`[${title}](${topic.href})`);
   } else if (topic.image !== null && topic.image.src !== '') {
-    parts.push(`![${title}](${topic.image.src})`);
+    parts.push(`![${title}](${withoutShareCredentials(topic.image.src)})`);
   } else {
     parts.push(title);
   }

@@ -146,16 +146,14 @@ export function applyImageSources(
   ctx: ExportContext,
   sources: ReadonlyMap<string, string>,
 ): ExportContext {
-  if (sources.size === 0) return ctx;
-
   let changed = false;
   const sheets = ctx.sheets.map((sheet) => {
     let sizes = sheet.layout.sizes;
     for (const [id, size] of sheet.layout.sizes) {
       const src = size.image?.src;
       if (src === undefined) continue;
-      const replacement = sources.get(src);
-      if (replacement === undefined) continue;
+      const replacement = sources.get(src) ?? withoutShareCredentials(src);
+      if (replacement === src) continue;
       if (sizes === sheet.layout.sizes) sizes = new Map(sheet.layout.sizes);
       sizes.set(id, { ...size, image: { ...size.image!, src: replacement } });
       changed = true;
@@ -168,6 +166,20 @@ export function applyImageSources(
   // 引用不变时返回原对象：`useMemo` 的依赖是它，白造一个新对象会让下游
   // 每轮都重算一次。
   return changed ? { ...ctx, sheets } : ctx;
+}
+
+/** Failed embeds must not distribute a share's temporary password proof in SVG. */
+export function withoutShareCredentials(src: string): string {
+  if (!/^\/uploads\/file_(?:[1-9][0-9]*_)?[a-f0-9]{32}\.(?:png|jpg|gif|webp)\?/.test(src)) return src;
+  const parsed = new URL(src, 'https://wmind.invalid');
+  let changed = false;
+  for (const key of [...parsed.searchParams.keys()]) {
+    if (key.toLowerCase() === 'share' || key.toLowerCase() === 'access') {
+      parsed.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  return changed ? parsed.pathname + parsed.search + parsed.hash : src;
 }
 
 /** 测试用：清掉模块级缓存。 */

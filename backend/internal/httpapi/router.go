@@ -63,6 +63,7 @@ type Deps struct {
 	Templates *handler.TemplateHandler
 	// Files 处理通用图片上传（导入时的图片还原）。
 	Files *handler.FileHandler
+	Media *handler.MediaHandler
 	// Shares 处理分享链接的增删改查与两个公开访问接口。
 	Shares *handler.ShareHandler
 }
@@ -120,11 +121,11 @@ func NewRouter(deps Deps) http.Handler {
 			middleware.NewRateLimiter(5, time.Minute, 5).Middleware(middleware.UserKey), deps.AI.Generate)
 	}
 
-	// 头像等上传文件由 API 直接提供。生产部署里 Nginx 把 /uploads/ 也代理到
-	// 本进程（见 deploy/nginx.conf），所以这里不需要额外的鉴权：头像本来就是
-	// 公开资源，URL 里带随机 uid，猜不到别人的。
-	if dir := deps.Config.Storage.Dir; dir != "" {
-		r.Static("/uploads", dir)
+	// Native images use the read-only media session or current share grant.
+	// Never restore a static-directory fallback: it bypasses revocation.
+	if deps.Media != nil {
+		r.GET("/uploads/:key", deps.Media.Get)
+		r.HEAD("/uploads/:key", deps.Media.Get)
 	}
 
 	return r

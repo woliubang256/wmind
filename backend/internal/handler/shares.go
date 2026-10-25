@@ -230,10 +230,15 @@ func (h *ShareHandler) PublicGet(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
+	document, err := service.ShareDocumentAssets(payload.Document, c.Param("token"), access)
+	if err != nil {
+		response.Fail(c, apperr.Wrap(apperr.CodeInternalError, err))
+		return
+	}
 	snapshot := h.settings.Snapshot()
 	response.OK(c, publicShareDTO{
 		Title:         payload.Title,
-		Document:      json.RawMessage(payload.Document),
+		Document:      json.RawMessage(document),
 		AllowDownload: payload.AllowDownload,
 		ShowNotes:     payload.ShowNotes,
 		SiteName:      snapshot.SiteName(),

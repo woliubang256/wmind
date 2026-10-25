@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDocument, createSheet, createTopic } from '../model/create';
 import type { TopicImage, WmindDocument } from '../model/types';
 import { DEFAULT_EXPORT_OPTIONS, buildExportContext } from './context';
+import { buildExportSvg } from './svg';
 import {
   applyImageSources,
   collectImageSources,
@@ -120,6 +121,18 @@ describe('抓取', () => {
 });
 
 describe('替换地址', () => {
+  it('抓取分享图片失败时导出不携带临时访问凭据', () => {
+    const src = '/uploads/file_1_0123456789abcdef0123456789abcdef.png?share=public-secret&access=password-proof';
+    const ctx = buildExportContext(docWithImages([{ src, width: 4, height: 4 }]), 'sheet-0', opts());
+    const result = applyImageSources(ctx, new Map());
+    expect(result.sheets[0]!.layout.sizes.get('c-0')!.image?.src).toBe(src.split('?')[0]);
+    const svg = buildExportSvg(result);
+    expect(svg).not.toContain('password-proof');
+    expect(svg).not.toContain('public-secret');
+    expect(ctx.sheets[0]!.layout.sizes.get('c-0')!.image?.src).toBe(src);
+    const embedded = applyImageSources(ctx, new Map([[src, PNG]]));
+    expect(embedded.sheets[0]!.layout.sizes.get('c-0')!.image?.src).toBe(PNG);
+  });
   it('把 src 换成 data: URL，尺寸不变', () => {
     const doc = docWithImages([{ src: '/uploads/a.png', width: 200, height: 100 }]);
     const ctx = buildExportContext(doc, 'sheet-0', opts());

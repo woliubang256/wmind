@@ -236,7 +236,7 @@ func TestFileUploadRejectsWrongFieldName(t *testing.T) {
 	}
 }
 
-func TestFileUploadIsPubliclyReadable(t *testing.T) {
+func TestFileUploadIsNotPubliclyReadable(t *testing.T) {
 	s := newAuthTestServer(t)
 	token := s.loginAs(testAdminEmail, testAdminPassword)
 
@@ -246,15 +246,15 @@ func TestFileUploadIsPubliclyReadable(t *testing.T) {
 	}
 	url, _ := body.Data["url"].(string)
 
-	// 换一个不带 Cookie 的客户端读：URL 本身就是凭证（128 位随机）。
+	// 随机地址不再是凭证；换一个不带 Cookie 的客户端必须拒绝。
 	anon := &http.Client{}
 	resp, err := anon.Get(s.server.URL + url)
 	if err != nil {
 		t.Fatalf("匿名取回: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("匿名取回 = %d; 期望 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("匿名取回 = %d; 期望 404", resp.StatusCode)
 	}
 }
 

@@ -13,9 +13,7 @@ import (
 
 // FileHandler 处理通用图片上传。
 //
-// 一期只需要 POST：文件由静态目录直接回放（与头像同一条 `/uploads` 映射），
-// 所以没有 GET/DELETE。等 M5 做缩略图与分享时，会补上 `files` 表与
-// `/api/v1/files/{uid}`（含属主校验与删除），届时这里的响应形状不变。
+// 读取由 MediaHandler 按会话、属主或当前分享权限授权。
 type FileHandler struct {
 	files    *service.FileService
 	maxBytes int64
@@ -31,6 +29,10 @@ func NewFileHandler(files *service.FileService) *FileHandler {
 // 请求：`multipart/form-data`，字段 `file`。
 // 响应：`{ uid, url, width, height, format, bytes }`。
 func (h *FileHandler) Upload(c *gin.Context) {
+	owner, ok := ownerID(c)
+	if !ok {
+		return
+	}
 	// 与头像一致：用 MaxBytesReader 提前卡住请求体，而不是先收完再判断。
 	// multipartSlack 是表单头与 boundary 的余量，落在余量里的文件由
 	// service 的字节检查兜住，两条路径都回 FILE_TOO_LARGE。
@@ -53,7 +55,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	uploaded, err := h.files.Upload(c.Request.Context(), data)
+	uploaded, err := h.files.Upload(c.Request.Context(), owner, data)
 	if err != nil {
 		response.Fail(c, err)
 		return

@@ -18,12 +18,12 @@ var ErrInvalidKey = errors.New("非法的存储键")
 
 // Store 是文件存储接口。
 //
-// Save 返回可直接放进响应里的公开 URL；Delete 对不存在的键返回 nil
+// Save 返回可直接放进响应里的资源 URL（读取权限由 HTTP 层校验）；Delete 对不存在的键返回 nil
 // （删除是幂等的，重复删除不该报错）。
 type Store interface {
 	Save(ctx context.Context, key string, data []byte) (string, error)
 	Delete(ctx context.Context, key string) error
-	// URL 返回键对应的公开地址，不检查文件是否存在。
+	// URL 返回键对应的资源地址，不检查文件是否存在。
 	URL(key string) string
 }
 
@@ -88,7 +88,7 @@ func (s *LocalStore) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-// URL 返回键对应的公开地址。
+// URL 返回键对应的资源地址。
 func (s *LocalStore) URL(key string) string {
 	return s.urlPrefix + "/" + key
 }

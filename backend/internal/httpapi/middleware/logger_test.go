@@ -38,3 +38,37 @@ func TestLoggerRedactsSharePasswordQuery(t *testing.T) {
 		})
 	}
 }
+
+func TestLoggerRedactsShareMediaCredentials(t *testing.T) {
+	for _, query := range []string{
+		"share=secret-share&access=secret-access&filter=mine",
+		"share=secret-share&share=second-share&access=secret-access&access=second-access",
+		"SHARE=secret-share&AcCeSs=secret-access",
+		"%73hare=secret-share&%61ccess=secret-access",
+		"share=secret-share&access=secret-access&bad=%zz",
+		"bad=foo;share=secret-share&access=secret-access",
+	} {
+		t.Run(query, func(t *testing.T) {
+			var buf bytes.Buffer
+			r := gin.New()
+			r.Use(Logger(slog.New(slog.NewJSONHandler(&buf, nil))))
+			r.GET("/uploads/file.png", func(c *gin.Context) { c.Status(http.StatusOK) })
+			r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/uploads/file.png?"+query, nil))
+			for _, secret := range []string{"secret-share", "second-share", "secret-access", "second-access"} {
+				if strings.Contains(buf.String(), secret) {
+					t.Fatalf("share media credential %q leaked into access log", secret)
+				}
+			}
+			var entry map[string]any
+			if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+				t.Fatal(err)
+			}
+			if entry["path"] != "/uploads/file.png" {
+				t.Fatal("path lost")
+			}
+			if strings.Contains(query, "filter=mine") && !strings.Contains(entry["query"].(string), "filter=mine") {
+				t.Fatal("non-sensitive query lost")
+			}
+		})
+	}
+}

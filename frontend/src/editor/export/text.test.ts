@@ -63,6 +63,18 @@ function reimportOpml(text: string): Topic {
 }
 
 describe('Markdown 导出', () => {
+  it('分享图片导出不保留临时凭据，普通外链不变', () => {
+    const sheet = createSheet({ id: 'sheet-0', title: '画布 0' });
+    const path = '/uploads/file_1_0123456789abcdef0123456789abcdef.png';
+    sheet.rootTopic.image = { src: path + '?share=secret-link&access=secret-proof', width: 4, height: 4 };
+    const markdown = exportMarkdown(docOf(sheet), sheet.id);
+    expect(markdown).toContain(path + ')');
+    expect(markdown).not.toContain('secret-link');
+    expect(markdown).not.toContain('secret-proof');
+    const remote = 'https://external.invalid/a.png?access=user-content';
+    sheet.rootTopic.image.src = remote;
+    expect(exportMarkdown(docOf(sheet), sheet.id)).toContain(remote);
+  });
   it('整体形状与 docs/06 §3.6 的示例逐字一致', () => {
     // 手搭而不是用 sheetWith：那个 helper 每条路径建一条链，写不出「一个分支两个子节点」。
     const sheet = createSheet({ id: 'sheet-0', title: '画布 0' });
