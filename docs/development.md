@@ -6,11 +6,13 @@
 
 正式版本以根目录 [VERSION](../VERSION) 为准，个人设置入口右侧显示正在运行的后端版本；直接 `go run` 的开发服务显示 `dev`。部署时在 `deploy/.env` 设置 `WMIND_VERSION=v1.0.0` 可固定版本；留为 `latest` 则拉取最新正式镜像。源码本地构建使用 `docker compose up -d --build`。
 
-普通提交和 PR 不触发 CI，推送 `v*` 标签才执行完整校验、构建并发布 GitHub Release。发布页包含自动分类的更新日志、Linux amd64/arm64 部署压缩包、SHA256SUMS，以及对应的 GHCR API/Web 多架构镜像。压缩包只包含二进制、静态前端、示例配置与部署脚本，使用方式见包内 RELEASE.md；解压前可执行 `sha256sum -c SHA256SUMS` 校验。
+普通提交和 PR 不触发 CI，推送 `v*` 标签才执行完整校验、构建并发布 GitHub Release。发布页包含按版本整理的更新日志、Linux amd64/arm64 部署压缩包、SHA256SUMS，以及对应的 GHCR API/Web 多架构镜像。压缩包只包含二进制、静态前端、示例配置与部署脚本，使用方式见包内 RELEASE.md；解压前可执行 `sha256sum -c SHA256SUMS` 校验。
 
 ```bash
 npm run version:next          # 同步 VERSION 和两个 package.json，不自动提交或打标签
 npm run version:check -- v1.0.1
+# 整理并审阅 changelogs/v1.0.1.md 后校验输出：
+node scripts/release.mjs changelog v1.0.1 release/CHANGELOG.md
 npm run test:release
 # 提交本次版本变更并通过相关本地检查后：
 git tag -a v1.0.1 -m "wmind v1.0.1"
@@ -18,6 +20,16 @@ git push origin main v1.0.1
 ```
 
 版本按十进制进位：`1.0.8 → 1.0.9 → 1.1.0`，`1.9.9 → 2.0.0`。只有所有校验、压缩包和镜像都成功后才创建正式 Release；失败时修复问题并跟进流水线，不把仅创建标签当成已发布。
+
+### 更新日志整理
+
+每个版本维护 `changelogs/vX.Y.Z.md`，格式参见 [v1.0.0](../changelogs/v1.0.0.md)。标题为 `# vX.Y.Z`，仅使用「新增功能 / 问题修复 / 性能改进」二级标题，条目用单行 `- 文案`，无内容的分类不写。
+
+发布前结合提交历史和实际代码，按功能归并多次实现与修复，改写为最终用户可见效果。文档、测试、CI、构建、维护和已被替代的中间方案不进入正式日志，不附提交哈希。首发概括完整已交付能力；新版本只写相对前一版的增量；同版本重发更新同一份完整摘要，不追加本轮提交。
+
+CI 在依赖安装和构建前校验整理稿；缺稿、版本错误、未知或空分类、完全重复的条目、占位和原样提交记录会阻止发布，不回退到 Git 历史，也不调用站点 AI。语义重复和描述准确性仍须发布前审阅，脚本校验不能替代整理。发布页、日志附件和包内 CHANGELOG.md 共用生成结果，打包前还会拒绝过期日志。
+
+仅调整现有 Release 页面正文时，不移动版本标签或替换附件；旧包内日志保持原样，待下次正式发布再统一更新，避免破坏已发布校验和。
 
 ## 常用命令
 
