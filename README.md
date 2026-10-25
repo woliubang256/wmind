@@ -1,39 +1,39 @@
 # wmind
 
-可自托管的思维导图系统。对标 XMind 的编辑体验，一条命令私有化部署。
+可自托管的在线思维导图工具，用于整理知识、梳理项目和分享想法。支持 Docker Compose 部署，数据由自己掌握。
 
-| | |
+[快速部署](#部署) · [使用手册](./docs/10-用户使用手册.md) · [部署指南](./docs/07-部署与运维.md) · [开发文档](./docs/README.md)
+
+## 主要功能
+
+- **导图编辑**：快捷键、拖拽、撤销重做与自动保存，支持概要、边界、联系线、备注、标签和附件。
+- **布局与外观**：9 种布局结构、19 套内置配色和自定义主题，支持浅色 / 深色模式与中英文切换。
+- **多画布与大纲**：一份文档管理多个画布，随时切换大纲视图，支持 ZEN 专注模式与模板复用。
+- **导入与导出**：导入 XMind / Markdown / OPML，导出 JPEG / PNG / SVG / PDF / XMind / Markdown / OPML，也可保存为 `.wmind` 文档。
+- **链接分享**：设置有效期、访问密码、下载与备注权限，访客可缩放画布、折叠和展开节点。
+- **私有部署与管理**：支持 SQLite / PostgreSQL、用户管理与双因素认证，提供 S3 / WebDAV 备份恢复、定时备份、保留份数和可选去重。
+
+PDF 导出为单页图片，文字不可选中。
+
+## 界面预览
+
+### 导图编辑
+
+![wmind 编辑器：产品规划导图、配色面板与多画布](./docs/screenshots/editor.png)
+
+### 链接分享
+
+![wmind 分享页：只读导图、画布切换与缩放控件](./docs/screenshots/share.png)
+
+## 技术栈
+
+| 模块 | 技术 |
 | --- | --- |
-| 后端 | Go 1.25 + Gin，模块化单体；**SQLite（默认）与 PostgreSQL 双方言** |
-| 前端 | React + TypeScript + Vite + Tailwind v4，纯 SPA，自带三档暗色模式（light / dark / system） |
-| 编辑器 | 自研 SVG 渲染 + 自研布局引擎（8 种结构、10 套配色） |
-| 格式 | 自有 `.wmind` 文档格式；导入 XMind / Markdown / OPML，导出 PNG / JPEG / SVG / PDF / Markdown / OPML（PDF 为单页图片，文字不可选中） |
-| 部署 | `docker compose up -d`，一期零外部依赖 |
-
-需求、架构、接口、部署的完整设计见 [`docs/`](./docs/README.md)，逐里程碑的进度与验收记录见
-[`docs/08-开发路线图.md`](./docs/08-开发路线图.md)。**只是想用起来的话，看
-[用户使用手册](./docs/10-用户使用手册.md)。**
-
-## 当前状态
-
-**M0–M6 的功能主体已完成。** 账号体系、编辑器内核、8 种结构与 10 套配色、导入导出、
-多画布与大纲视图、分享链接、模板、管理后台、无障碍、视口裁剪、备份恢复都已可用，
-并各自跑过验收。剩下的是几处需要外部环境的收尾（见下表 🟡 与 ⬜）。
-
-| 模块 | 状态 |
-| --- | --- |
-| 文档与架构决策 | ✅ v1.3 定稿，ADR 见 [docs/09](./docs/09-技术决策记录.md)；另有 [OpenAPI 3.1 契约](./docs/openapi.yaml)（49 个操作，测试比对路由表）与 [用户使用手册](./docs/10-用户使用手册.md) |
-| M0 基建：迁移、双 sqlc target、双方言仓储与契约测试、方言静态检查、CI | ✅ SQLite 全绿；PostgreSQL 由 CI 提供环境 |
-| M1 账号体系：注册/登录/刷新/登出/改密/头像、管理后台、审计、三档暗色 | ✅ |
-| M2 编辑器内核：SVG 渲染、布局引擎、拖拽、快捷键、撤销重做、自动保存 | ✅ |
-| M3 样式与主题：8 种结构、10 套配色、自定义主题、面板 | ✅ |
-| M4 导入导出：XMind 8/新版、Markdown、OPML；导出 SVG/PNG/JPEG/PDF/MD/OPML/XMind | ✅ PDF 走**栅格**路线（单页图片 + 手写容器），文字不可选中，界面已说明；矢量 PDF 需要 WOFF2→TTF 子集化工具，是独立工程，见 [docs/06](./docs/06-导入导出与主题系统.md) §3.5 |
-| M5 模板 / 多画布 / 大纲 / ZEN / 分享链接 | ✅ |
-| M6 无障碍、视口裁剪、错误兜底、备份与恢复 | ✅ 无障碍 23 条、裁剪 6 条、错误 3 条界面验收全过 |
-| 测试 | ✅ 前端 1081 条单测（66 个文件）；后端全绿；界面验收 204 条 / 10 套（`npm run e2e`）；仓储契约覆盖全部有代码的表 |
-| 两套 Compose / Dockerfile / Nginx | 🟡 配置已写，**本机没有 Docker，镜像构建与编排未实跑** |
-| PostgreSQL 完整回归 | ⬜ 需要 CI 提供实例 |
-| 多语言 | ✅ zh-CN / en-US 双语约 860 个键，界面内可切换（跟随浏览器 / 中文 / English），`<html lang>` 同步；守卫测试比对 key、占位符与源码引用 |
+| 后端 | Go 1.25 + Gin，模块化单体 |
+| 前端 | React + TypeScript + Vite + Tailwind CSS v4，纯 SPA |
+| 编辑器 | 自研 SVG 渲染与布局引擎 |
+| 数据库 | SQLite（默认）/ PostgreSQL |
+| 部署 | Docker Compose，支持 amd64 / arm64 |
 
 ## 快速开始
 
@@ -131,7 +131,7 @@ make verify-dialect  # 迁移 parity + 方言分层检查
 界面验收（需要后端与前端都起着，见 [`frontend/e2e/README.md`](./frontend/e2e/README.md)）：
 
 ```bash
-cd frontend && npm run e2e    # 十套 204 条，串行约 15 分钟
+cd frontend && npm run e2e
 ```
 
 ## 目录结构
@@ -152,7 +152,7 @@ wmind/
 │   │   └── pkg/              apperr / logger / id / reqid 等通用件
 │   └── db/                   两套迁移集、sqlc 配置与查询
 ├── frontend/                 React 前端（Vite + TypeScript + Tailwind v4，自建 UI 组件）
-│   └── e2e/                  界面验收脚本（十套 204 条，见 e2e/README.md）
+│   └── e2e/                  界面验收脚本，见 e2e/README.md
 ├── deploy/                   Compose、Dockerfile、Nginx 配置
 ├── docs/                     需求、架构、接口、部署文档
 └── .agents/                  架构决策笔记与校验脚本
@@ -180,3 +180,7 @@ service 与 handler 层只依赖 `domain` 中的接口，唯一的方言分叉�
 ## 许可
 
 [MIT](./LICENSE)
+
+## 社区
+
+[Linux DO](https://linux.do/)
