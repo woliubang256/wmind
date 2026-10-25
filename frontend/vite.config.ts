@@ -58,6 +58,8 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
+    // Vite injects its client before <meta>; the response header must protect it too.
+    headers: { 'Referrer-Policy': 'strict-origin' },
     port: 5173,
     strictPort: true,
     proxy: {
@@ -73,6 +75,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  preview: {
+    headers: { 'Referrer-Policy': 'strict-origin' },
   },
   test: {
     environment: 'node',

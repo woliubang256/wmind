@@ -60,6 +60,7 @@ const SUITE = [
   ['share-font-loading', '分享字体延迟 / 就绪后布局 / 保存视角'],
   ['share-defaults', '分享默认权限 / 期限 / 文案与异步配置'],
   ['share-password-management', '4位随机密码 / 查看复制与重设 / 旧哈希兼容'],
+  ['share-password-query', '密码链接预填 / URL清理 / 不自动验证与分享隔离'],
 ];
 
 function probe(url) {

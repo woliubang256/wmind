@@ -3,6 +3,8 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +18,7 @@ func Logger(log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := redactedQuery(c.Request.URL.RawQuery)
 
 		c.Next()
 
@@ -47,4 +49,20 @@ func Logger(log *slog.Logger) gin.HandlerFunc {
 			log.InfoContext(c.Request.Context(), "请求完成", attrs...)
 		}
 	}
+}
+
+func redactedQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "[REDACTED]"
+	}
+	for key := range values {
+		if strings.EqualFold(key, "psw") {
+			values.Set(key, "[REDACTED]")
+		}
+	}
+	return values.Encode()
 }

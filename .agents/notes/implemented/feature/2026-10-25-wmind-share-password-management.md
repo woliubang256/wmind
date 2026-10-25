@@ -12,6 +12,10 @@ Status: implemented
 
 随机生成默认4位，以浏览器 crypto.getRandomValues 无偏采样并拒绝不含全部三类的候选，保证大小写字母和数字齐全；熵源不可用时明确报错，不回退 Math.random。新建保留空密码和手动输入。输入框右侧放生成按钮，两处管理入口共用行内密码控件和重设弹窗，避免新增独占整行的说明或重复“需要密码”标签；明文只留内存，不写浏览器持久存储。旧密码不可查看时明确提示并允许重设，已撤销行不提供重设。
 
+可读密码由复制链接函数编码为 psw，保留其他查询与hash，不给非HTTP地址追加密码。公开页只预填、不自动验证；读取后replace清除全部psw并保留其他参数与hash。按分享token隔离组件状态，地址变化不会把上张分享的密码或凭证带入新分享；预填只存内存，sessionStorage仅保存验证后的访问令牌。浏览器页面和Web响应使用strict-origin引用策略，内置Nginx访问日志仅记录不带query的URI且不含Referer，应用日志屏蔽psw。外部代理、异常日志、发送方和浏览器初始导航仍可能记录完整链接，不能承诺消除所有泄露渠道；带密码链接等于同时发送两者。
+
+仅HTML meta不足以保护开发模式：Vite把热更新client注入到meta之前，真实浏览器复现其Referer仍带初始psw。因此dev和preview也设置响应头strict-origin，与生产Nginx一致；测试不排除这个早期子请求。
+
 数据库迁移新增 password_ciphertext，bcrypt password_hash 继续独立负责访客验证。AES-256-GCM 使用现有稳定安全密钥源（专用 2FA 密钥优先、JWT 密钥回退），但以独立用途派生密钥，AAD 绑定分享 UID 与属主。管理端 DTO 的 password 为字符串或 null，仅经过属主过滤后解密，响应 no-store；公开查询不读取密文，公开 DTO 不包含密码、哈希或密文。审计不记敏感值。
 
 旧行不回填虚假密码；旧哈希或密钥变更/密文损坏时仍要求密码，验证继续使用哈希，管理端显示不可查看并允许重设。重设原子写入哈希与密文，其他设置修改保留两者，清密码同时清除两者。密钥必须随部署备份并保持稳定。
@@ -37,6 +41,8 @@ Status: implemented
 - `go test ./internal/auth ./internal/service ./internal/httpapi ./internal/repository/sqlite -run 'TestShare|TestRepositoryContract' -count=1` 验证密文非明文、随机化、防篡改、防跨属主/分享交换、密钥用途隔离；错误密钥不阻断 bcrypt 和重设。
 - HTTP 先复现属主无法查看密码，再验证创建、两类列表、重设、null/省略、越权404、公开隔离与 no-store；仓储契约覆盖双方言密文映射，SQLite覆盖0005旧行升级到0006。
 - 前端 `share-password.test.ts` 验证1000份随机结果、三类齐全、无偏采样和安全随机失败；`share-password-management.mjs` 以全拦截夹具覆盖两处管理、旧哈希、失败/取消、刷新、清密码、原生dialog复制降级、中英文375px及明文不进持久化存储。`share-defaults.mjs` 回归默认值与异步草稿保护。
+- URL纯函数测试覆盖编码、重复参数、空/超长、伪协议与旧哈希；`share-password-query.mjs` 覆盖只预填、主动错误/正确验证、URL清理/刷新、跨token与同token导航、失效和无密码链接、API URL和子请求Referer不携带psw。应用日志与Nginx访问日志防泄露均先编写失败测试，再修至通过。
+- 完整前端95文件1355项测试、类型检查与生产构建通过；后端全量测试、vet、分享auth/service race通过。生成代码无漂移、方言边界、迁移序列、笔记、配色/字体及12项发布工具测试通过。公开预填夹具在dev与生产preview均验证；另回归分享默认、21项画布状态与34项导出品牌策略。PostgreSQL实库结构/契约和Nginx整栈冒烟在发布CI执行，本地未提供PostgreSQL/Docker。
 
 ## Consequences
 

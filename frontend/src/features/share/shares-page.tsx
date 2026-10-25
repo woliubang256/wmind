@@ -22,7 +22,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Icon } from '@/components/ui/icon';
 import { LoadingState } from '@/components/ui/loading-state';
 import { Badge, EmptyState, PageHeader, Panel } from '@/components/ui/panel';
-import { resolveShareUrl, shareApi, type ShareLink } from '@/lib/api/shares';
+import { shareUrlForCopy, shareApi, type ShareLink } from '@/lib/api/shares';
 import { shareKeys } from './queries';
 import { copyToClipboard } from './share-password';
 import { SharePasswordControl, SharePasswordResetDialog } from './share-password-controls';
@@ -53,7 +53,7 @@ export function SharesPage() {
   });
 
   const copy = async (link: ShareLink) => {
-    if (await copyToClipboard(resolveShareUrl(link.url))) {
+    if (await copyToClipboard(shareUrlForCopy(link))) {
       toast.success(t('share.copied'));
     } else {
       toast.error(t('share.copyFailed'));
@@ -99,7 +99,7 @@ export function SharesPage() {
                     </Badge>
                     {!link.allowDownload ? <Badge>{t('share.badge.noDownload')}</Badge> : null}
                   </div>
-                  <code className="mt-1.5 block truncate text-xs text-muted-foreground">{resolveShareUrl(link.url)}</code>
+                  <code className="mt-1.5 block truncate text-xs text-muted-foreground">{shareUrlForCopy(link)}</code>
                 </div>
 
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">

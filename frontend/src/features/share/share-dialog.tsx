@@ -24,7 +24,7 @@ import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/panel';
 import { Switch } from '@/components/ui/switch';
 import { fieldErrorsFrom } from '@/lib/api/errors';
-import { resolveShareUrl, shareApi, type ShareLink } from '@/lib/api/shares';
+import { shareUrlForCopy, shareApi, type ShareLink } from '@/lib/api/shares';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { shareKeys } from './queries';
 import { copyToClipboard } from './share-password';
@@ -119,7 +119,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
   const createError = create.error ? fieldErrorsFrom(create.error) : {};
 
   const copy = async (link: ShareLink) => {
-    const ok = await copyToClipboard(resolveShareUrl(link.url));
+    const ok = await copyToClipboard(shareUrlForCopy(link));
     if (!ok) {
       toast.error(t('share.copyFailed'));
       return;
@@ -177,7 +177,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
                 <p className="text-xs font-medium text-primary">{t('share.create.done')}</p>
                 <div className="mt-2 flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded-lg bg-background px-2 py-1.5 text-xs">{resolveShareUrl(created.url)}</code>
+                  <code className="min-w-0 flex-1 truncate rounded-lg bg-background px-2 py-1.5 text-xs">{shareUrlForCopy(created)}</code>
                   <Button size="sm" variant="outline" onClick={() => void copy(created)}>
                     <Icon name="copy" className="mr-1.5 size-4" />
                     {copiedUid === created.uid ? t('share.copied') : t('share.copy')}
@@ -199,7 +199,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
                 {items.map((link) => (
                   <li key={link.uid} className="rounded-xl border border-border/70 p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <code className="min-w-0 flex-1 truncate text-xs">{resolveShareUrl(link.url)}</code>
+                      <code className="min-w-0 flex-1 truncate text-xs">{shareUrlForCopy(link)}</code>
                       {link.revokedAt ? <Badge>{t('share.badge.revoked')}</Badge> : null}
                       <SharePasswordControl link={link} onReset={setResetting} />
                       <Badge tone={link.revokedAt ? 'neutral' : 'success'}>

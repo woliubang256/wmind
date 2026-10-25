@@ -27,6 +27,18 @@ test('备份根接口不重定向，恢复子接口保留独立上传限制', ()
   backupContract(config);
 });
 
+test('分享密码不进入内置访问日志或同源引用地址', () => {
+  const format = /log_format\s+wmind_privacy\s+([^;]+);/.exec(config)?.[1];
+  assert.ok(format, '显式隐私日志格式，不能继承含查询参数与Referer的combined格式');
+  assert.match(format, /\$request_method \$uri \$server_protocol/);
+  assert.doesNotMatch(format, /\$(?:request(?:_uri)?|args|query_string|http_referer)\b/);
+  assert.match(config, /access_log\s+\/var\/log\/nginx\/access\.log\s+wmind_privacy\s*;/);
+  assert.doesNotMatch(config, /strict-origin-when-cross-origin/);
+  assert.match(config, /Referrer-Policy "strict-origin"/);
+  const html = readFileSync(join(root, 'frontend/index.html'), 'utf8');
+  assert.match(html, /<meta name="referrer" content="strict-origin"\s*\/?\s*>/);
+});
+
 function uploadsContract(source) {
   // ^~ keeps uploaded file extensions out of regex static-file locations.
   const uploads = /location\s+\^~\s+\/uploads\/\s*\{([^}]+)\}/.exec(source)?.[1];

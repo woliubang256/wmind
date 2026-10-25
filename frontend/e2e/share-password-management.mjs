@@ -66,6 +66,8 @@ try {
   await created.getByText(generated, { exact: true }).waitFor();
   await created.getByRole('button', { name: '复制密码', exact: true }).click();
   assert.equal(await page.evaluate(() => window.__copied), generated);
+  await dialog.locator('li').filter({ has: created }).getByRole('button', { name: '复制链接', exact: true }).click();
+  assert.equal(new URL(await page.evaluate(() => window.__copied)).searchParams.get('psw'), generated);
   assert.equal(await dialog.locator('li').filter({ hasText: '/s/open' }).getByRole('button', { name: '重设密码', exact: true }).count(), 0);
   assert.equal(await dialog.locator('[data-share-password="revoked"]').getByRole('button', { name: '重设密码', exact: true }).count(), 0);
   await dialog.locator('[data-share-password="legacy"]').getByText('原密码不可查看', { exact: true }).waitFor();
@@ -97,6 +99,9 @@ try {
 
   await page.goto(`${BASE}/shares`);
   await page.locator('[data-share-password="legacy"]').getByText(resetPassword, { exact: true }).waitFor();
+  const myLink = page.locator('li').filter({ has: page.locator('[data-share-password="legacy"]') });
+  await myLink.getByRole('button', { name: '复制链接', exact: true }).click();
+  assert.equal(new URL(await page.evaluate(() => window.__copied)).searchParams.get('psw'), resetPassword);
   await page.reload();
   await page.locator('[data-share-password="legacy"]').getByText(resetPassword, { exact: true }).waitFor();
   await page.locator('[data-share-password="legacy"]').getByRole('button', { name: '重设密码', exact: true }).click();

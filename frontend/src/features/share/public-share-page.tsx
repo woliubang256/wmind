@@ -17,10 +17,10 @@
  * 选中、拖拽的插件根本没有被挂载。
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { produce } from 'immer';
 import { useQuery } from '@tanstack/react-query';
-import { useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ import { ApiError } from '@/lib/api/errors';
 import {
   clearShareAccess,
   readShareAccess,
+  readSharePasswordQuery,
   shareApi,
   writeShareAccess,
   type PublicShare,
@@ -91,9 +92,9 @@ function InvalidShare({ code }: { code: 'SHARE_NOT_FOUND' | 'SHARE_DISABLED' }) 
  * 后端对这个接口按 IP 限流 10 次/分钟，被限流时把 429 的提示原样显示出来
  * ——「等一会儿再试」比「密码错误」准确。
  */
-function PasswordGate({ token, onGranted }: { token: string; onGranted: (accessToken: string) => void }) {
+function PasswordGate({ token, initialPassword, onGranted }: { token: string; initialPassword: string; onGranted: (accessToken: string) => void }) {
   const { t } = useTranslation();
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(initialPassword);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
 
@@ -251,14 +252,25 @@ function ShareCanvas({ share }: { share: PublicShare }) {
 
 export function PublicSharePage() {
   const { token = '' } = useParams();
+  // Scope all transient state, including pending password verification, to its share.
+  return <PublicShareContent key={token} token={token} />;
+}
+
+function PublicShareContent({ token }: { token: string }) {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { config } = useSiteConfig();
   const [access, setAccess] = useState(() => readShareAccess(token));
+  const prefill = useMemo(() => readSharePasswordQuery(location.search), [location.search]);
+  const [passwordSeed, setPasswordSeed] = useState(() => ({ value: prefill.password, key: location.key }));
 
-  // 换令牌（比如从一个分享跳到另一个）时，凭证也要跟着换。
-  useEffect(() => {
-    setAccess(readShareAccess(token));
-  }, [token]);
+  // Keep the hint only in memory. Replace rather than push so Back cannot restore it.
+  useLayoutEffect(() => {
+    if (!prefill.present) return;
+    setPasswordSeed((current) => current.key === location.key ? current : { value: prefill.password, key: location.key });
+    void navigate({ pathname: location.pathname, search: prefill.search, hash: location.hash }, { replace: true, state: location.state });
+  }, [prefill, location, navigate]);
 
   const query = useQuery({
     queryKey: [...shareKeys.public(token), access],
@@ -272,6 +284,7 @@ export function PublicSharePage() {
   });
 
   const onGranted = useCallback((accessToken: string) => {
+    setPasswordSeed((current) => ({ ...current, value: '' }));
     setAccess(accessToken);
   }, []);
 
@@ -297,7 +310,7 @@ export function PublicSharePage() {
   if (query.error) {
     const code = query.error instanceof ApiError ? query.error.code : '';
     if (code === 'SHARE_PASSWORD_REQUIRED') {
-      return <PasswordGate token={token} onGranted={onGranted} />;
+      return <PasswordGate key={passwordSeed.key} token={token} initialPassword={passwordSeed.value} onGranted={onGranted} />;
     }
     if (code === 'SHARE_DISABLED') {
       return <InvalidShare code="SHARE_DISABLED" />;

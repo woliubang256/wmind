@@ -127,6 +127,31 @@ export function resolveShareUrl(url: string): string {
   return `${window.location.origin}${path}`;
 }
 
+/** A password-bearing link sends both credentials together. Never attach to non-HTTP URLs. */
+export function shareUrlForCopy(link: Pick<ShareLink, 'url' | 'hasPassword' | 'password'>): string {
+  const resolved = resolveShareUrl(link.url);
+  try {
+    const url = new URL(resolved);
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) return resolved;
+    url.searchParams.delete('psw');
+    if (link.hasPassword && link.password) url.searchParams.set('psw', link.password);
+    return url.toString();
+  } catch {
+    return resolved;
+  }
+}
+
+/** Pure parsing: callers keep the hint in memory and replace the URL, never auto-verify. */
+export function readSharePasswordQuery(search: string): { password: string; search: string; present: boolean } {
+  const params = new URLSearchParams(search);
+  const present = params.has('psw');
+  const value = params.get('psw') ?? '';
+  const password = Array.from(value).length <= 64 && new TextEncoder().encode(value).length <= 72 ? value : '';
+  params.delete('psw');
+  const remaining = params.toString();
+  return { password, search: remaining ? `?${remaining}` : '', present };
+}
+
 /** 分享页访问凭证在 sessionStorage 里的键。按令牌分开，避免多标签页互相覆盖。 */
 export function shareAccessStorageKey(token: string): string {
   return `wmind:share-access:${token}`;
