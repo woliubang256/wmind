@@ -153,10 +153,15 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	if err != nil {
 		t.Fatalf("NewShareTokenIssuer: %v", err)
 	}
+	sharePasswords, err := auth.NewSharePasswordCipher("http-test-secret-that-is-long-enough")
+	if err != nil {
+		t.Fatal(err)
+	}
 	shareSvc, err := service.NewShareService(service.ShareServiceConfig{
 		Shares: sqlite.NewShareRepository(db), Maps: sqlite.NewMapRepository(db),
 		Policy: settingsSvc, Tokens: shareTokens,
-		Views: service.NewViewDeduper(30*time.Minute, nil),
+		Passwords: sharePasswords,
+		Views:     service.NewViewDeduper(30*time.Minute, nil),
 	})
 	if err != nil {
 		t.Fatalf("NewShareService: %v", err)

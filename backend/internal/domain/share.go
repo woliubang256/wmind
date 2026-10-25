@@ -25,9 +25,12 @@ type ShareLink struct {
 
 	// PasswordHash 为空串表示无访问密码。
 	//
-	// 存 bcrypt 哈希而不是明文：分享密码通常是「随手设的四位数字」，
-	// 明文落库意味着一次库泄露就能把用户在其他站点的同款密码一起带走。
-	PasswordHash string
+	// bcrypt 独立负责访客验证；密文仅供属主管理接口解密，不读入公开查询。
+	PasswordHash       string `json:"-"`
+	PasswordCiphertext string `json:"-"`
+	// Password 仅在属主服务返回值内存中填充，仓储不得保存明文。
+	// nil 表示未设密码、旧哈希或密文不可解密，HasPassword 仍由哈希决定。
+	Password *string `json:"-"`
 
 	AllowDownload bool
 	ShowNotes     bool
@@ -97,15 +100,16 @@ type ShareDocument struct {
 
 // CreateShareInput 是创建分享链接的入参。
 type CreateShareInput struct {
-	UID           string
-	Token         string
-	MapID         int64
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload bool
-	ShowNotes     bool
-	ExpiresAt     *time.Time
-	Now           time.Time
+	UID                string
+	Token              string
+	MapID              int64
+	OwnerID            int64
+	PasswordHash       string
+	PasswordCiphertext string
+	AllowDownload      bool
+	ShowNotes          bool
+	ExpiresAt          *time.Time
+	Now                time.Time
 }
 
 // UpdateShareInput 是改写分享设置的入参。
@@ -113,12 +117,13 @@ type CreateShareInput struct {
 // 每个字段都是「合并后的最终值」，不是补丁：仓储只做一次全量写入
 // （原因见 queries/shared/shares.sql 里 UpdateShare 的注释）。
 type UpdateShareInput struct {
-	UID           string
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload bool
-	ShowNotes     bool
-	ExpiresAt     *time.Time
+	UID                string
+	OwnerID            int64
+	PasswordHash       string
+	PasswordCiphertext string
+	AllowDownload      bool
+	ShowNotes          bool
+	ExpiresAt          *time.Time
 }
 
 // ShareRepo 是分享链接仓储接口。

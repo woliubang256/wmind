@@ -20,17 +20,17 @@
 
 -- name: CreateShare :one
 INSERT INTO share_links (
-  uid, token, map_id, owner_id, password_hash, allow_download, show_notes,
+  uid, token, map_id, owner_id, password_hash, password_ciphertext, allow_download, show_notes,
   expires_at, created_at
 ) VALUES (
   sqlc.arg(uid), sqlc.arg(token), sqlc.arg(map_id), sqlc.arg(owner_id),
-  sqlc.arg(password_hash), sqlc.arg(allow_download), sqlc.arg(show_notes),
+  sqlc.arg(password_hash), sqlc.arg(password_ciphertext), sqlc.arg(allow_download), sqlc.arg(show_notes),
   sqlc.narg(expires_at), sqlc.arg(created_at)
 )
 RETURNING *;
 
 -- name: GetShareByUID :one
-SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
+SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash, s.password_ciphertext,
        s.allow_download, s.show_notes, s.expires_at, s.view_count,
        s.last_viewed_at, s.revoked_at, s.created_at,
        m.uid AS map_uid, m.title AS map_title
@@ -40,6 +40,7 @@ WHERE s.uid = sqlc.arg(uid) AND s.owner_id = sqlc.arg(owner_id);
 
 -- name: GetShareByToken :one
 -- The public read path. Returns the document in the same round trip: a second
+-- Never reads password_ciphertext: only owner-scoped management needs it.
 -- query would double the latency of the only request an anonymous visitor ever
 -- makes, and would let the two reads disagree if the map is saved in between.
 --
@@ -65,7 +66,7 @@ WHERE s.token = sqlc.arg(token);
 --
 -- `id DESC` breaks ties on created_at (millisecond resolution), otherwise a
 -- burst of links created in the same millisecond paginates non-deterministically.
-SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
+SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash, s.password_ciphertext,
        s.allow_download, s.show_notes, s.expires_at, s.view_count,
        s.last_viewed_at, s.revoked_at, s.created_at,
        m.uid AS map_uid, m.title AS map_title
@@ -78,7 +79,7 @@ ORDER BY s.created_at DESC, s.id DESC;
 -- The "my shares" page. The map_uid filter is optional; COALESCE keeps the
 -- comparison against the column so sqlc infers a real type instead of
 -- interface{} (see audit_logs.sql for the same trick).
-SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
+SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash, s.password_ciphertext,
        s.allow_download, s.show_notes, s.expires_at, s.view_count,
        s.last_viewed_at, s.revoked_at, s.created_at,
        m.uid AS map_uid, m.title AS map_title
@@ -118,6 +119,7 @@ WHERE map_id = sqlc.arg(map_id) AND revoked_at IS NULL;
 -- name: UpdateShare :one
 UPDATE share_links
 SET password_hash = sqlc.arg(password_hash),
+    password_ciphertext = sqlc.arg(password_ciphertext),
     allow_download = sqlc.arg(allow_download),
     show_notes = sqlc.arg(show_notes),
     expires_at = sqlc.narg(expires_at)

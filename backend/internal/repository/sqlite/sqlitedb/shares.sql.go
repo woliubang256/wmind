@@ -47,26 +47,27 @@ func (q *Queries) CountSharesByOwner(ctx context.Context, arg CountSharesByOwner
 const createShare = `-- name: CreateShare :one
 
 INSERT INTO share_links (
-  uid, token, map_id, owner_id, password_hash, allow_download, show_notes,
+  uid, token, map_id, owner_id, password_hash, password_ciphertext, allow_download, show_notes,
   expires_at, created_at
 ) VALUES (
   ?1, ?2, ?3, ?4,
-  ?5, ?6, ?7,
-  ?8, ?9
+  ?5, ?6, ?7, ?8,
+  ?9, ?10
 )
-RETURNING id, uid, token, map_id, owner_id, password_hash, allow_download, show_notes, expires_at, view_count, last_viewed_at, revoked_at, created_at
+RETURNING id, uid, token, map_id, owner_id, password_hash, allow_download, show_notes, expires_at, view_count, last_viewed_at, revoked_at, created_at, password_ciphertext
 `
 
 type CreateShareParams struct {
-	Uid           string
-	Token         string
-	MapID         int64
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload int64
-	ShowNotes     int64
-	ExpiresAt     *string
-	CreatedAt     string
+	Uid                string
+	Token              string
+	MapID              int64
+	OwnerID            int64
+	PasswordHash       string
+	PasswordCiphertext string
+	AllowDownload      int64
+	ShowNotes          int64
+	ExpiresAt          *string
+	CreatedAt          string
 }
 
 // share_links: queries shared by BOTH dialects.
@@ -95,6 +96,7 @@ func (q *Queries) CreateShare(ctx context.Context, arg CreateShareParams) (Share
 		arg.MapID,
 		arg.OwnerID,
 		arg.PasswordHash,
+		arg.PasswordCiphertext,
 		arg.AllowDownload,
 		arg.ShowNotes,
 		arg.ExpiresAt,
@@ -115,6 +117,7 @@ func (q *Queries) CreateShare(ctx context.Context, arg CreateShareParams) (Share
 		&i.LastViewedAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.PasswordCiphertext,
 	)
 	return i, err
 }
@@ -153,6 +156,7 @@ type GetShareByTokenRow struct {
 }
 
 // The public read path. Returns the document in the same round trip: a second
+// Never reads password_ciphertext: only owner-scoped management needs it.
 // query would double the latency of the only request an anonymous visitor ever
 // makes, and would let the two reads disagree if the map is saved in between.
 //
@@ -189,7 +193,7 @@ func (q *Queries) GetShareByToken(ctx context.Context, token string) (GetShareBy
 }
 
 const getShareByUID = `-- name: GetShareByUID :one
-SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
+SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash, s.password_ciphertext,
        s.allow_download, s.show_notes, s.expires_at, s.view_count,
        s.last_viewed_at, s.revoked_at, s.created_at,
        m.uid AS map_uid, m.title AS map_title
@@ -204,21 +208,22 @@ type GetShareByUIDParams struct {
 }
 
 type GetShareByUIDRow struct {
-	ID            int64
-	Uid           string
-	Token         string
-	MapID         int64
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload int64
-	ShowNotes     int64
-	ExpiresAt     *string
-	ViewCount     int64
-	LastViewedAt  *string
-	RevokedAt     *string
-	CreatedAt     string
-	MapUid        string
-	MapTitle      string
+	ID                 int64
+	Uid                string
+	Token              string
+	MapID              int64
+	OwnerID            int64
+	PasswordHash       string
+	PasswordCiphertext string
+	AllowDownload      int64
+	ShowNotes          int64
+	ExpiresAt          *string
+	ViewCount          int64
+	LastViewedAt       *string
+	RevokedAt          *string
+	CreatedAt          string
+	MapUid             string
+	MapTitle           string
 }
 
 func (q *Queries) GetShareByUID(ctx context.Context, arg GetShareByUIDParams) (GetShareByUIDRow, error) {
@@ -231,6 +236,7 @@ func (q *Queries) GetShareByUID(ctx context.Context, arg GetShareByUIDParams) (G
 		&i.MapID,
 		&i.OwnerID,
 		&i.PasswordHash,
+		&i.PasswordCiphertext,
 		&i.AllowDownload,
 		&i.ShowNotes,
 		&i.ExpiresAt,
@@ -245,7 +251,7 @@ func (q *Queries) GetShareByUID(ctx context.Context, arg GetShareByUIDParams) (G
 }
 
 const listSharesByMap = `-- name: ListSharesByMap :many
-SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
+SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash, s.password_ciphertext,
        s.allow_download, s.show_notes, s.expires_at, s.view_count,
        s.last_viewed_at, s.revoked_at, s.created_at,
        m.uid AS map_uid, m.title AS map_title
@@ -261,21 +267,22 @@ type ListSharesByMapParams struct {
 }
 
 type ListSharesByMapRow struct {
-	ID            int64
-	Uid           string
-	Token         string
-	MapID         int64
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload int64
-	ShowNotes     int64
-	ExpiresAt     *string
-	ViewCount     int64
-	LastViewedAt  *string
-	RevokedAt     *string
-	CreatedAt     string
-	MapUid        string
-	MapTitle      string
+	ID                 int64
+	Uid                string
+	Token              string
+	MapID              int64
+	OwnerID            int64
+	PasswordHash       string
+	PasswordCiphertext string
+	AllowDownload      int64
+	ShowNotes          int64
+	ExpiresAt          *string
+	ViewCount          int64
+	LastViewedAt       *string
+	RevokedAt          *string
+	CreatedAt          string
+	MapUid             string
+	MapTitle           string
 }
 
 // Includes revoked rows: the per-map dialog shows history, and hiding revoked
@@ -299,6 +306,7 @@ func (q *Queries) ListSharesByMap(ctx context.Context, arg ListSharesByMapParams
 			&i.MapID,
 			&i.OwnerID,
 			&i.PasswordHash,
+			&i.PasswordCiphertext,
 			&i.AllowDownload,
 			&i.ShowNotes,
 			&i.ExpiresAt,
@@ -323,7 +331,7 @@ func (q *Queries) ListSharesByMap(ctx context.Context, arg ListSharesByMapParams
 }
 
 const listSharesByOwner = `-- name: ListSharesByOwner :many
-SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
+SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash, s.password_ciphertext,
        s.allow_download, s.show_notes, s.expires_at, s.view_count,
        s.last_viewed_at, s.revoked_at, s.created_at,
        m.uid AS map_uid, m.title AS map_title
@@ -343,21 +351,22 @@ type ListSharesByOwnerParams struct {
 }
 
 type ListSharesByOwnerRow struct {
-	ID            int64
-	Uid           string
-	Token         string
-	MapID         int64
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload int64
-	ShowNotes     int64
-	ExpiresAt     *string
-	ViewCount     int64
-	LastViewedAt  *string
-	RevokedAt     *string
-	CreatedAt     string
-	MapUid        string
-	MapTitle      string
+	ID                 int64
+	Uid                string
+	Token              string
+	MapID              int64
+	OwnerID            int64
+	PasswordHash       string
+	PasswordCiphertext string
+	AllowDownload      int64
+	ShowNotes          int64
+	ExpiresAt          *string
+	ViewCount          int64
+	LastViewedAt       *string
+	RevokedAt          *string
+	CreatedAt          string
+	MapUid             string
+	MapTitle           string
 }
 
 // The "my shares" page. The map_uid filter is optional; COALESCE keeps the
@@ -384,6 +393,7 @@ func (q *Queries) ListSharesByOwner(ctx context.Context, arg ListSharesByOwnerPa
 			&i.MapID,
 			&i.OwnerID,
 			&i.PasswordHash,
+			&i.PasswordCiphertext,
 			&i.AllowDownload,
 			&i.ShowNotes,
 			&i.ExpiresAt,
@@ -450,20 +460,22 @@ func (q *Queries) RevokeShare(ctx context.Context, arg RevokeShareParams) (int64
 const updateShare = `-- name: UpdateShare :one
 UPDATE share_links
 SET password_hash = ?1,
-    allow_download = ?2,
-    show_notes = ?3,
-    expires_at = ?4
-WHERE uid = ?5 AND owner_id = ?6 AND revoked_at IS NULL
-RETURNING id, uid, token, map_id, owner_id, password_hash, allow_download, show_notes, expires_at, view_count, last_viewed_at, revoked_at, created_at
+    password_ciphertext = ?2,
+    allow_download = ?3,
+    show_notes = ?4,
+    expires_at = ?5
+WHERE uid = ?6 AND owner_id = ?7 AND revoked_at IS NULL
+RETURNING id, uid, token, map_id, owner_id, password_hash, allow_download, show_notes, expires_at, view_count, last_viewed_at, revoked_at, created_at, password_ciphertext
 `
 
 type UpdateShareParams struct {
-	PasswordHash  string
-	AllowDownload int64
-	ShowNotes     int64
-	ExpiresAt     *string
-	Uid           string
-	OwnerID       int64
+	PasswordHash       string
+	PasswordCiphertext string
+	AllowDownload      int64
+	ShowNotes          int64
+	ExpiresAt          *string
+	Uid                string
+	OwnerID            int64
 }
 
 // A full write of every mutable column, not a partial patch.
@@ -481,6 +493,7 @@ type UpdateShareParams struct {
 func (q *Queries) UpdateShare(ctx context.Context, arg UpdateShareParams) (ShareLink, error) {
 	row := q.db.QueryRowContext(ctx, updateShare,
 		arg.PasswordHash,
+		arg.PasswordCiphertext,
 		arg.AllowDownload,
 		arg.ShowNotes,
 		arg.ExpiresAt,
@@ -502,6 +515,7 @@ func (q *Queries) UpdateShare(ctx context.Context, arg UpdateShareParams) (Share
 		&i.LastViewedAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.PasswordCiphertext,
 	)
 	return i, err
 }

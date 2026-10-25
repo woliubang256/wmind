@@ -688,6 +688,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
     "token": "kJ8xQ2mNp4Vt7Zs1Rw9YbC",
     "url": "https://wmind.example.com/s/kJ8xQ2mNp4Vt7Zs1Rw9YbC",
     "hasPassword": true,
+    "password": "optional-pass",
     "allowDownload": true,
     "showNotes": true,
     "expiresAt": "2026-10-23T02:30:00Z",
@@ -698,6 +699,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 ```
 
 - `token` 明文返回（属主可随时复制），`url` 由 `site.base_url` 拼接。
+- `password` 仅在属主响应返回，均为 `Cache-Control: no-store`；无密码、旧哈希或密钥不可用时为 `null`。`hasPassword` 独立表示访问是否受保护，不能用 `password == null` 判断。创建/重设同时保存 bcrypt 与 AES-GCM 密文，公开接口不读取密文或返回密码。旧密码不可查看时可通过 PATCH 重设。
 - `site.base_url` **为空时 `url` 是相对路径**（`/s/<token>`），前端用 `window.location.origin` 补全。这是刻意的：反代后面的服务端看到的 `Host` 往往不是用户实际访问的域名（内网地址、容器名、端口都不对），在服务端猜绝对地址比让浏览器补更错。
 - `share.public_link_enabled = false` → 403 `SHARE_DISABLED`。
 - `share.require_password = true` 且未提供密码 → 422 `VALIDATION_FAILED`。

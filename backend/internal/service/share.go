@@ -61,7 +61,8 @@ type ShareServiceConfig struct {
 	Maps   domain.MapRepo
 	Policy SharePolicy
 	// Tokens 签发密码校验通过后的短期访问凭证。
-	Tokens *auth.ShareTokenIssuer
+	Tokens    *auth.ShareTokenIssuer
+	Passwords *auth.SharePasswordCipher
 	// Views 是访问计数去重表；为 nil 时不去重（每次访问都计数）。
 	Views *ViewDeduper
 	Now   Clock
@@ -73,12 +74,13 @@ type ShareServiceConfig struct {
 // 的做法一致（见 handler/settings.go）。审计要拿到请求 IP，而 IP 是 HTTP
 // 层的东西，不该渗进业务方法签名。
 type ShareService struct {
-	shares domain.ShareRepo
-	maps   domain.MapRepo
-	policy SharePolicy
-	tokens *auth.ShareTokenIssuer
-	views  *ViewDeduper
-	now    Clock
+	shares    domain.ShareRepo
+	maps      domain.MapRepo
+	policy    SharePolicy
+	tokens    *auth.ShareTokenIssuer
+	passwords *auth.SharePasswordCipher
+	views     *ViewDeduper
+	now       Clock
 }
 
 // NewShareService 构造分享服务。
@@ -92,12 +94,15 @@ func NewShareService(cfg ShareServiceConfig) (*ShareService, error) {
 	if cfg.Tokens == nil {
 		return nil, errors.New("ShareService 需要分享令牌签发器")
 	}
+	if cfg.Passwords == nil {
+		return nil, errors.New("ShareService 需要分享密码加密器")
+	}
 	if cfg.Now == nil {
 		cfg.Now = SystemClock
 	}
 	return &ShareService{
 		shares: cfg.Shares, maps: cfg.Maps, policy: cfg.Policy,
-		tokens: cfg.Tokens, views: cfg.Views, now: cfg.Now,
+		tokens: cfg.Tokens, passwords: cfg.Passwords, views: cfg.Views, now: cfg.Now,
 	}, nil
 }
 
@@ -171,16 +176,22 @@ func (s *ShareService) Create(ctx context.Context, mapUID string, ownerID int64,
 		return nil, err
 	}
 
+	uid := id.New()
+	ciphertext, err := s.encryptPassword(password, uid, ownerID)
+	if err != nil {
+		return nil, err
+	}
 	created, err := s.shares.Create(ctx, domain.CreateShareInput{
-		UID:           id.New(),
-		Token:         newShareToken(),
-		MapID:         target.ID,
-		OwnerID:       ownerID,
-		PasswordHash:  passwordHash,
-		AllowDownload: in.AllowDownload,
-		ShowNotes:     in.ShowNotes,
-		ExpiresAt:     expiresAt,
-		Now:           s.now(),
+		UID:                uid,
+		Token:              newShareToken(),
+		MapID:              target.ID,
+		OwnerID:            ownerID,
+		PasswordHash:       passwordHash,
+		PasswordCiphertext: ciphertext,
+		AllowDownload:      in.AllowDownload,
+		ShowNotes:          in.ShowNotes,
+		ExpiresAt:          expiresAt,
+		Now:                s.now(),
 	})
 	if err != nil {
 		return nil, mapShareError(err)
@@ -188,7 +199,7 @@ func (s *ShareService) Create(ctx context.Context, mapUID string, ownerID int64,
 	// RETURNING 不带 JOIN，这里补上（见 domain.ShareLink 的注释）。
 	created.MapUID = target.UID
 	created.MapTitle = target.Title
-	return created, nil
+	return s.ownerPassword(created), nil
 }
 
 // ListByMap 返回某张导图的全部分享链接（含已撤销的）。
@@ -200,6 +211,9 @@ func (s *ShareService) ListByMap(ctx context.Context, mapUID string, ownerID int
 	list, err := s.shares.ListByMap(ctx, target.ID, ownerID)
 	if err != nil {
 		return nil, mapShareError(err)
+	}
+	for i, link := range list {
+		list[i] = s.ownerPassword(link)
 	}
 	return list, nil
 }
@@ -215,6 +229,9 @@ func (s *ShareService) ListMine(ctx context.Context, ownerID int64, mapUID strin
 	if err != nil {
 		return nil, 0, mapShareError(err)
 	}
+	for i, link := range list {
+		list[i] = s.ownerPassword(link)
+	}
 	return list, total, nil
 }
 
@@ -226,12 +243,13 @@ func (s *ShareService) Update(ctx context.Context, shareUID string, ownerID int6
 	}
 
 	next := domain.UpdateShareInput{
-		UID:           current.UID,
-		OwnerID:       ownerID,
-		PasswordHash:  current.PasswordHash,
-		AllowDownload: current.AllowDownload,
-		ShowNotes:     current.ShowNotes,
-		ExpiresAt:     current.ExpiresAt,
+		UID:                current.UID,
+		OwnerID:            ownerID,
+		PasswordHash:       current.PasswordHash,
+		PasswordCiphertext: current.PasswordCiphertext,
+		AllowDownload:      current.AllowDownload,
+		ShowNotes:          current.ShowNotes,
+		ExpiresAt:          current.ExpiresAt,
 	}
 
 	if in.Password != nil {
@@ -246,6 +264,10 @@ func (s *ShareService) Update(ctx context.Context, shareUID string, ownerID int6
 			return nil, err
 		}
 		next.PasswordHash = hash
+		next.PasswordCiphertext, err = s.encryptPassword(password, current.UID, ownerID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if in.ExpiresInDays != nil {
 		expiresAt, err := s.expiryFrom(*in.ExpiresInDays)
@@ -268,7 +290,31 @@ func (s *ShareService) Update(ctx context.Context, shareUID string, ownerID int6
 	// 与 Create 同理：RETURNING 没有 JOIN，用读出来的那一行补上。
 	updated.MapUID = current.MapUID
 	updated.MapTitle = current.MapTitle
-	return updated, nil
+	return s.ownerPassword(updated), nil
+}
+
+func (s *ShareService) encryptPassword(password, uid string, ownerID int64) (string, error) {
+	if password == "" {
+		return "", nil
+	}
+	value, err := s.passwords.Encrypt(password, uid, ownerID)
+	if err != nil {
+		return "", apperr.Wrap(apperr.CodeInternalError, err)
+	}
+	return value, nil
+}
+
+// ownerPassword is used only after owner-scoped access. Legacy or damaged
+// ciphertext remains password-protected via bcrypt and can be reset by its owner.
+func (s *ShareService) ownerPassword(link *domain.ShareLink) *domain.ShareLink {
+	copy := *link
+	copy.Password = nil
+	if link.HasPassword() && link.PasswordCiphertext != "" {
+		if value, err := s.passwords.Decrypt(link.PasswordCiphertext, link.UID, link.OwnerID); err == nil {
+			copy.Password = &value
+		}
+	}
+	return &copy
 }
 
 // Revoke 撤销分享链接。

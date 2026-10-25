@@ -77,7 +77,8 @@ func (r *fakeShareRepo) Create(_ context.Context, in domain.CreateShareInput) (*
 	link := &domain.ShareLink{
 		ID: r.nextID, UID: in.UID, Token: in.Token, MapID: in.MapID, OwnerID: in.OwnerID,
 		PasswordHash: in.PasswordHash, AllowDownload: in.AllowDownload, ShowNotes: in.ShowNotes,
-		ExpiresAt: in.ExpiresAt, CreatedAt: in.Now,
+		PasswordCiphertext: in.PasswordCiphertext,
+		ExpiresAt:          in.ExpiresAt, CreatedAt: in.Now,
 	}
 	r.rows = append(r.rows, link)
 	return r.clone(link), nil
@@ -166,6 +167,7 @@ func (r *fakeShareRepo) Update(_ context.Context, in domain.UpdateShareInput) (*
 		return nil, domain.ErrNotFound
 	}
 	row.PasswordHash = in.PasswordHash
+	row.PasswordCiphertext = in.PasswordCiphertext
 	row.AllowDownload = in.AllowDownload
 	row.ShowNotes = in.ShowNotes
 	row.ExpiresAt = in.ExpiresAt
@@ -252,10 +254,15 @@ func newShareFixture(t *testing.T, policy SharePolicy) *shareFixture {
 	if err != nil {
 		t.Fatalf("NewShareTokenIssuer: %v", err)
 	}
+	passwords, err := auth.NewSharePasswordCipher("share-test-secret-that-is-long-enough")
+	if err != nil {
+		t.Fatal(err)
+	}
 	svc, err := NewShareService(ShareServiceConfig{
 		Shares: shares, Maps: maps, Policy: policy, Tokens: tokens,
-		Views: NewViewDeduper(DefaultShareViewWindow, clock.Now),
-		Now:   clock.Now,
+		Passwords: passwords,
+		Views:     NewViewDeduper(DefaultShareViewWindow, clock.Now),
+		Now:       clock.Now,
 	})
 	if err != nil {
 		t.Fatalf("NewShareService: %v", err)
@@ -481,6 +488,74 @@ func TestShareUpdateRejectsRevokedLink(t *testing.T) {
 	// 二次撤销也是 404：调用方不该以为「刚刚撤销成功」。
 	if err := f.svc.Revoke(context.Background(), created.UID, 1); codeOf(t, err) != apperr.CodeShareNotFound {
 		t.Fatalf("二次撤销 = %v，期望 SHARE_NOT_FOUND", err)
+	}
+}
+
+func TestShareOwnerPasswordEncryptionAndRecovery(t *testing.T) {
+	f := newShareFixture(t, defaultSharePolicy())
+	ctx := context.Background()
+	mapUID, _ := f.seedMap(t, 1, "密码")
+	created, err := f.svc.Create(ctx, mapUID, 1, CreateShareInput{Password: " Ab9x "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := f.shares.rows[0]
+	if stored.Password != nil || stored.PasswordCiphertext == "" || strings.Contains(stored.PasswordCiphertext, "Ab9x") || !auth.VerifyPassword(stored.PasswordHash, "Ab9x") {
+		t.Fatal("repository must store ciphertext and bcrypt, never plaintext")
+	}
+	if created.Password == nil || *created.Password != "Ab9x" {
+		t.Fatal("owner create password missing")
+	}
+	ciphertext := stored.PasswordCiphertext
+	notes := true
+	updated, err := f.svc.Update(ctx, created.UID, 1, UpdateShareInput{ShowNotes: &notes})
+	if err != nil || updated.PasswordCiphertext != ciphertext || updated.Password == nil || *updated.Password != "Ab9x" {
+		t.Fatalf("unrelated patch changed password: %v", err)
+	}
+	if _, err := f.svc.Update(ctx, created.UID, 2, UpdateShareInput{}); codeOf(t, err) != apperr.CodeShareNotFound {
+		t.Fatal("cross-owner access allowed")
+	}
+	for _, tc := range []string{"legacy", "corrupt", "wrong-key"} {
+		t.Run(tc, func(t *testing.T) {
+			stored.PasswordCiphertext = ciphertext
+			switch tc {
+			case "legacy":
+				stored.PasswordCiphertext = ""
+			case "corrupt":
+				stored.PasswordCiphertext = "invalid"
+			case "wrong-key":
+				f.svc.passwords, _ = auth.NewSharePasswordCipher(strings.Repeat("x", 32))
+			}
+			list, err := f.svc.ListByMap(ctx, mapUID, 1)
+			if err != nil || len(list) != 1 || list[0].Password != nil || !list[0].HasPassword() {
+				t.Fatalf("unavailable ciphertext must not remove protection: %v", err)
+			}
+			mine, _, err := f.svc.ListMine(ctx, 1, "", 1, 20)
+			if err != nil || mine[0].Password != nil {
+				t.Fatalf("list mine: %v", err)
+			}
+			if _, _, err := f.svc.VerifyPassword(ctx, created.Token, "Ab9x"); err != nil {
+				t.Fatalf("bcrypt must remain usable: %v", err)
+			}
+			if _, err := f.svc.ReadPublic(ctx, created.Token, "", "127.0.0.1"); codeOf(t, err) != apperr.CodeSharePasswordRequired {
+				t.Fatal("public gate bypassed")
+			}
+			next := "Cd8y"
+			reset, err := f.svc.Update(ctx, created.UID, 1, UpdateShareInput{Password: &next})
+			if err != nil || reset.Password == nil || *reset.Password != next {
+				t.Fatalf("reset unavailable password: %v", err)
+			}
+			if _, _, err := f.svc.VerifyPassword(ctx, created.Token, next); err != nil {
+				t.Fatalf("reset verification: %v", err)
+			}
+			// Restore the old hash for the next independent recovery case.
+			stored.PasswordHash = created.PasswordHash
+		})
+	}
+	empty := ""
+	cleared, err := f.svc.Update(ctx, created.UID, 1, UpdateShareInput{Password: &empty})
+	if err != nil || cleared.Password != nil || cleared.PasswordCiphertext != "" || cleared.HasPassword() {
+		t.Fatalf("clear must erase both forms: %v", err)
 	}
 }
 

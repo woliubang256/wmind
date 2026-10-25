@@ -39,6 +39,7 @@ type shareDTO struct {
 	MapUID        string  `json:"mapUid"`
 	MapTitle      string  `json:"mapTitle"`
 	HasPassword   bool    `json:"hasPassword"`
+	Password      *string `json:"password"`
 	AllowDownload bool    `json:"allowDownload"`
 	ShowNotes     bool    `json:"showNotes"`
 	ExpiresAt     *string `json:"expiresAt"`
@@ -53,6 +54,7 @@ func (h *ShareHandler) toDTO(link *domain.ShareLink) shareDTO {
 		UID: link.UID, Token: link.Token, URL: h.shares.ShareURL(link.Token),
 		MapUID: link.MapUID, MapTitle: link.MapTitle,
 		HasPassword:   link.HasPassword(),
+		Password:      link.Password,
 		AllowDownload: link.AllowDownload,
 		ShowNotes:     link.ShowNotes,
 		ExpiresAt:     formatTimePtr(link.ExpiresAt),
@@ -74,6 +76,7 @@ type createShareRequest struct {
 
 // Create 处理 POST /api/v1/maps/{uid}/shares。
 func (h *ShareHandler) Create(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	owner, ok := ownerID(c)
 	if !ok {
 		return
@@ -104,6 +107,7 @@ func (h *ShareHandler) Create(c *gin.Context) {
 
 // ListByMap 处理 GET /api/v1/maps/{uid}/shares。
 func (h *ShareHandler) ListByMap(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	owner, ok := ownerID(c)
 	if !ok {
 		return
@@ -124,6 +128,7 @@ func (h *ShareHandler) ListByMap(c *gin.Context) {
 
 // ListMine 处理 GET /api/v1/shares（「我的分享」）。
 func (h *ShareHandler) ListMine(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	owner, ok := ownerID(c)
 	if !ok {
 		return
@@ -153,6 +158,7 @@ type updateShareRequest struct {
 
 // Update 处理 PATCH /api/v1/shares/{uid}。
 func (h *ShareHandler) Update(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	owner, ok := ownerID(c)
 	if !ok {
 		return

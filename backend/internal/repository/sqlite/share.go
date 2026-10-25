@@ -20,7 +20,7 @@ func NewShareRepository(db *sql.DB) *ShareRepository { return &ShareRepository{d
 // 三种查询（按 uid / 按 map / 按属主）生成的 Go 结构体互不相同但字段完全
 // 一致，让它们各自写一遍映射只会得到三份会各自漂移的代码。
 func newSQLiteShare(
-	id int64, uid, token string, mapID, ownerID int64, passwordHash string,
+	id int64, uid, token string, mapID, ownerID int64, passwordHash, passwordCiphertext string,
 	allowDownload, showNotes int64, expiresAt *string, viewCount int64,
 	lastViewedAt, revokedAt *string, createdAt, mapUID, mapTitle string,
 ) (*domain.ShareLink, error) {
@@ -42,7 +42,7 @@ func newSQLiteShare(
 	}
 	return &domain.ShareLink{
 		ID: id, UID: uid, Token: token, MapID: mapID, OwnerID: ownerID,
-		PasswordHash: passwordHash,
+		PasswordHash: passwordHash, PasswordCiphertext: passwordCiphertext,
 		// SQLite 没有布尔类型，这两列是 INTEGER + CHECK (col IN (0,1))。
 		AllowDownload: allowDownload != 0,
 		ShowNotes:     showNotes != 0,
@@ -58,7 +58,7 @@ func newSQLiteShare(
 // 是哪张导图（创建），要么从读出来的那一行复制（改写）。
 func mapSQLiteShareRow(v sqlitedb.ShareLink) (*domain.ShareLink, error) {
 	return newSQLiteShare(
-		v.ID, v.Uid, v.Token, v.MapID, v.OwnerID, v.PasswordHash,
+		v.ID, v.Uid, v.Token, v.MapID, v.OwnerID, v.PasswordHash, v.PasswordCiphertext,
 		v.AllowDownload, v.ShowNotes, v.ExpiresAt, v.ViewCount,
 		v.LastViewedAt, v.RevokedAt, v.CreatedAt, "", "",
 	)
@@ -68,7 +68,7 @@ func mapSQLiteShares(rows []sqlitedb.ListSharesByOwnerRow) ([]*domain.ShareLink,
 	out := make([]*domain.ShareLink, 0, len(rows))
 	for _, row := range rows {
 		v, err := newSQLiteShare(
-			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, row.PasswordCiphertext,
 			row.AllowDownload, row.ShowNotes, row.ExpiresAt, row.ViewCount,
 			row.LastViewedAt, row.RevokedAt, row.CreatedAt, row.MapUid, row.MapTitle,
 		)
@@ -83,11 +83,12 @@ func mapSQLiteShares(rows []sqlitedb.ListSharesByOwnerRow) ([]*domain.ShareLink,
 func (r *ShareRepository) Create(ctx context.Context, in domain.CreateShareInput) (*domain.ShareLink, error) {
 	v, err := queries(ctx, r.db).CreateShare(ctx, sqlitedb.CreateShareParams{
 		Uid: in.UID, Token: in.Token, MapID: in.MapID, OwnerID: in.OwnerID,
-		PasswordHash:  in.PasswordHash,
-		AllowDownload: boolToSQLite(in.AllowDownload),
-		ShowNotes:     boolToSQLite(in.ShowNotes),
-		ExpiresAt:     sqliteOptionalTime(in.ExpiresAt),
-		CreatedAt:     sqliteTime(in.Now),
+		PasswordHash:       in.PasswordHash,
+		PasswordCiphertext: in.PasswordCiphertext,
+		AllowDownload:      boolToSQLite(in.AllowDownload),
+		ShowNotes:          boolToSQLite(in.ShowNotes),
+		ExpiresAt:          sqliteOptionalTime(in.ExpiresAt),
+		CreatedAt:          sqliteTime(in.Now),
 	})
 	if err != nil {
 		return nil, mapSQLiteError(err)
@@ -101,7 +102,7 @@ func (r *ShareRepository) GetByUID(ctx context.Context, uid string, ownerID int6
 		return nil, mapSQLiteError(err)
 	}
 	return newSQLiteShare(
-		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, row.PasswordCiphertext,
 		row.AllowDownload, row.ShowNotes, row.ExpiresAt, row.ViewCount,
 		row.LastViewedAt, row.RevokedAt, row.CreatedAt, row.MapUid, row.MapTitle,
 	)
@@ -113,7 +114,7 @@ func (r *ShareRepository) GetByToken(ctx context.Context, token string) (*domain
 		return nil, mapSQLiteError(err)
 	}
 	share, err := newSQLiteShare(
-		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, "",
 		row.AllowDownload, row.ShowNotes, row.ExpiresAt, row.ViewCount,
 		row.LastViewedAt, row.RevokedAt, row.CreatedAt, row.MapUid, row.MapTitle,
 	)
@@ -138,7 +139,7 @@ func (r *ShareRepository) ListByMap(ctx context.Context, mapID int64, ownerID in
 	out := make([]*domain.ShareLink, 0, len(rows))
 	for _, row := range rows {
 		v, err := newSQLiteShare(
-			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, row.PasswordCiphertext,
 			row.AllowDownload, row.ShowNotes, row.ExpiresAt, row.ViewCount,
 			row.LastViewedAt, row.RevokedAt, row.CreatedAt, row.MapUid, row.MapTitle,
 		)
@@ -175,12 +176,13 @@ func (r *ShareRepository) CountActiveByMap(ctx context.Context, mapID int64) (in
 
 func (r *ShareRepository) Update(ctx context.Context, in domain.UpdateShareInput) (*domain.ShareLink, error) {
 	v, err := queries(ctx, r.db).UpdateShare(ctx, sqlitedb.UpdateShareParams{
-		PasswordHash:  in.PasswordHash,
-		AllowDownload: boolToSQLite(in.AllowDownload),
-		ShowNotes:     boolToSQLite(in.ShowNotes),
-		ExpiresAt:     sqliteOptionalTime(in.ExpiresAt),
-		Uid:           in.UID,
-		OwnerID:       in.OwnerID,
+		PasswordHash:       in.PasswordHash,
+		PasswordCiphertext: in.PasswordCiphertext,
+		AllowDownload:      boolToSQLite(in.AllowDownload),
+		ShowNotes:          boolToSQLite(in.ShowNotes),
+		ExpiresAt:          sqliteOptionalTime(in.ExpiresAt),
+		Uid:                in.UID,
+		OwnerID:            in.OwnerID,
 	})
 	if err != nil {
 		return nil, mapSQLiteError(err)

@@ -10,6 +10,8 @@ Status: proposed
 
 ## Proposal
 
+密码只存 bcrypt 的部分由[分享密码管理](../../implemented/feature/2026-10-25-wmind-share-password-management.md)取代：验证仍用哈希，新增属主可查看的加密副本。只读形态、ACL取舍与公开失效规则仍保留本篇理由。
+
 **形态：公开只读链接，不是指定用户共享。**
 
 拿到链接的人可以查看（可缩放、平移、折叠展开、切换画布），但不能编辑。一张导图可有多条分享链接，每条独立配置：

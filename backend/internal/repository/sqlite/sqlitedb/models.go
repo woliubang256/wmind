@@ -76,19 +76,20 @@ type Setting struct {
 }
 
 type ShareLink struct {
-	ID            int64
-	Uid           string
-	Token         string
-	MapID         int64
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload int64
-	ShowNotes     int64
-	ExpiresAt     *string
-	ViewCount     int64
-	LastViewedAt  *string
-	RevokedAt     *string
-	CreatedAt     string
+	ID                 int64
+	Uid                string
+	Token              string
+	MapID              int64
+	OwnerID            int64
+	PasswordHash       string
+	AllowDownload      int64
+	ShowNotes          int64
+	ExpiresAt          *string
+	ViewCount          int64
+	LastViewedAt       *string
+	RevokedAt          *string
+	CreatedAt          string
+	PasswordCiphertext string
 }
 
 type Template struct {

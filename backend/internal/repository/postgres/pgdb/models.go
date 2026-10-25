@@ -82,19 +82,20 @@ type Setting struct {
 }
 
 type ShareLink struct {
-	ID            int64
-	Uid           string
-	Token         string
-	MapID         int64
-	OwnerID       int64
-	PasswordHash  string
-	AllowDownload bool
-	ShowNotes     bool
-	ExpiresAt     pgtype.Timestamptz
-	ViewCount     int64
-	LastViewedAt  pgtype.Timestamptz
-	RevokedAt     pgtype.Timestamptz
-	CreatedAt     pgtype.Timestamptz
+	ID                 int64
+	Uid                string
+	Token              string
+	MapID              int64
+	OwnerID            int64
+	PasswordHash       string
+	AllowDownload      bool
+	ShowNotes          bool
+	ExpiresAt          pgtype.Timestamptz
+	ViewCount          int64
+	LastViewedAt       pgtype.Timestamptz
+	RevokedAt          pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	PasswordCiphertext string
 }
 
 type Template struct {

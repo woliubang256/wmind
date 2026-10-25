@@ -214,6 +214,59 @@ func TestSharePasswordFlow(t *testing.T) {
 	}
 }
 
+func TestShareOwnerCanReadAndResetPassword(t *testing.T) {
+	s := newAuthTestServer(t)
+	owner := s.registerUser("alice")
+	other := s.registerUser("bob")
+	mapUID := s.createMap(owner, "密码管理")
+	share := s.createShare(owner, mapUID, map[string]any{"password": "Ab9x"})
+	uid := share["uid"].(string)
+	if share["password"] != "Ab9x" {
+		t.Fatalf("创建者应能查看密码，得到 %#v", share["password"])
+	}
+	for _, path := range []string{"/api/v1/maps/" + mapUID + "/shares", "/api/v1/shares"} {
+		status, body := s.do(http.MethodGet, path, owner, nil)
+		if status != http.StatusOK || len(body.Items) != 1 || body.Items[0]["password"] != "Ab9x" {
+			t.Fatalf("属主密码列表 %s = %d %#v", path, status, body.Items)
+		}
+		req, _ := http.NewRequest(http.MethodGet, s.server.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer "+owner)
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.Header.Get("Cache-Control") != "no-store" {
+			t.Fatal("owner password response must not be cached")
+		}
+	}
+	status, body := s.do(http.MethodPatch, "/api/v1/shares/"+uid, other, map[string]any{"password": "Cd8y"})
+	if status != http.StatusNotFound {
+		t.Fatalf("越权重设 = %d %#v", status, body.Error)
+	}
+	status, body = s.do(http.MethodPatch, "/api/v1/shares/"+uid, owner, map[string]any{"showNotes": true})
+	if status != http.StatusOK || body.Data["password"] != "Ab9x" {
+		t.Fatalf("省略密码必须保留 = %d %#v", status, body.Data)
+	}
+	status, body = s.do(http.MethodPatch, "/api/v1/shares/"+uid, owner, map[string]any{"password": "Cd8y"})
+	if status != http.StatusOK || body.Data["password"] != "Cd8y" {
+		t.Fatalf("重设密码 = %d %#v", status, body.Data)
+	}
+	status, body = s.do(http.MethodPatch, "/api/v1/shares/"+uid, owner, map[string]any{"password": nil})
+	if status != http.StatusOK || body.Data["password"] != nil || body.Data["hasPassword"] != false {
+		t.Fatalf("清空密码 = %d %#v", status, body.Data)
+	}
+	status, body = s.do(http.MethodGet, "/api/v1/public/shares/"+share["token"].(string), "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("公开访问 = %d %#v", status, body.Error)
+	}
+	for _, key := range []string{"password", "passwordHash", "passwordCiphertext"} {
+		if _, exists := body.Data[key]; exists {
+			t.Fatalf("公开响应泄露 %s", key)
+		}
+	}
+}
+
 func TestShareNotesStrippedInHTTPResponse(t *testing.T) {
 	s := newAuthTestServer(t)
 	token := s.registerUser("alice")

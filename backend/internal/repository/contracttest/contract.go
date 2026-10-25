@@ -701,13 +701,17 @@ func Run(t *testing.T, r Repos) {
 		link, err := shares.Create(ctx, domain.CreateShareInput{
 			UID: ulid.Make().String(), Token: "tok-" + ulid.Make().String(),
 			MapID: target.ID, OwnerID: owner.ID, PasswordHash: "bcrypt-hash",
-			AllowDownload: false, ShowNotes: false, ExpiresAt: &expires, Now: now,
+			PasswordCiphertext: "v1:encrypted-password",
+			AllowDownload:      false, ShowNotes: false, ExpiresAt: &expires, Now: now,
 		})
 		if err != nil {
 			t.Fatalf("create share: %v", err)
 		}
 		if link.AllowDownload || link.ShowNotes {
 			t.Fatalf("booleans not stored: %#v", link)
+		}
+		if link.PasswordCiphertext != "v1:encrypted-password" || link.Password != nil {
+			t.Fatal("create ciphertext not preserved or plaintext stored")
 		}
 		if link.ExpiresAt == nil || !link.ExpiresAt.Equal(expires) {
 			t.Fatalf("expires_at mismatch: %v, want %v", link.ExpiresAt, expires)
@@ -724,6 +728,9 @@ func Run(t *testing.T, r Repos) {
 		if got.MapUID != target.UID || got.MapTitle != target.Title {
 			t.Fatalf("join fields missing: uid=%q title=%q", got.MapUID, got.MapTitle)
 		}
+		if got.PasswordCiphertext != link.PasswordCiphertext {
+			t.Fatal("owner read lost ciphertext")
+		}
 		// A different owner must see "not found", never "forbidden".
 		if _, err := shares.GetByUID(ctx, link.UID, other.ID); !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("cross-owner GetByUID = %v; want ErrNotFound", err)
@@ -739,6 +746,9 @@ func Run(t *testing.T, r Repos) {
 		}
 		if byToken.MapDeleted {
 			t.Fatal("freshly created map reported as deleted")
+		}
+		if byToken.Share.PasswordCiphertext != "" || byToken.Share.Password != nil {
+			t.Fatal("public query must not read ciphertext")
 		}
 		if byToken.OwnerNickname != owner.Nickname {
 			t.Fatalf("owner nickname = %q, want %q", byToken.OwnerNickname, owner.Nickname)
@@ -766,6 +776,9 @@ func Run(t *testing.T, r Repos) {
 		if byMap[0].ID != second.ID {
 			t.Fatalf("ListByMap is not newest-first: %#v", byMap[0])
 		}
+		if byMap[1].PasswordCiphertext != link.PasswordCiphertext {
+			t.Fatal("map list lost ciphertext")
+		}
 
 		if n, err := shares.CountActiveByMap(ctx, target.ID); err != nil || n != 2 {
 			t.Fatalf("CountActiveByMap = %d, %v; want 2", n, err)
@@ -777,6 +790,9 @@ func Run(t *testing.T, r Repos) {
 		}
 		if len(mine) != 2 {
 			t.Fatalf("ListByOwner = %d rows; want 2", len(mine))
+		}
+		if mine[1].PasswordCiphertext != link.PasswordCiphertext {
+			t.Fatal("owner list lost ciphertext")
 		}
 		// The optional map_uid filter must narrow, not widen.
 		if rows, err := shares.ListByOwner(ctx, owner.ID, target.UID, domain.NewPage(1, 20)); err != nil || len(rows) != 2 {
@@ -800,7 +816,7 @@ func Run(t *testing.T, r Repos) {
 		if err != nil {
 			t.Fatalf("Update: %v", err)
 		}
-		if updated.PasswordHash != "" || !updated.AllowDownload || !updated.ShowNotes || updated.ExpiresAt != nil {
+		if updated.PasswordHash != "" || updated.PasswordCiphertext != "" || !updated.AllowDownload || !updated.ShowNotes || updated.ExpiresAt != nil {
 			t.Fatalf("update did not apply every field: %#v", updated)
 		}
 

@@ -29,14 +29,15 @@ func (r *ShareRepository) queries(ctx context.Context) *pgdb.Queries {
 // 时间参数用 *time.Time 而不是 pgtype.Timestamptz：转换（fromPGTime）放在
 // 调用点，这个函数就与驱动类型无关，和 SQLite 版本的签名一一对应。
 func newPGShare(
-	id int64, uid, token string, mapID, ownerID int64, passwordHash string,
+	id int64, uid, token string, mapID, ownerID int64, passwordHash, passwordCiphertext string,
 	allowDownload, showNotes bool, expiresAt *time.Time, viewCount int64,
 	lastViewedAt, revokedAt *time.Time, createdAt time.Time, mapUID, mapTitle string,
 ) *domain.ShareLink {
 	return &domain.ShareLink{
 		ID: id, UID: uid, Token: token, MapID: mapID, OwnerID: ownerID,
-		PasswordHash:  passwordHash,
-		AllowDownload: allowDownload, ShowNotes: showNotes,
+		PasswordHash:       passwordHash,
+		PasswordCiphertext: passwordCiphertext,
+		AllowDownload:      allowDownload, ShowNotes: showNotes,
 		ExpiresAt: expiresAt, ViewCount: int(viewCount),
 		LastViewedAt: lastViewedAt, RevokedAt: revokedAt,
 		CreatedAt: createdAt, MapUID: mapUID, MapTitle: mapTitle,
@@ -47,7 +48,7 @@ func newPGShare(
 // 这两条语句没有 JOIN，MapUID / MapTitle 为空（原因见 SQLite 侧同名函数）。
 func mapPGShareRow(v pgdb.ShareLink) *domain.ShareLink {
 	return newPGShare(
-		v.ID, v.Uid, v.Token, v.MapID, v.OwnerID, v.PasswordHash,
+		v.ID, v.Uid, v.Token, v.MapID, v.OwnerID, v.PasswordHash, v.PasswordCiphertext,
 		v.AllowDownload, v.ShowNotes, fromPGTime(v.ExpiresAt), v.ViewCount,
 		fromPGTime(v.LastViewedAt), fromPGTime(v.RevokedAt), v.CreatedAt.Time.UTC(),
 		"", "",
@@ -57,11 +58,12 @@ func mapPGShareRow(v pgdb.ShareLink) *domain.ShareLink {
 func (r *ShareRepository) Create(ctx context.Context, in domain.CreateShareInput) (*domain.ShareLink, error) {
 	v, err := r.queries(ctx).CreateShare(ctx, pgdb.CreateShareParams{
 		Uid: in.UID, Token: in.Token, MapID: in.MapID, OwnerID: in.OwnerID,
-		PasswordHash:  in.PasswordHash,
-		AllowDownload: in.AllowDownload,
-		ShowNotes:     in.ShowNotes,
-		ExpiresAt:     pgTimePtr(in.ExpiresAt),
-		CreatedAt:     pgTime(in.Now),
+		PasswordHash:       in.PasswordHash,
+		PasswordCiphertext: in.PasswordCiphertext,
+		AllowDownload:      in.AllowDownload,
+		ShowNotes:          in.ShowNotes,
+		ExpiresAt:          pgTimePtr(in.ExpiresAt),
+		CreatedAt:          pgTime(in.Now),
 	})
 	if err != nil {
 		return nil, mapPGError(err)
@@ -75,7 +77,7 @@ func (r *ShareRepository) GetByUID(ctx context.Context, uid string, ownerID int6
 		return nil, mapPGError(err)
 	}
 	return newPGShare(
-		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, row.PasswordCiphertext,
 		row.AllowDownload, row.ShowNotes, fromPGTime(row.ExpiresAt), row.ViewCount,
 		fromPGTime(row.LastViewedAt), fromPGTime(row.RevokedAt), row.CreatedAt.Time.UTC(),
 		row.MapUid, row.MapTitle,
@@ -88,7 +90,7 @@ func (r *ShareRepository) GetByToken(ctx context.Context, token string) (*domain
 		return nil, mapPGError(err)
 	}
 	share := newPGShare(
-		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+		row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, "",
 		row.AllowDownload, row.ShowNotes, fromPGTime(row.ExpiresAt), row.ViewCount,
 		fromPGTime(row.LastViewedAt), fromPGTime(row.RevokedAt), row.CreatedAt.Time.UTC(),
 		row.MapUid, row.MapTitle,
@@ -113,7 +115,7 @@ func (r *ShareRepository) ListByMap(ctx context.Context, mapID int64, ownerID in
 	out := make([]*domain.ShareLink, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, newPGShare(
-			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, row.PasswordCiphertext,
 			row.AllowDownload, row.ShowNotes, fromPGTime(row.ExpiresAt), row.ViewCount,
 			fromPGTime(row.LastViewedAt), fromPGTime(row.RevokedAt), row.CreatedAt.Time.UTC(),
 			row.MapUid, row.MapTitle,
@@ -133,7 +135,7 @@ func (r *ShareRepository) ListByOwner(ctx context.Context, ownerID int64, mapUID
 	out := make([]*domain.ShareLink, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, newPGShare(
-			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash,
+			row.ID, row.Uid, row.Token, row.MapID, row.OwnerID, row.PasswordHash, row.PasswordCiphertext,
 			row.AllowDownload, row.ShowNotes, fromPGTime(row.ExpiresAt), row.ViewCount,
 			fromPGTime(row.LastViewedAt), fromPGTime(row.RevokedAt), row.CreatedAt.Time.UTC(),
 			row.MapUid, row.MapTitle,
@@ -156,12 +158,13 @@ func (r *ShareRepository) CountActiveByMap(ctx context.Context, mapID int64) (in
 
 func (r *ShareRepository) Update(ctx context.Context, in domain.UpdateShareInput) (*domain.ShareLink, error) {
 	v, err := r.queries(ctx).UpdateShare(ctx, pgdb.UpdateShareParams{
-		PasswordHash:  in.PasswordHash,
-		AllowDownload: in.AllowDownload,
-		ShowNotes:     in.ShowNotes,
-		ExpiresAt:     pgTimePtr(in.ExpiresAt),
-		Uid:           in.UID,
-		OwnerID:       in.OwnerID,
+		PasswordHash:       in.PasswordHash,
+		PasswordCiphertext: in.PasswordCiphertext,
+		AllowDownload:      in.AllowDownload,
+		ShowNotes:          in.ShowNotes,
+		ExpiresAt:          pgTimePtr(in.ExpiresAt),
+		Uid:                in.UID,
+		OwnerID:            in.OwnerID,
 	})
 	if err != nil {
 		return nil, mapPGError(err)

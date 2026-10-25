@@ -267,10 +267,15 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	sharePasswords, err := auth.NewSharePasswordCipher(factorKey)
+	if err != nil {
+		return err
+	}
 	shareSvc, err := service.NewShareService(service.ShareServiceConfig{
 		Shares: shareRepo, Maps: mapRepo, Policy: settingsSvc,
-		Tokens: shareTokens,
-		Views:  service.NewViewDeduper(service.DefaultShareViewWindow, nil),
+		Tokens:    shareTokens,
+		Passwords: sharePasswords,
+		Views:     service.NewViewDeduper(service.DefaultShareViewWindow, nil),
 	})
 	if err != nil {
 		return err

@@ -2169,7 +2169,7 @@ components:
 
     ShareLink:
       type: object
-      required: [uid, token, url, mapUid, hasPassword, allowDownload, showNotes, createdAt]
+      required: [uid, token, url, mapUid, hasPassword, password, allowDownload, showNotes, createdAt]
       properties:
         uid: { type: string }
         token: { type: string }
@@ -2182,6 +2182,9 @@ components:
         mapUid: { type: string }
         mapTitle: { type: string }
         hasPassword: { type: boolean }
+        password:
+          type: [string, 'null']
+          description: 仅属主可读；无密码、旧哈希或密文不可解密时为 null，不影响 hasPassword。响应 no-store。
         allowDownload: { type: boolean }
         showNotes: { type: boolean }
         expiresAt: { type: [string, 'null'], format: date-time }
