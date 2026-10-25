@@ -22,6 +22,8 @@ Status: implemented
 
 附件既可点击选择也可拖入弹窗表单，上传区域在文件进入时高亮；嵌套元素切换用进入深度计数避免闪烁，最后离开或松手时清除。仅拦截文件拖放并阻止冒泡到背景导图导入；文字拖动保持原生行为。解析、生成及保存中仍阻止文件默认导航，但不接收新文件。拖放与点击共用去重、格式及大小/数量限制，失败不丢已有附件。
 
+后台思考等级复用现有 SelectField，标签为「思考等级」，空值显示「不传」，其他选项直接显示 Provider 的枚举值；只保留一条模型兼容性提醒。Base URL/API Key 与 Model/思考等级桌面两行两列、手机单列。等级参与草稿变更检测，保存后及刷新恢复已存值；历史响应缺字段显示空值，不因新增字段清除 API Key。
+
 ## Related decisions
 
 - 兼容消息结构参考 [OpenAI Chat Completions API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)：user content 支持字符串或有序 text/image_url 内容块；只依赖基础消息契约，不假定兼容端实现所有 OpenAI 参数。
@@ -48,6 +50,7 @@ Status: implemented
 - 后台布局回归脚本保存后将鼠标移离通知区域，避免指针悬停使 Sonner 暂停消失并遮挡下一次保存；不修改通知或业务行为。`node frontend/e2e/admin-settings-layout.mjs` 中英文、桌面及手机布局 38 项通过。
 - 拖放交互追加浏览器断言：文件进入/嵌套切换/离开高亮、文字原生拖动、多文件有序与去重、格式/数量/单文件大小超限保留已有项、生成中拦截及背景导入隔离、键盘上传；`node frontend/e2e/ai-generation.mjs` 31 项通过，桌面和手机截图已检查，`pnpm exec tsc --noEmit` 通过。
 - 思考等级后端测试覆盖旧密文缺字段、全部枚举保存重载与空密钥保留、非法值不落库、默认请求字段不存在、显式 none 与其他等级原样发送、拒绝普通用户覆盖、公开配置不泄漏等级、Provider 拒绝后只调用一次且不改模型。相关 `go test ./internal/ai ./internal/settings ./internal/httpapi -run 'TestAI|TestConfiguration|TestGenerate|TestRejectsInvalid|TestSiteConfig|TestOpenAPI|TestAdminSettings' -count=1` 通过。
+- 后台等级下拉覆盖旧响应缺字段、默认不传、键盘选择 max、保存刷新、全部枚举及重新清空、中英文与桌面/手机两列/单列；`node frontend/e2e/ai-generation.mjs` 43 项通过。`pnpm exec tsc --noEmit` 与附件、按需加载、i18n 守卫 13 项测试通过，后台截图已检查。
 - 管理员配置的真实 Provider（保留原有 model）使用自行创建的 docx/xlsx/文字 PDF/扫描 PDF/PNG 完成联调，新建独立“AI联调测试”导图 11 节点，保留研发预算 1200 并自动进入编辑器。一次无效模型输出被拒绝，重试成功；不自动重试付费请求、不保存失败占位。已有三份开发导图未覆盖。
 
 ## Consequences

@@ -26,7 +26,7 @@ run(async () => {
       if (path === '/admin/ai') {
         if (method === 'PUT') {
           const input = route.request().postDataJSON(); saves.push(input);
-          configuration = { ...configuration, enabled: input.enabled, baseUrl: input.baseUrl, model: input.model, apiKeySet: Boolean(input.apiKey) || configuration.apiKeySet };
+          configuration = { ...configuration, enabled: input.enabled, baseUrl: input.baseUrl, model: input.model, reasoningEffort: input.reasoningEffort, apiKeySet: input.clearApiKey ? false : Boolean(input.apiKey) || configuration.apiKeySet };
         }
         data = configuration;
       }
@@ -54,6 +54,8 @@ run(async () => {
     const enabled = page.getByRole('switch', { name: '启用 AI 功能', exact: true });
     await enabled.waitFor();
     check('后台AI开关默认关闭', await enabled.getAttribute('aria-checked') === 'false');
+    const reasoning = page.getByRole('combobox', { name: '思考等级', exact: true });
+    check('历史配置缺等级时默认不传且无虚假待保存状态', await reasoning.innerText() === '不传' && await page.getByRole('button', { name: '保存', exact: true }).isDisabled());
     await page.getByText('追加提示词', { exact: true }).click();
     check('追加提示词可查看但不能编辑', await page.getByRole('textbox', { name: '追加提示词', exact: true }).getAttribute('readonly') !== null);
     await page.getByRole('textbox', { name: 'Base URL', exact: true }).fill('https://fixture.example/v1');
@@ -62,18 +64,38 @@ run(async () => {
     await enabled.click();
     await page.getByRole('button', { name: '保存', exact: true }).click();
     await page.getByText('AI 配置已保存', { exact: true }).waitFor();
-    check('保存Provider不提交只读提示词，成功后清空密钥输入', saves.length === 1 && saves[0].model === 'vision-model' && !('systemPrompt' in saves[0]) && await page.getByRole('textbox', { name: 'API Key', exact: true }).inputValue() === '');
-    const controls = ['Base URL', 'API Key', 'Model'];
-    const desktop = await Promise.all(controls.map((name) => page.getByRole('textbox', { name, exact: true }).boundingBox()));
-    check('桌面Provider三个短字段并排', desktop.every((box) => Math.abs(box.y - desktop[0].y) < 2));
+    await page.mouse.move(10, 10);
+    check('保存Provider默认不传等级、不提交只读提示词，成功后清空密钥输入', saves.length === 1 && saves[0].model === 'vision-model' && saves[0].reasoningEffort === '' && !('systemPrompt' in saves[0]) && await page.getByRole('textbox', { name: 'API Key', exact: true }).inputValue() === '');
+    const controls = ['Base URL', 'API Key', 'Model'].map((name) => page.getByRole('textbox', { name, exact: true })).concat(reasoning);
+    const desktop = await Promise.all(controls.map((control) => control.boundingBox()));
+    check('桌面Provider四个短字段两行两列', Math.abs(desktop[0].y - desktop[1].y) < 2 && Math.abs(desktop[2].y - desktop[3].y) < 2 && desktop[2].y > desktop[0].y);
     await page.setViewportSize({ width: 375, height: 812 });
-    const mobile = await Promise.all(controls.map((name) => page.getByRole('textbox', { name, exact: true }).boundingBox()));
-    check('手机Provider字段单列且不溢出', mobile.every((box) => box.x >= 0 && box.x + box.width <= 375) && mobile[1].y > mobile[0].y && mobile[2].y > mobile[1].y);
+    const mobile = await Promise.all(controls.map((control) => control.boundingBox()));
+    check('手机Provider字段单列且不溢出', mobile.every((box, index) => box.x >= 0 && box.x + box.width <= 375 && (index === 0 || box.y > mobile[index - 1].y)));
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('textbox', { name: 'Model', exact: true }).fill('vision-model-2');
     await page.getByRole('button', { name: '保存', exact: true }).click();
     await page.getByRole('button', { name: '保存', exact: true }).waitFor({ state: 'visible' });
     await page.waitForFunction(() => document.querySelector('input[aria-label="Model"]')?.value === 'vision-model-2');
+    const saveConfiguration = async () => {
+      const response = page.waitForResponse((response) => response.url().endsWith('/admin/ai') && response.request().method() === 'PUT');
+      await page.getByRole('button', { name: '保存', exact: true }).click();
+      await response;
+      await page.waitForFunction(() => !document.querySelector('input[aria-label="Model"]')?.matches(':disabled'));
+      await page.mouse.move(10, 10);
+    };
+    await reasoning.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('End'); await page.keyboard.press('Enter');
+    check('思考等级键盘可选max并触发待保存状态', await reasoning.innerText() === 'max' && await page.getByRole('button', { name: '保存', exact: true }).isEnabled());
+    await saveConfiguration();
+    await page.reload(); await page.getByRole('tab', { name: 'AI', exact: true }).click(); await reasoning.waitFor();
+    check('思考等级保存刷新后保留，API Key未被清空', await reasoning.innerText() === 'max' && configuration.apiKeySet && await page.getByRole('textbox', { name: 'API Key', exact: true }).inputValue() === '' && await page.getByRole('button', { name: '保存', exact: true }).isDisabled());
+    for (const effort of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', '']) {
+      await reasoning.click();
+      await page.getByRole('option', { name: effort || '不传', exact: true }).click();
+      await saveConfiguration();
+      check(`思考等级${effort || '不传'}原值提交且不重复提交密钥`, saves.at(-1).reasoningEffort === effort && saves.at(-1).apiKey === '' && configuration.apiKeySet);
+    }
+    await page.screenshot({ path: '/tmp/wmind-ai-settings.png' });
     await page.getByRole('tab', { name: 'AI', exact: true }).focus();
     await page.keyboard.press('ArrowRight');
     check('三个设置Tab支持方向键循环', await page.getByRole('tab').first().getAttribute('aria-selected') === 'true');
@@ -181,6 +203,10 @@ run(async () => {
     await page.getByRole('option', { name: 'English', exact: true }).click();
     await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
     check('英文生成界面翻译完整', await dialog.getByRole('textbox', { name: 'Generation instructions', exact: true }).isVisible() && !(await dialog.innerText()).includes('ai.'));
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.goto(`${BASE}/admin/settings`); await page.getByRole('tab', { name: 'AI', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Reasoning effort', exact: true }).waitFor();
+    check('英文思考等级默认不传且兼容性提示完整', await page.getByRole('combobox', { name: 'Reasoning effort', exact: true }).innerText() === 'Not sent' && await page.getByText('Supported levels vary by model.', { exact: true }).isVisible());
     check('浏览器没有未捕获异常', errors.length === 0, errors.join('\n'));
     return summary();
   } finally { await browser.close(); }

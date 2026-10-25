@@ -1,10 +1,14 @@
 import { api } from '@/lib/api/client';
 
+export const AI_REASONING_EFFORTS = ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type AIReasoningEffort = typeof AI_REASONING_EFFORTS[number];
+
 export interface AIConfiguration {
   enabled: boolean;
   baseUrl: string;
   apiKeySet: boolean;
   model: string;
+  reasoningEffort: AIReasoningEffort;
   systemPrompt: string;
 }
 export interface AIConfigurationInput {
@@ -12,6 +16,7 @@ export interface AIConfigurationInput {
   baseUrl: string;
   apiKey?: string;
   model: string;
+  reasoningEffort: AIReasoningEffort;
   clearApiKey?: boolean;
 }
 export interface AISource {
