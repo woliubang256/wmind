@@ -19,6 +19,20 @@ afterEach(() => {
 });
 
 describe('apiRequest', () => {
+  it.each([true, false])('keeps the current session when a sensitive action rejects the supplied password (retry=%s)', async (retryAuth) => {
+    setAccessToken('valid-current-access');
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    const fetchMock = vi.fn().mockResolvedValue(json(401, {
+      error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'wrong current password', details: { fields: { oldPassword: 'wrong password' } } },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(apiRequest('/users/me/password', { method: 'POST', retryAuth, body: { oldPassword: 'wrong', newPassword: 'new-password' } }))
+      .rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' });
+    expect(getAccessToken()).toBe('valid-current-access');
+    expect(onUnauthorized).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
   it('unwraps the standard data envelope and adds the bearer token', async () => {
     setAccessToken('access-token');
     const fetchMock = vi.fn().mockResolvedValue(json(200, { data: { value: 42 }, requestId: 'req-1' }));

@@ -55,7 +55,9 @@ type RefreshTokenRepo interface {
 
 	// Revoke 撤销单个令牌，返回是否真的撤销了一行。
 	Revoke(ctx context.Context, tokenHash string, at time.Time) (bool, error)
-	// RevokeAllForUser 撤销该用户全部未撤销令牌（禁用账号、重置密码时用）。
+	// RevokeAllForUser permanently expires all prior tokens, including rotated
+	// history, at the security boundary. Returns rows changed; repeated calls are
+	// idempotent. Replays from before this boundary must not revoke newer sessions.
 	RevokeAllForUser(ctx context.Context, userID int64, at time.Time) (int64, error)
 	// RevokeAllExcept 撤销除 keepTokenHash 之外的全部令牌（改密后保留当前设备）。
 	RevokeAllExcept(ctx context.Context, userID int64, keepTokenHash string, at time.Time) (int64, error)

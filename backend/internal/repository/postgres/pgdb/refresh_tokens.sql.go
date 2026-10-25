@@ -131,8 +131,11 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshToken
 
 const revokeUserRefreshTokens = `-- name: RevokeUserRefreshTokens :execrows
 UPDATE refresh_tokens
-SET revoked_at = $1
-WHERE user_id = $2 AND revoked_at IS NULL
+SET revoked_at = COALESCE(revoked_at, $1),
+    expires_at = CASE WHEN expires_at > $1
+                      THEN $1 ELSE expires_at END
+WHERE user_id = $2
+  AND (revoked_at IS NULL OR expires_at > $1)
 `
 
 type RevokeUserRefreshTokensParams struct {

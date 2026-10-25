@@ -200,7 +200,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Auth:             handler.NewAuthHandler(svc, cookie, nil, loginEncryption),
 		Sessions:         svc,
 		RegistrationOpen: settingsSvc.RegistrationEnabled,
-		Users:            handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Users:            handler.NewUserHandler(userSvc, svc, cookie, service.DefaultMaxAvatarBytes),
 		Site:             handler.NewSiteHandler(settingsSvc, "test-version", aiSvc.Enabled),
 		AI:               handler.NewAIHandler(aiSvc, adminSvc),
 		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),

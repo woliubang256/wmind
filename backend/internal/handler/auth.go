@@ -5,8 +5,6 @@
 package handler
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -34,11 +32,9 @@ type CookieConfig struct {
 	MaxAge   time.Duration
 }
 
-// RefreshCookieName 是刷新令牌 Cookie 的默认名字。
-//
-// 读取方（UserHandler 改密要拿到「当前设备」的令牌）和写入方（AuthHandler）
-// 必须用同一个名字，所以这个名字只能有一个来源。
+// RefreshCookieName is the single default for all session Cookie writers.
 const RefreshCookieName = "wmind_refresh"
+const MediaCookieName = "wmind_media"
 
 // DefaultCookieConfig 返回 Web 端的默认 Cookie 配置。
 func DefaultCookieConfig(secure bool, maxAge time.Duration) CookieConfig {
@@ -79,9 +75,11 @@ type registerRequest struct {
 
 // Register 处理 POST /api/v1/auth/register。
 func (h *AuthHandler) Register(c *gin.Context) {
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
+		return
+	}
 	var req registerRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, apperr.Wrap(apperr.CodeBadRequest, err))
+	if !bindAuthJSON(c, &req) {
 		return
 	}
 	result, err := h.svc.Register(c.Request.Context(), service.RegisterInput{
@@ -92,7 +90,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	h.setRefreshCookie(c, result)
+	if err := h.setRefreshCookie(c, result); err != nil {
+		response.Fail(c, err)
+		return
+	}
 	response.Created(c, toAuthResponse(result))
 }
 
@@ -102,28 +103,14 @@ type loginRequest struct {
 	EncryptedPassword string `json:"encryptedPassword"`
 }
 
-// bindLoginJSON rejects legacy plaintext, mixed and oversized bodies without
-// reflecting decoder errors or credential values into responses/logs.
-func bindLoginJSON(c *gin.Context, target any) bool {
-	c.Header("Cache-Control", "no-store")
-	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		response.Fail(c, apperr.New(apperr.CodeBadRequest, ""))
-		return false
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		response.Fail(c, apperr.New(apperr.CodeBadRequest, ""))
-		return false
-	}
-	return true
-}
-
 func (h *AuthHandler) LoginChallenge(c *gin.Context) {
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
+		return
+	}
 	var req struct {
 		Identifier string `json:"identifier"`
 	}
-	if !bindLoginJSON(c, &req) {
+	if !bindAuthJSON(c, &req) {
 		return
 	}
 	if h.loginEncryption == nil {
@@ -140,8 +127,11 @@ func (h *AuthHandler) LoginChallenge(c *gin.Context) {
 
 // Login 处理 POST /api/v1/auth/login。
 func (h *AuthHandler) Login(c *gin.Context) {
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
+		return
+	}
 	var req loginRequest
-	if !bindLoginJSON(c, &req) {
+	if !bindAuthJSON(c, &req) {
 		return
 	}
 	if !h.allowLoginAttempt(c, req.Identifier) {
@@ -168,7 +158,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.OK(c, gin.H{"twoFactorRequired": true, "challengeToken": result.ChallengeToken, "expiresIn": result.ExpiresIn})
 		return
 	}
-	h.setRefreshCookie(c, result)
+	if err := h.setRefreshCookie(c, result); err != nil {
+		response.Fail(c, err)
+		return
+	}
 	response.OK(c, toAuthResponse(result))
 }
 
@@ -200,20 +193,37 @@ type refreshRequest struct {
 // Web 走 HttpOnly Cookie，客户端（App）走请求体；两者共用同一接口，
 // Cookie 优先——浏览器里 Cookie 是更安全的那条路径。
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	result, err := h.svc.Refresh(c.Request.Context(), h.refreshToken(c), h.sessionMeta(c))
+	if !allowSessionRequest(c, h.cookie.Secure, true) {
+		return
+	}
+	token, ok := h.refreshToken(c)
+	if !ok {
+		return
+	}
+	result, err := h.svc.Refresh(c.Request.Context(), token, h.sessionMeta(c))
 	if err != nil {
-		// 刷新失败意味着会话已死，顺手清掉旧 Cookie，避免前端反复重试。
-		h.clearRefreshCookie(c)
+		// An old in-flight request may fail after a newer login/password response
+		// installed new Cookies. Never let that stale rejection clear newer state.
 		response.Fail(c, err)
 		return
 	}
-	h.setRefreshCookie(c, result)
+	if err := h.setRefreshCookie(c, result); err != nil {
+		response.Fail(c, err)
+		return
+	}
 	response.OK(c, toAuthResponse(result))
 }
 
 // Logout 处理 POST /api/v1/auth/logout。幂等，始终 204。
 func (h *AuthHandler) Logout(c *gin.Context) {
-	if err := h.svc.Logout(c.Request.Context(), h.refreshToken(c)); err != nil {
+	if !allowSessionRequest(c, h.cookie.Secure, true) {
+		return
+	}
+	token, ok := h.refreshToken(c)
+	if !ok {
+		return
+	}
+	if err := h.svc.Logout(c.Request.Context(), token); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -235,23 +245,24 @@ func (h *AuthHandler) sessionMeta(c *gin.Context) service.SessionMeta {
 	return service.SessionMeta{Platform: "web", Device: c.Request.UserAgent()}
 }
 
-func (h *AuthHandler) refreshToken(c *gin.Context) string {
-	if value, err := c.Cookie(h.cookie.Name); err == nil && value != "" {
-		return value
-	}
-	// 没有 Cookie 时才读请求体：Cookie 存在说明是浏览器，body 里的值
-	// 可能是攻击者塞进来的（CSRF 场景下不该被优先采用）。
-	if c.Request.ContentLength == 0 {
-		return ""
-	}
+func (h *AuthHandler) refreshToken(c *gin.Context) (string, bool) {
+	cookie, _ := c.Cookie(h.cookie.Name)
 	var body refreshRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		return ""
+	if c.Request.ContentLength != 0 && !bindAuthJSON(c, &body) {
+		return "", false
 	}
-	return body.RefreshToken
+	// Validate any supplied body but never let it override the browser Cookie.
+	if cookie != "" {
+		return cookie, true
+	}
+	return body.RefreshToken, true
 }
 
-func (h *AuthHandler) setRefreshCookie(c *gin.Context, result *service.AuthResult) {
+func (h *AuthHandler) setRefreshCookie(c *gin.Context, result *service.AuthResult) error {
+	media, err := h.svc.MediaToken(result)
+	if err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, err)
+	}
 	maxAge := int(h.cookie.MaxAge.Seconds())
 	if !result.RefreshExpiresAt.IsZero() {
 		maxAge = int(time.Until(result.RefreshExpiresAt).Seconds())
@@ -261,11 +272,14 @@ func (h *AuthHandler) setRefreshCookie(c *gin.Context, result *service.AuthResul
 	}
 	c.SetSameSite(h.cookie.SameSite)
 	c.SetCookie(h.cookie.Name, result.RefreshToken, maxAge, h.cookie.Path, h.cookie.Domain, h.cookie.Secure, true)
+	c.SetCookie(MediaCookieName, media, maxAge, "/uploads", h.cookie.Domain, h.cookie.Secure, true)
+	return nil
 }
 
 func (h *AuthHandler) clearRefreshCookie(c *gin.Context) {
 	c.SetSameSite(h.cookie.SameSite)
 	c.SetCookie(h.cookie.Name, "", -1, h.cookie.Path, h.cookie.Domain, h.cookie.Secure, true)
+	c.SetCookie(MediaCookieName, "", -1, "/uploads", h.cookie.Domain, h.cookie.Secure, true)
 }
 
 // userDTO 是用户信息的线上结构。

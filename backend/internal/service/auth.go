@@ -290,14 +290,6 @@ func (s *AuthService) Refresh(ctx context.Context, plainToken string, meta Sessi
 		}
 		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
-	if stored.Revoked() {
-		// 复用检测。这里刻意不返回更具体的错误：对客户端来说结果都是
-		// 「请重新登录」，而攻击者也不该知道自己的令牌已被标记。
-		if _, revokeErr := s.tokens.RevokeAllForUser(ctx, stored.UserID, now); revokeErr != nil {
-			return nil, apperr.Wrap(apperr.CodeInternalError, revokeErr)
-		}
-		return nil, apperr.New(apperr.CodeAuthRefreshInvalid, "")
-	}
 	if stored.Expired(now) {
 		return nil, apperr.New(apperr.CodeAuthRefreshInvalid, "")
 	}
@@ -315,6 +307,22 @@ func (s *AuthService) Refresh(ctx context.Context, plainToken string, meta Sessi
 
 	var result *AuthResult
 	err = s.withTwoFactor(ctx, user, func(ctx context.Context, _ *domain.TwoFactorState) error {
+		// Re-read under the shared security lock. A password/2FA/admin change may
+		// have permanently expired this token while this request waited for the lock.
+		current, err := s.tokens.GetByHash(ctx, hash)
+		if err != nil {
+			return err
+		}
+		now := s.now()
+		if current.Expired(now) {
+			return apperr.New(apperr.CodeAuthRefreshInvalid, "")
+		}
+		if current.Revoked() {
+			// Normal rotation preserves expiry as a replay signal. Global security
+			// revocation expires all history, so old devices cannot revoke new sessions.
+			_, err := s.tokens.RevokeAllForUser(ctx, user.ID, now)
+			return err // Commit the revocation before returning the public 401 below.
+		}
 		// 撤销与签发必须在同一事务里：否则「旧的已撤销、新的没写成」
 		// 会把用户直接踢下线。
 		revoked, revokeErr := s.tokens.Revoke(ctx, hash, now)
@@ -336,6 +344,9 @@ func (s *AuthService) Refresh(ctx context.Context, plainToken string, meta Sessi
 	if err != nil {
 		return nil, err
 	}
+	if result == nil {
+		return nil, apperr.New(apperr.CodeAuthRefreshInvalid, "")
+	}
 	return result, nil
 }
 
@@ -350,49 +361,50 @@ func (s *AuthService) Logout(ctx context.Context, plainToken string) error {
 	return nil
 }
 
-// ChangePassword 修改密码，并撤销除当前设备外的全部会话。
-func (s *AuthService) ChangePassword(ctx context.Context, uid, oldPassword, newPassword, currentRefreshToken string) error {
+// ChangePassword atomically revokes all prior credentials and issues a replacement
+// session to the authenticated caller. The refresh Cookie is scoped to /auth and
+// is deliberately not required on the /users/me/password request.
+func (s *AuthService) ChangePassword(ctx context.Context, uid, oldPassword, newPassword string, meta SessionMeta) (*AuthResult, error) {
 	user, err := s.users.GetByUID(ctx, uid)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return apperr.New(apperr.CodeAuthTokenInvalid, "")
+			return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
 		}
-		return apperr.Wrap(apperr.CodeInternalError, err)
+		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
 	if !auth.VerifyPassword(user.PasswordHash, oldPassword) {
-		return apperr.New(apperr.CodeAuthInvalidCredentials, "").WithFieldErrors(map[string]string{
+		return nil, apperr.New(apperr.CodeAuthInvalidCredentials, "").WithFieldErrors(map[string]string{
 			"oldPassword": "当前密码不正确",
 		})
 	}
 	if oldPassword == newPassword {
-		return apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
+		return nil, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
 			"newPassword": "新密码不能与当前密码相同",
 		})
 	}
 	if err := auth.ValidatePassword(newPassword, s.site.PasswordMinLength()); err != nil {
-		return passwordPolicyError(err)
+		return nil, passwordPolicyError(err)
 	}
 
 	hash, err := auth.HashPassword(newPassword)
 	if err != nil {
-		return apperr.Wrap(apperr.CodeInternalError, err)
+		return nil, apperr.Wrap(apperr.CodeInternalError, err)
 	}
-	now := s.now()
-	if err := s.users.UpdatePassword(ctx, user.ID, hash, now); err != nil {
-		return apperr.Wrap(apperr.CodeInternalError, err)
-	}
-
-	// 改密后让其它设备下线，但保留当前设备——否则用户改完密码就被自己踢出去。
-	if currentRefreshToken != "" {
-		if _, err := s.tokens.RevokeAllExcept(ctx, user.ID, auth.HashRefreshToken(currentRefreshToken), now); err != nil {
-			return apperr.Wrap(apperr.CodeInternalError, err)
+	var result *AuthResult
+	err = s.withTwoFactor(ctx, user, func(ctx context.Context, state *domain.TwoFactorState) error {
+		if err := s.users.UpdatePassword(ctx, user.ID, hash, s.now()); err != nil {
+			return err
 		}
+		user.PasswordHash = hash
+		state.Challenges = nil
+		change := &TwoFactorChange{}
+		if err := s.rotateTwoFactorSession(ctx, user, state, change, meta); err != nil {
+			return err
+		}
+		result = change.Session
 		return nil
-	}
-	if _, err := s.tokens.RevokeAllForUser(ctx, user.ID, now); err != nil {
-		return apperr.Wrap(apperr.CodeInternalError, err)
-	}
-	return nil
+	})
+	return result, err
 }
 
 // Me 返回当前用户。

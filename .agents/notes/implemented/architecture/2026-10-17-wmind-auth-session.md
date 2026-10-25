@@ -22,6 +22,8 @@ Refresh Token 是 32 字节随机串（base64url），**只存 SHA-256**，7 天
 
 ### 复用检测：旧令牌再次出现 → 撤销该用户全部会话
 
+[安全撤销到期边界](../bug-fix/2026-10-26-wmind-refresh-revocation-expiry.md)收窄本节到尚未安全过期的轮换令牌：账号级改密、禁用和 2FA 变更会让全部旧令牌立即到期，旧设备后续刷新只拒绝，不再影响新会话。
+
 轮换后的旧令牌若被再次使用，说明它可能被复制过（攻击者与真实用户各持一份）。此时不能只拒绝这一次请求——真实用户的令牌也可能已经在攻击者手里。策略是撤销该用户**全部** refresh token，强制重新登录。
 
 代价是：客户端并发刷新（多个请求同时 401）会互相踩踏，后到的那个请求拿到「已撤销」→ 触发全量撤销 → 用户被踢下线。所以前端必须把并发刷新合并成一次单例 Promise（docs/08 验收标准 5）。这是有意的严格策略：宁可让前端多做一步，也不放过一次可能的令牌泄露。
@@ -50,7 +52,9 @@ Refresh Token 是 32 字节随机串（base64url），**只存 SHA-256**，7 天
 
 Web 端的刷新令牌走 Cookie，`Secure` 在生产为 true，`Path` 收窄到 `/api/v1/auth`——浏览器不会把它带到别的请求上。请求体里的 `refreshToken` 只在没有 Cookie 时采用（客户端 App 用），Cookie 优先：CSRF 场景下不该让攻击者用 body 覆盖浏览器里的会话。
 
-刷新失败时顺手清 Cookie，避免前端拿着死 Cookie 反复重试。
+原先刷新失败时清 Cookie 的细节由[自助改密会话轮换](../bug-fix/2026-10-26-wmind-password-session-rotation.md)部分替代：迟到的旧刷新失败不能清理新登录 Cookie，只有显式登出清理；失效 Cookie 即使仍在浏览器中也无法通过共享数据库认证。
+
+[Cookie 请求来源守卫](../bug-fix/2026-10-26-wmind-cookie-session-csrf.md)补充 Origin、Fetch Metadata、JSON MIME 和小请求体限制；[自助改密会话轮换](../bug-fix/2026-10-26-wmind-password-session-rotation.md)同时同步 Path=/uploads 的独立只读媒体凭据，不扩大 Refresh Cookie 的路径。
 
 ### 迁移 0002：`lower(username)` 唯一索引
 

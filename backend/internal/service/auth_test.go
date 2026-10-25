@@ -38,11 +38,26 @@ func newAuthFixture(t *testing.T, site SiteConfigProvider) *authFixture {
 	}
 	svc, err := NewAuthService(users, tokens, fakeTxManager{}, AuthServiceConfig{
 		Issuer: issuer, RefreshTTL: 7 * 24 * time.Hour, Site: site, Now: clock,
+		TwoFactor: &authTestSecurityRepo{states: map[int64]domain.TwoFactorState{}}, TwoFactorKey: "unit-test-two-factor-key-long-enough",
 	})
 	if err != nil {
 		t.Fatalf("NewAuthService: %v", err)
 	}
 	return &authFixture{svc: svc, users: users, tokens: tokens, now: &now}
+}
+
+type authTestSecurityRepo struct {
+	states map[int64]domain.TwoFactorState
+}
+
+func (r *authTestSecurityRepo) Ensure(context.Context, int64) error { return nil }
+func (r *authTestSecurityRepo) Get(_ context.Context, id int64, _ bool) (*domain.TwoFactorState, error) {
+	state := r.states[id]
+	return &state, nil
+}
+func (r *authTestSecurityRepo) Save(_ context.Context, id int64, state *domain.TwoFactorState) error {
+	r.states[id] = *state
+	return nil
 }
 
 func requireCode(t *testing.T, err error, want apperr.Code) *apperr.Error {
@@ -248,7 +263,7 @@ func TestChangePasswordRevokesOtherSessions(t *testing.T) {
 		t.Fatalf("第二次登录: %v", err)
 	}
 
-	if err := f.svc.ChangePassword(context.Background(), first.User.UID, "correct-horse", "brand-new-secret", first.RefreshToken); err != nil {
+	if _, err := f.svc.ChangePassword(context.Background(), first.User.UID, "correct-horse", "brand-new-secret", SessionMeta{}); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
 
@@ -273,13 +288,13 @@ func TestChangePasswordValidation(t *testing.T) {
 	result := registerAlice(t, f)
 	ctx := context.Background()
 
-	wrongOld := f.svc.ChangePassword(ctx, result.User.UID, "nope", "brand-new-secret", "")
+	_, wrongOld := f.svc.ChangePassword(ctx, result.User.UID, "nope", "brand-new-secret", SessionMeta{})
 	requireCode(t, wrongOld, apperr.CodeAuthInvalidCredentials)
 
-	same := f.svc.ChangePassword(ctx, result.User.UID, "correct-horse", "correct-horse", "")
+	_, same := f.svc.ChangePassword(ctx, result.User.UID, "correct-horse", "correct-horse", SessionMeta{})
 	requireCode(t, same, apperr.CodeValidationFailed)
 
-	weak := f.svc.ChangePassword(ctx, result.User.UID, "correct-horse", "password123", "")
+	_, weak := f.svc.ChangePassword(ctx, result.User.UID, "correct-horse", "password123", SessionMeta{})
 	requireCode(t, weak, apperr.CodeValidationFailed)
 }
 

@@ -328,7 +328,7 @@ func run() error {
 		// 关闭注册时让 /auth/register 在限流器之前就返回 403：关站期间的
 		// 探测不该消耗 IP 的注册配额，也不该报成「请求太频繁」。
 		RegistrationOpen: settingsSvc.RegistrationEnabled,
-		Users:            handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
+		Users:            handler.NewUserHandler(userSvc, authSvc, cookie, service.DefaultMaxAvatarBytes),
 		Site:             handler.NewSiteHandler(settingsSvc, config.Version, aiSvc.Enabled),
 		AI:               handler.NewAIHandler(aiSvc, adminSvc),
 		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),

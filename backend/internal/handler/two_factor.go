@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/middleware"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/response"
-	"github.com/woliubang256/wmind/backend/internal/pkg/apperr"
 )
 
 type twoFactorRequest struct {
@@ -16,13 +15,15 @@ type twoFactorRequest struct {
 func bindTwoFactor(c *gin.Context) (*twoFactorRequest, bool) {
 	c.Header("Cache-Control", "no-store")
 	var req twoFactorRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, apperr.Wrap(apperr.CodeBadRequest, err))
+	if !bindAuthJSON(c, &req) {
 		return nil, false
 	}
 	return &req, true
 }
 func (h *AuthHandler) VerifyTwoFactor(c *gin.Context) {
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
+		return
+	}
 	req, ok := bindTwoFactor(c)
 	if !ok {
 		return
@@ -32,7 +33,10 @@ func (h *AuthHandler) VerifyTwoFactor(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	h.setRefreshCookie(c, result)
+	if err := h.setRefreshCookie(c, result); err != nil {
+		response.Fail(c, err)
+		return
+	}
 	response.OK(c, toAuthResponse(result))
 }
 func (h *AuthHandler) TwoFactorStatus(c *gin.Context) {
@@ -45,6 +49,9 @@ func (h *AuthHandler) TwoFactorStatus(c *gin.Context) {
 	response.OK(c, status)
 }
 func (h *AuthHandler) SetupTwoFactor(c *gin.Context) {
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
+		return
+	}
 	req, ok := bindTwoFactor(c)
 	if !ok {
 		return
@@ -57,6 +64,9 @@ func (h *AuthHandler) SetupTwoFactor(c *gin.Context) {
 	response.OK(c, result)
 }
 func (h *AuthHandler) EnableTwoFactor(c *gin.Context) {
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
+		return
+	}
 	req, ok := bindTwoFactor(c)
 	if !ok {
 		return
@@ -66,12 +76,18 @@ func (h *AuthHandler) EnableTwoFactor(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	h.setRefreshCookie(c, result.Session)
+	if err := h.setRefreshCookie(c, result.Session); err != nil {
+		response.Fail(c, err)
+		return
+	}
 	response.OK(c, gin.H{"session": toAuthResponse(result.Session), "recoveryCodes": result.RecoveryCodes})
 }
 func (h *AuthHandler) DisableTwoFactor(c *gin.Context)        { h.changeTwoFactor(c, true) }
 func (h *AuthHandler) RegenerateRecoveryCodes(c *gin.Context) { h.changeTwoFactor(c, false) }
 func (h *AuthHandler) changeTwoFactor(c *gin.Context, disable bool) {
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
+		return
+	}
 	req, ok := bindTwoFactor(c)
 	if !ok {
 		return
@@ -82,7 +98,10 @@ func (h *AuthHandler) changeTwoFactor(c *gin.Context, disable bool) {
 		return
 	}
 	if result.Session != nil {
-		h.setRefreshCookie(c, result.Session)
+		if err := h.setRefreshCookie(c, result.Session); err != nil {
+			response.Fail(c, err)
+			return
+		}
 		response.OK(c, gin.H{"session": toAuthResponse(result.Session)})
 		return
 	}

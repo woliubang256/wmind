@@ -172,11 +172,11 @@ func TestChangePasswordOverHTTP(t *testing.T) {
 		t.Fatalf("弱密码 = %d %#v", status, body.Error)
 	}
 
-	// 3. 正常改密 → 204。
+	// 3. 正常改密 → 200，返回当前设备替代会话。
 	status, body = s.do(http.MethodPost, "/api/v1/users/me/password", token, map[string]string{
 		"oldPassword": "correct-horse", "newPassword": "brand-new-secret",
 	})
-	if status != http.StatusNoContent {
+	if status != http.StatusOK {
 		t.Fatalf("改密 = %d %#v", status, body.Error)
 	}
 

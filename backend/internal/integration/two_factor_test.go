@@ -206,7 +206,7 @@ func TestTwoFactorExpirationAndLockout(t *testing.T) {
 		f := factorServer(t)
 		enabled := f.enable(t)
 		ch := f.challenge(t)
-		if err := f.svc.ChangePassword(t.Context(), f.initial.User.UID, "factor-test-password", "another-safe-password", enabled.Session.RefreshToken); err != nil {
+		if _, err := f.svc.ChangePassword(t.Context(), f.initial.User.UID, "factor-test-password", "another-safe-password", service.SessionMeta{}); err != nil {
 			t.Fatal(err)
 		}
 		_, err := f.svc.VerifyTwoFactorLogin(t.Context(), ch, enabled.RecoveryCodes[0], service.SessionMeta{})

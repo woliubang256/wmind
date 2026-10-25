@@ -31,7 +31,7 @@ M1-3 要实现「我的」页面的三个动作：改昵称/邮箱、改密码�
 
 改密码要撤销会话（保留当前设备、踢掉其它设备），而撤销逻辑、刷新令牌仓储、密码策略都在认证侧。放进 UserService 就得把这些依赖也搬过去，等于把认证策略拆成两半。
 
-当前设备靠刷新令牌 Cookie 定位：服务端只能从这次请求知道哪一台是「当前设备」。为此 `RefreshCookieName` 提成 handler 包的常量，`NewUserHandler` 从调用方的 `CookieConfig` 收名字——两处各写一份默认值，改配置时必然漏掉一处。
+当前请求完成 Access Token 和旧密码验证后，在同一事务内更新密码、撤销旧会话并获得替代会话。`NewUserHandler` 与 `AuthHandler` 共用完整 `CookieConfig` 写入新 Cookie，前端安装新内存令牌。原先按 Refresh Cookie 定位设备的细节由[自助改密会话轮换](../bug-fix/2026-10-26-wmind-password-session-rotation.md)替代，因为 Cookie Path=/api/v1/auth，不会发送到改密接口；认证策略仍归 AuthService。
 
 ### 头像：「是不是图片」只认解码结果
 

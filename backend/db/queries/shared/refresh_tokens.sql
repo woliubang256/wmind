@@ -38,8 +38,11 @@ WHERE token_hash = sqlc.arg(token_hash) AND revoked_at IS NULL;
 
 -- name: RevokeUserRefreshTokens :execrows
 UPDATE refresh_tokens
-SET revoked_at = sqlc.arg(revoked_at)
-WHERE user_id = sqlc.arg(user_id) AND revoked_at IS NULL;
+SET revoked_at = COALESCE(revoked_at, sqlc.arg(revoked_at)),
+    expires_at = CASE WHEN expires_at > sqlc.arg(revoked_at)
+                      THEN sqlc.arg(revoked_at) ELSE expires_at END
+WHERE user_id = sqlc.arg(user_id)
+  AND (revoked_at IS NULL OR expires_at > sqlc.arg(revoked_at));
 
 -- Used after a password change: keep the current device logged in, drop the
 -- rest. The caller passes the hash of the token that made the request.

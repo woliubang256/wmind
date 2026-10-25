@@ -40,6 +40,9 @@ func CORS(origins []string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		// Session handlers need the same explicit allowlist for CSRF checks;
+		// a CORS response header alone cannot prevent request side effects.
+		c.Set(ctxKeyAllowedSessionOrigin, true)
 
 		header := c.Writer.Header()
 		header.Set("Access-Control-Allow-Origin", origin)

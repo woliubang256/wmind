@@ -535,7 +535,7 @@ paths:
     post:
       tags: [users]
       summary: 改密码
-      description: 改密后撤销**除当前设备外**的全部会话——否则用户改完密码就把自己踢出去。
+      description: 原子更新密码并立即撤销全部旧访问与刷新令牌，返回当前设备替代会话及刷新 Cookie。
       requestBody:
         required: true
         content:
@@ -547,8 +547,15 @@ paths:
                 oldPassword: { type: string }
                 newPassword: { type: string }
       responses:
-        '204':
-          description: 已修改
+        '200':
+          description: 已修改并换发当前会话
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthSession'
         '401':
           $ref: '#/components/responses/Error'
         '422':

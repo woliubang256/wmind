@@ -167,7 +167,7 @@ func (s *AuthService) EnableTwoFactor(ctx context.Context, uid, password, code s
 	s.throttle.Reset("manage-2fa:" + uid)
 	return result, nil
 }
-func (s *AuthService) rotateTwoFactorSession(ctx context.Context, user *domain.User, state *domain.TwoFactorState, result *TwoFactorChange) error {
+func (s *AuthService) rotateTwoFactorSession(ctx context.Context, user *domain.User, state *domain.TwoFactorState, result *TwoFactorChange, metadata ...SessionMeta) error {
 	version, _, err := auth.NewRefreshToken()
 	if err != nil {
 		return err
@@ -179,7 +179,11 @@ func (s *AuthService) rotateTwoFactorSession(ctx context.Context, user *domain.U
 	if _, err = s.tokens.RevokeAllForUser(ctx, user.ID, s.now()); err != nil {
 		return err
 	}
-	result.Session, err = s.issueSession(ctx, user, SessionMeta{Platform: "web"})
+	meta := SessionMeta{Platform: "web"}
+	if len(metadata) > 0 {
+		meta = metadata[0]
+	}
+	result.Session, err = s.issueSession(ctx, user, meta)
 	return err
 }
 func (s *AuthService) verifyFactor(user *domain.User, state *domain.TwoFactorState, code string) (bool, error) {

@@ -121,7 +121,19 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
     throw new Error(i18n.t('network.offline'), { cause });
   }
 
-  if (response.status === 401 && auth) {
+  if (response.status === 204) return { data: undefined as T };
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(i18n.t('network.unreadable', { status: response.status }));
+  }
+  const errorPayload = payload as ApiErrorEnvelope;
+
+  // A sensitive action may reject the password supplied for that action while
+  // the bearer session remains valid. Do not refresh or log out that session.
+  if (response.status === 401 && auth && errorPayload?.error?.code !== 'AUTH_INVALID_CREDENTIALS') {
     if (retryAuth && path !== '/auth/refresh' && generation === sessionGeneration) {
       // 较慢的旧请求可能在刷新完成后才返回 401，直接复用新令牌，不再轮换。
       const token = accessToken && accessToken !== requestToken
@@ -134,17 +146,7 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
     endSession(generation);
   }
 
-  if (response.status === 204) return { data: undefined as T };
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new Error(i18n.t('network.unreadable', { status: response.status }));
-  }
-
   if (!response.ok) {
-    const errorPayload = payload as ApiErrorEnvelope;
     if (auth && response.status === 403 && errorPayload?.error?.code === 'AUTH_ACCOUNT_DISABLED') {
       endSession(generation);
     }

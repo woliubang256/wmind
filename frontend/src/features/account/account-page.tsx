@@ -11,6 +11,7 @@ import { Panel } from '@/components/ui/panel';
 import { authKeys, useCurrentUser } from '@/app/auth';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { userApi } from '@/lib/api/endpoints';
+import { setAccessToken } from '@/lib/api/client';
 import type { User } from '@/lib/api/types';
 import { ApiError, codeToField, fieldErrorsFrom } from '@/lib/api/errors';
 import { hasErrors, validatePasswordChange, validateProfile, type FieldErrors } from '@/lib/validation';
@@ -164,12 +165,15 @@ function ProfileCard({ user }: { user: NonNullable<ReturnType<typeof useCurrentU
 function PasswordCard() {
   const { t } = useTranslation();
   const { config } = useSiteConfig();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const change = useMutation({
     mutationFn: () => userApi.changePassword({ oldPassword: form.oldPassword, newPassword: form.newPassword }),
-    onSuccess: () => {
+    onSuccess: (session) => {
+      setAccessToken(session.accessToken);
+      queryClient.setQueryData(authKeys.currentUser, session.user);
       setForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
       setErrors({});
       toast.success(t('account.passwordChanged'));

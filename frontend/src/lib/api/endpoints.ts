@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, type AuthSession } from './client';
 import { query } from './query';
 import type { AdminStats, AuditLog, Paged, ResetPasswordResult, SettingsMap, User } from './types';
 
@@ -6,7 +6,7 @@ import type { AdminStats, AuditLog, Paged, ResetPasswordResult, SettingsMap, Use
 export const userApi = {
   updateProfile: (input: { nickname?: string; email?: string }) => api.patch<User>('/users/me', input),
   changePassword: (input: { oldPassword: string; newPassword: string }) =>
-    api.post<void>('/users/me/password', input),
+    api.post<AuthSession>('/users/me/password', input, { retryAuth: false }),
   /** 头像走 multipart：后端按解码结果判定类型，所以文件名不重要。 */
   uploadAvatar: (file: File) => {
     const body = new FormData();

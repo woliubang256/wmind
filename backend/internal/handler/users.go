@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -15,32 +16,30 @@ import (
 
 // UserHandler 处理「我的」相关接口：资料、密码、头像。
 type UserHandler struct {
-	users *service.UserService
-	auth  *service.AuthService
-	// cookieName 是刷新令牌 Cookie 的名字，改密时用来定位「当前设备」。
-	cookieName string
+	users  *service.UserService
+	auth   *service.AuthService
+	cookie CookieConfig
 	// maxAvatarBytes 同时用于 HTTP 层的读取上限与错误信息。
 	maxAvatarBytes int64
 }
 
 // NewUserHandler 构造用户 handler。
 //
-// cookieName 由调用方从同一个 CookieConfig 传进来，而不是在这里再算一遍：
-// 两处各写一份默认值，改配置时必然漏掉一处。
+// cookie is shared with AuthHandler so replacement sessions keep identical scope.
 func NewUserHandler(
 	users *service.UserService,
 	auth *service.AuthService,
-	cookieName string,
+	cookie CookieConfig,
 	maxAvatarBytes int64,
 ) *UserHandler {
-	if cookieName == "" {
-		cookieName = RefreshCookieName
+	if cookie.Name == "" {
+		cookie = DefaultCookieConfig(false, 7*24*time.Hour)
 	}
 	if maxAvatarBytes <= 0 {
 		maxAvatarBytes = service.DefaultMaxAvatarBytes
 	}
 	return &UserHandler{
-		users: users, auth: auth, cookieName: cookieName, maxAvatarBytes: maxAvatarBytes,
+		users: users, auth: auth, cookie: cookie, maxAvatarBytes: maxAvatarBytes,
 	}
 }
 
@@ -73,20 +72,28 @@ type changePasswordRequest struct {
 
 // ChangePassword 处理 POST /api/v1/users/me/password。
 //
-// 当前刷新令牌从 Cookie 取：改密要「保留当前设备、踢掉其它设备」，
-// 而服务端只能从这次请求知道哪一台是「当前设备」。
+// The authenticated caller receives a replacement session; all old credentials
+// are revoked in the same transaction as the password change.
 func (h *UserHandler) ChangePassword(c *gin.Context) {
-	var req changePasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, apperr.Wrap(apperr.CodeBadRequest, err))
+	if !allowSessionRequest(c, h.cookie.Secure, false) {
 		return
 	}
-	current := h.refreshTokenFromCookie(c)
-	if err := h.auth.ChangePassword(c.Request.Context(), middleware.UserID(c), req.OldPassword, req.NewPassword, current); err != nil {
+	var req changePasswordRequest
+	if !bindAuthJSON(c, &req) {
+		return
+	}
+	result, err := h.auth.ChangePassword(c.Request.Context(), middleware.UserID(c), req.OldPassword, req.NewPassword,
+		service.SessionMeta{Platform: "web", Device: c.Request.UserAgent()})
+	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.NoContent(c)
+	c.Header("Cache-Control", "no-store")
+	if err := (&AuthHandler{svc: h.auth, cookie: h.cookie}).setRefreshCookie(c, result); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, toAuthResponse(result))
 }
 
 // UploadAvatar 处理 POST /api/v1/users/me/avatar。
@@ -144,12 +151,4 @@ func uploadError(err error, maxBytes int64) error {
 		})
 	}
 	return apperr.Wrap(apperr.CodeValidationFailed, err)
-}
-
-func (h *UserHandler) refreshTokenFromCookie(c *gin.Context) string {
-	value, err := c.Cookie(h.cookieName)
-	if err != nil {
-		return ""
-	}
-	return value
 }

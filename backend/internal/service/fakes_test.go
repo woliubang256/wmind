@@ -183,7 +183,23 @@ func (r *fakeTokenRepo) Revoke(_ context.Context, tokenHash string, at time.Time
 }
 
 func (r *fakeTokenRepo) RevokeAllForUser(_ context.Context, userID int64, at time.Time) (int64, error) {
-	return r.revokeWhere(func(row *domain.RefreshToken) bool { return row.UserID == userID }, at)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var changed int64
+	for _, row := range r.rows {
+		if row.UserID != userID || (row.RevokedAt != nil && !row.ExpiresAt.After(at)) {
+			continue
+		}
+		if row.RevokedAt == nil {
+			value := at
+			row.RevokedAt = &value
+		}
+		if row.ExpiresAt.After(at) {
+			row.ExpiresAt = at
+		}
+		changed++
+	}
+	return changed, nil
 }
 
 func (r *fakeTokenRepo) RevokeAllExcept(_ context.Context, userID int64, keepTokenHash string, at time.Time) (int64, error) {
