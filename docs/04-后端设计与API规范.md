@@ -1382,3 +1382,11 @@ func (s *MapService) Save(ctx context.Context, in SaveInput) (*Map, error) {
 所有 `/api/v1/admin/backups` 接口要求管理员。GET 根路径返回脱敏配置、未来五次运行与最近 20 个作业；PUT `/config` 保存，POST `/test` 测试写入与清理，POST `/run` 启动异步上传，POST `/schedule` 校验五段 Cron 与 IANA 时区，POST `/restore/preview` 直接上传 ZIP 二进制并返回属主绑定的一小时暂存令牌，POST `/restore` 使用 `{id, confirm:true}` 确认覆盖。具体字段以 [OpenAPI](openapi.yaml) 为准。新增错误码：BACKUP_BUSY（409）、BACKUP_CONFIG_INVALID（422）、BACKUP_REMOTE_FAILED（502）、BACKUP_ARCHIVE_INVALID（422）、BACKUP_STAGE_INVALID（409）。
 
 备份捕获和恢复期间，业务接口返回 503 与 Retry-After；活性探针仍可访问。管理控制入口自行互斥，避免持有请求读锁再申请维护写锁。成功恢复撤销全部会话，客户端需重新登录查看最终作业结果。运行范围与恢复限制见 [后台备份](admin-backup.md)。
+
+### AI 配置与生成接口
+
+`GET/PUT /api/v1/admin/ai` 仅限管理员，配置默认关闭；密钥只写入、不返回，空密钥保留旧值，`clearApiKey` 显式清除。`systemPrompt` 为只读的应用固定追加提示词，PUT 不允许提交。公开 `/site/config` 仅增加 `aiEnabled`。配置存储与加密边界见[数据模型 §4.3](03-数据模型与文件格式.md#43-敏感配置的加密存储)。
+
+`POST /api/v1/ai/generate` 需要登录并启用 AI，接收 `prompt` 和有序 `sources[{name,text,images}]`；图片是实际 MIME 匹配的 data URL，不接受外部 URL。用户要求、附件素材、固定提示词依次放入同一 user 消息，固定提示词始终在最后。兼容端使用 `/chat/completions`，保留 Base URL 自定义前缀，拒绝重定向，100 秒超时。
+
+请求最多 12 MiB、10 万 Unicode 字符、5 份附件、12 张图片、8 MiB 图片总字节；每用户每分钟 5 次、同用户并发 1 次、每实例并发 4 次。响应最多 1 MiB，只接受 `title/children` 树，最多 500 节点、12 层。生成接口不创建导图，客户端验证并使用既有 `/maps` 接口保存；无效、失败、取消均不留下空导图。错误码为 `AI_DISABLED`（403）、`AI_CONFIG_INVALID` / `AI_INPUT_INVALID`（422）、`AI_PROVIDER_FAILED` / `AI_OUTPUT_INVALID`（502）。Provider 原始错误正文和密钥不进入响应与日志。完整请求字段以 [OpenAPI](openapi.yaml) 为准。
