@@ -73,6 +73,9 @@ run(async () => {
       await control('site.name').fill('布局保存测试');
       await page.getByRole('button', { name: t('admin.settings.save'), exact: true }).click();
       await page.getByText(t('admin.settings.saved', { count: 1 }), { exact: true }).waitFor();
+      // The success toast can appear under the pointer after saving. Move away
+      // so Sonner does not pause its dismissal and block the next Save click.
+      await page.mouse.move(10, 10);
       verify('布局调整不影响差异保存', saved.length === 1 && JSON.stringify(saved[0]) === JSON.stringify({ 'site.name': '布局保存测试' }));
       await control('auth.password_min_length').fill('7');
       await page.getByRole('button', { name: t('admin.settings.save'), exact: true }).click();

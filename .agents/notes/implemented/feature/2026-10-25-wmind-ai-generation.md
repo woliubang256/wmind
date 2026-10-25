@@ -41,6 +41,7 @@ Status: implemented
 - `node frontend/e2e/ai-generation.mjs`：独立接口夹具覆盖默认隐藏、后台只读与密钥保存、桌面/手机布局、Tab 循环、五份附件真实浏览器提取、PDF 超页拒绝、生成失败保留、错误树拒绝、保存重试不重复调用、取消后重开无旧写入、中英文，21 项通过。夹具不修改开发数据库。
 - `pnpm test`：96 个测试文件、1361 项全部通过；`pnpm exec tsc --noEmit` 通过。PDF.js 本地 worker/字体资源在浏览器中实际提取、渲染通过。
 - `dependency-loading.test.mjs` 在修复前证明缺少 PDF.js 预构建，修复后通过；独立临时 cacheDir 的全新 Vite 服务完成相同 21 项 E2E，无依赖发现导致的导航。`pnpm run build` 通过，PDF 模块仍为按需分块，既有大 chunk 警告不阻塞构建。
+- 后台布局回归脚本保存后将鼠标移离通知区域，避免指针悬停使 Sonner 暂停消失并遮挡下一次保存；不修改通知或业务行为。`node frontend/e2e/admin-settings-layout.mjs` 中英文、桌面及手机布局 38 项通过。
 - 管理员配置的真实 Provider（保留原有 model）使用自行创建的 docx/xlsx/文字 PDF/扫描 PDF/PNG 完成联调，新建独立“AI联调测试”导图 11 节点，保留研发预算 1200 并自动进入编辑器。一次无效模型输出被拒绝，重试成功；不自动重试付费请求、不保存失败占位。已有三份开发导图未覆盖。
 
 ## Consequences
