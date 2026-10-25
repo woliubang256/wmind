@@ -65,6 +65,9 @@ jobs:
       - name: Verify release tag and version
         run: node scripts/release.mjs check "$GITHUB_REF_NAME"
 
+      - name: Validate and render curated changelog
+        run: node scripts/release.mjs changelog "$GITHUB_REF_NAME" release/CHANGELOG.md
+
       - name: Test release tooling
         run: npm run test:release
 
@@ -125,10 +128,8 @@ jobs:
           docker compose -f deploy/docker-compose.yml config --quiet
           docker compose -f deploy/docker-compose.postgres.yml config --quiet
 
-      - name: Generate changelog and deployment archives
-        run: |
-          node scripts/release.mjs changelog "$GITHUB_REF_NAME" release/CHANGELOG.md
-          node scripts/release.mjs package "$GITHUB_REF_NAME" release
+      - name: Build deployment archives
+        run: node scripts/release.mjs package "$GITHUB_REF_NAME" release
 
       - name: Set up target platform emulation
         uses: docker/setup-qemu-action@v3
