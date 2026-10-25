@@ -12,7 +12,8 @@ import (
 	"strings"
 )
 
-// SharePasswordCipher protects owner-readable passwords, separately from bcrypt verification.
+// SharePasswordCipher reads legacy v1 owner passwords. New share values use plaintext;
+// Encrypt remains available for legacy-format fixtures, not the current write path.
 type SharePasswordCipher struct{ aead cipher.AEAD }
 
 func NewSharePasswordCipher(secret string) (*SharePasswordCipher, error) {

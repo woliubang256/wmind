@@ -491,7 +491,7 @@ func TestShareUpdateRejectsRevokedLink(t *testing.T) {
 	}
 }
 
-func TestShareOwnerPasswordEncryptionAndRecovery(t *testing.T) {
+func TestShareOwnerLegacyPasswordRecovery(t *testing.T) {
 	f := newShareFixture(t, defaultSharePolicy())
 	ctx := context.Background()
 	mapUID, _ := f.seedMap(t, 1, "密码")
@@ -500,13 +500,18 @@ func TestShareOwnerPasswordEncryptionAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored := f.shares.rows[0]
-	if stored.Password != nil || stored.PasswordCiphertext == "" || strings.Contains(stored.PasswordCiphertext, "Ab9x") || !auth.VerifyPassword(stored.PasswordHash, "Ab9x") {
-		t.Fatal("repository must store ciphertext and bcrypt, never plaintext")
+	if stored.Password != nil || stored.PasswordCiphertext != "plain:Ab9x" || !auth.VerifyPassword(stored.PasswordHash, "Ab9x") {
+		t.Fatal("repository must store a tagged readable value and an independent bcrypt hash")
 	}
 	if created.Password == nil || *created.Password != "Ab9x" {
 		t.Fatal("owner create password missing")
 	}
-	ciphertext := stored.PasswordCiphertext
+	// Seed the actual legacy format, not a value produced by the new write path.
+	ciphertext, err := f.svc.passwords.Encrypt("Ab9x", created.UID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored.PasswordCiphertext = ciphertext
 	notes := true
 	updated, err := f.svc.Update(ctx, created.UID, 1, UpdateShareInput{ShowNotes: &notes})
 	if err != nil || updated.PasswordCiphertext != ciphertext || updated.Password == nil || *updated.Password != "Ab9x" {
@@ -515,7 +520,7 @@ func TestShareOwnerPasswordEncryptionAndRecovery(t *testing.T) {
 	if _, err := f.svc.Update(ctx, created.UID, 2, UpdateShareInput{}); codeOf(t, err) != apperr.CodeShareNotFound {
 		t.Fatal("cross-owner access allowed")
 	}
-	for _, tc := range []string{"legacy", "corrupt", "wrong-key"} {
+	for _, tc := range []string{"legacy", "corrupt", "unknown-format", "empty-plain", "wrong-key"} {
 		t.Run(tc, func(t *testing.T) {
 			stored.PasswordCiphertext = ciphertext
 			switch tc {
@@ -523,6 +528,10 @@ func TestShareOwnerPasswordEncryptionAndRecovery(t *testing.T) {
 				stored.PasswordCiphertext = ""
 			case "corrupt":
 				stored.PasswordCiphertext = "invalid"
+			case "unknown-format":
+				stored.PasswordCiphertext = "v2:unknown"
+			case "empty-plain":
+				stored.PasswordCiphertext = "plain:"
 			case "wrong-key":
 				f.svc.passwords, _ = auth.NewSharePasswordCipher(strings.Repeat("x", 32))
 			}
@@ -542,7 +551,7 @@ func TestShareOwnerPasswordEncryptionAndRecovery(t *testing.T) {
 			}
 			next := "Cd8y"
 			reset, err := f.svc.Update(ctx, created.UID, 1, UpdateShareInput{Password: &next})
-			if err != nil || reset.Password == nil || *reset.Password != next {
+			if err != nil || reset.Password == nil || *reset.Password != next || stored.PasswordCiphertext != "plain:"+next {
 				t.Fatalf("reset unavailable password: %v", err)
 			}
 			if _, _, err := f.svc.VerifyPassword(ctx, created.Token, next); err != nil {

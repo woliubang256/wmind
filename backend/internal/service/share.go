@@ -29,6 +29,9 @@ const (
 	minSharePasswordRunes = 4
 	maxSharePasswordRunes = 64
 
+	// Keep the historical TEXT column, but distinguish new plaintext from legacy v1 ciphertext.
+	plainSharePasswordPrefix = "plain:"
+
 	// maxShareExpireDays 是链接有效期的上限（10 年，等价于「永久」）。
 	//
 	// 上限存在是为了让 `expiresInDays` 不能用来构造一个 100 年后的时间戳
@@ -61,7 +64,8 @@ type ShareServiceConfig struct {
 	Maps   domain.MapRepo
 	Policy SharePolicy
 	// Tokens 签发密码校验通过后的短期访问凭证。
-	Tokens    *auth.ShareTokenIssuer
+	Tokens *auth.ShareTokenIssuer
+	// Passwords is optional and only reads passwords encrypted by older builds.
 	Passwords *auth.SharePasswordCipher
 	// Views 是访问计数去重表；为 nil 时不去重（每次访问都计数）。
 	Views *ViewDeduper
@@ -93,9 +97,6 @@ func NewShareService(cfg ShareServiceConfig) (*ShareService, error) {
 	}
 	if cfg.Tokens == nil {
 		return nil, errors.New("ShareService 需要分享令牌签发器")
-	}
-	if cfg.Passwords == nil {
-		return nil, errors.New("ShareService 需要分享密码加密器")
 	}
 	if cfg.Now == nil {
 		cfg.Now = SystemClock
@@ -177,17 +178,13 @@ func (s *ShareService) Create(ctx context.Context, mapUID string, ownerID int64,
 	}
 
 	uid := id.New()
-	ciphertext, err := s.encryptPassword(password, uid, ownerID)
-	if err != nil {
-		return nil, err
-	}
 	created, err := s.shares.Create(ctx, domain.CreateShareInput{
 		UID:                uid,
 		Token:              newShareToken(),
 		MapID:              target.ID,
 		OwnerID:            ownerID,
 		PasswordHash:       passwordHash,
-		PasswordCiphertext: ciphertext,
+		PasswordCiphertext: storedSharePassword(password),
 		AllowDownload:      in.AllowDownload,
 		ShowNotes:          in.ShowNotes,
 		ExpiresAt:          expiresAt,
@@ -264,10 +261,7 @@ func (s *ShareService) Update(ctx context.Context, shareUID string, ownerID int6
 			return nil, err
 		}
 		next.PasswordHash = hash
-		next.PasswordCiphertext, err = s.encryptPassword(password, current.UID, ownerID)
-		if err != nil {
-			return nil, err
-		}
+		next.PasswordCiphertext = storedSharePassword(password)
 	}
 	if in.ExpiresInDays != nil {
 		expiresAt, err := s.expiryFrom(*in.ExpiresInDays)
@@ -293,23 +287,28 @@ func (s *ShareService) Update(ctx context.Context, shareUID string, ownerID int6
 	return s.ownerPassword(updated), nil
 }
 
-func (s *ShareService) encryptPassword(password, uid string, ownerID int64) (string, error) {
+func storedSharePassword(password string) string {
 	if password == "" {
-		return "", nil
+		return ""
 	}
-	value, err := s.passwords.Encrypt(password, uid, ownerID)
-	if err != nil {
-		return "", apperr.Wrap(apperr.CodeInternalError, err)
-	}
-	return value, nil
+	return plainSharePasswordPrefix + password
 }
 
-// ownerPassword is used only after owner-scoped access. Legacy or damaged
-// ciphertext remains password-protected via bcrypt and can be reset by its owner.
+// ownerPassword never consumes the saved value. New passwords need no key;
+// legacy ciphertext is read when possible, otherwise its owner can reset it.
 func (s *ShareService) ownerPassword(link *domain.ShareLink) *domain.ShareLink {
 	copy := *link
 	copy.Password = nil
-	if link.HasPassword() && link.PasswordCiphertext != "" {
+	if !link.HasPassword() {
+		return &copy
+	}
+	if value, plain := strings.CutPrefix(link.PasswordCiphertext, plainSharePasswordPrefix); plain {
+		if value != "" {
+			copy.Password = &value
+		}
+		return &copy
+	}
+	if s.passwords != nil && link.PasswordCiphertext != "" {
 		if value, err := s.passwords.Decrypt(link.PasswordCiphertext, link.UID, link.OwnerID); err == nil {
 			copy.Password = &value
 		}

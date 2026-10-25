@@ -25,11 +25,12 @@ type ShareLink struct {
 
 	// PasswordHash 为空串表示无访问密码。
 	//
-	// bcrypt 独立负责访客验证；密文仅供属主管理接口解密，不读入公开查询。
-	PasswordHash       string `json:"-"`
+	// bcrypt 独立负责访客验证；可读副本不读入公开查询。
+	PasswordHash string `json:"-"`
+	// 历史字段名保留：plain: 前缀保存明文访问码，v1: 为旧版 AES-GCM 密文。
 	PasswordCiphertext string `json:"-"`
-	// Password 仅在属主服务返回值内存中填充，仓储不得保存明文。
-	// nil 表示未设密码、旧哈希或密文不可解密，HasPassword 仍由哈希决定。
+	// Password 仅在属主服务返回值内存中填充，不回写这一派生字段。
+	// nil 表示未设密码、旧哈希或旧密文不可解密，HasPassword 仍由哈希决定。
 	Password *string `json:"-"`
 
 	AllowDownload bool

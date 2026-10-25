@@ -240,6 +240,33 @@ func TestShareOwnerCanReadAndResetPassword(t *testing.T) {
 			t.Fatal("owner password response must not be cached")
 		}
 	}
+	// Public verification and visits must not turn owner passwords into one-time values.
+	for read := 0; read < 2; read++ {
+		publicPath := "/api/v1/public/shares/" + share["token"].(string)
+		status, verified := s.do(http.MethodPost, publicPath+"/verify", "", map[string]any{"password": "Ab9x"})
+		if status != http.StatusOK {
+			t.Fatalf("验证分享 = %d %#v", status, verified.Error)
+		}
+		status, public := s.doHeader(http.MethodGet, publicPath, "", nil, map[string]string{"X-Share-Access": verified.Data["accessToken"].(string)})
+		if status != http.StatusOK {
+			t.Fatalf("公开访问 = %d %#v", status, public.Error)
+		}
+		for _, key := range []string{"password", "passwordHash", "passwordCiphertext"} {
+			if _, exists := public.Data[key]; exists {
+				t.Fatalf("公开响应泄露 %s", key)
+			}
+		}
+		for _, path := range []string{"/api/v1/maps/" + mapUID + "/shares", "/api/v1/shares"} {
+			status, listed := s.do(http.MethodGet, path, owner, nil)
+			if status != http.StatusOK || len(listed.Items) != 1 || listed.Items[0]["password"] != "Ab9x" {
+				t.Fatalf("访问分享后密码不得消失 %s = %d", path, status)
+			}
+			status, listed = s.do(http.MethodGet, path, other, nil)
+			if status != http.StatusNotFound && (status != http.StatusOK || len(listed.Items) != 0) {
+				t.Fatalf("非属主列表泄露密码 %s = %d", path, status)
+			}
+		}
+	}
 	status, body := s.do(http.MethodPatch, "/api/v1/shares/"+uid, other, map[string]any{"password": "Cd8y"})
 	if status != http.StatusNotFound {
 		t.Fatalf("越权重设 = %d %#v", status, body.Error)
