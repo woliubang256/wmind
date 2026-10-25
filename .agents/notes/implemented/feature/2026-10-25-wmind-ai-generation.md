@@ -22,6 +22,7 @@ Status: implemented
 
 ## Related decisions
 
+- 兼容消息结构参考 [OpenAI Chat Completions API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)：user content 支持字符串或有序 text/image_url 内容块；只依赖基础消息契约，不假定兼容端实现所有 OpenAI 参数。
 - [站点设置](../../implemented/architecture/2026-10-17-wmind-site-settings.md)：部分重叠，保留通用快照和白名单公开；私有 AI 配置由独立服务持有，不进入通用设置响应。
 - [导入框架](../../implemented/architecture/2026-10-20-wmind-import-framework.md)：部分重叠，Office 提取复用 fflate 与解压前预算思想；AI 材料不经过导图格式探测，也不更改已有导入语义。
 - 搜索 proposed/implemented/rejected 的 AI、OpenAI、Provider、人工智能关键词，没有现成 AI 决策需要取代；导图持久化中 AI 仅是未来扩展点。
