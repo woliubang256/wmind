@@ -27,7 +27,7 @@ export interface ShareLink {
   mapUid: string;
   mapTitle: string;
   hasPassword: boolean;
-  /** Owner-only; null for no password, legacy hashes or unavailable ciphertext. */
+  /** Repeatable owner-only readback; null for no password or unrecoverable legacy values. */
   password: string | null;
   allowDownload: boolean;
   showNotes: boolean;

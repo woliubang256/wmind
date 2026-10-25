@@ -31,6 +31,8 @@ Status: implemented
 - `TestSharePasswordRemainsReadableWithoutOriginalKey` 先复现更换密钥后回显为 null、未配置旧加密器时构造失败；修改后通过。新值测试覆盖明文实际存储、Unicode 与 `v1:` / `plain:` 原密码前缀不被误解。
 - `go test ./internal/service -run 'TestShare(Password|OwnerLegacyPasswordRecovery|Update)' -count=1` 覆盖两类列表重复读取、访客验证和浏览、旧密文、仅哈希、错误密钥、未知版本、重设、清除和无关设置更新。
 - `go test ./internal/integration ./internal/httpapi -run 'TestSharePasswordPersistsAcrossDatabaseReopens|TestShareOwnerCanReadAndResetPassword' -count=1` 使用真实 SQLite，数据库反复关闭重开并替换/移除旧密钥后仍可读回。公开查询不读取可读副本，HTTP 公开与越权响应不暴露密码，账号密码哈希不变。
+- `frontend/e2e/share-password-management.mjs` 覆盖分享弹窗两次关闭重开、刷新重开与“我的分享”刷新后的重复复制，独立验证空的新建草稿不影响已有密码。旧脚本将带 dialog 作用域的定位器嵌入行内 has 过滤而超时，现用行内相对 data-share-password 定位。原 psw 预填、URL/Referer 清理、旧哈希重设和中英文窄屏回归通过。
+- 本地前端类型检查、95 文件 1355 项单测和生产构建、后端全量测试与 vet、12 项发布工具测试、配色和字体门禁通过。PostgreSQL 实库、生成代码和 Docker 整栈由标签发布 CI 再验证。
 
 ## Consequences
 

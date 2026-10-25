@@ -66,8 +66,24 @@ try {
   await created.getByText(generated, { exact: true }).waitFor();
   await created.getByRole('button', { name: '复制密码', exact: true }).click();
   assert.equal(await page.evaluate(() => window.__copied), generated);
-  await dialog.locator('li').filter({ has: created }).getByRole('button', { name: '复制链接', exact: true }).click();
+  await dialog.locator('li').filter({ has: page.locator('[data-share-password="created-1"]') }).getByRole('button', { name: '复制链接', exact: true }).click();
   assert.equal(new URL(await page.evaluate(() => window.__copied)).searchParams.get('psw'), generated);
+  // Viewing/copying an existing password must not behave like a one-time secret.
+  for (let reopen = 0; reopen < 2; reopen++) {
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+    await page.getByRole('button', { name: '分享', exact: true }).click();
+    await created.getByText(generated, { exact: true }).waitFor();
+    await created.getByRole('button', { name: '复制密码', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.__copied), generated, 'reopening must retain the saved password');
+    assert.equal(await password.inputValue(), '', 'new-link draft is separate from saved passwords');
+  }
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.reload();
+  await page.locator('g.wmind-topic').first().waitFor();
+  await page.getByRole('button', { name: '分享', exact: true }).click();
+  await created.getByText(generated, { exact: true }).waitFor();
+  await created.getByRole('button', { name: '复制密码', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__copied), generated, 'refresh must read the saved password from the owner API');
   assert.equal(await dialog.locator('li').filter({ hasText: '/s/open' }).getByRole('button', { name: '重设密码', exact: true }).count(), 0);
   assert.equal(await dialog.locator('[data-share-password="revoked"]').getByRole('button', { name: '重设密码', exact: true }).count(), 0);
   await dialog.locator('[data-share-password="legacy"]').getByText('原密码不可查看', { exact: true }).waitFor();
@@ -104,6 +120,10 @@ try {
   assert.equal(new URL(await page.evaluate(() => window.__copied)).searchParams.get('psw'), resetPassword);
   await page.reload();
   await page.locator('[data-share-password="legacy"]').getByText(resetPassword, { exact: true }).waitFor();
+  const refreshed = page.locator('[data-share-password="created-1"]');
+  await refreshed.getByText(generated, { exact: true }).waitFor();
+  await refreshed.getByRole('button', { name: '复制密码', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__copied), generated, 'My shares must support repeated copying after refresh');
   await page.locator('[data-share-password="legacy"]').getByRole('button', { name: '重设密码', exact: true }).click();
   await reset.getByRole('button', { name: '取消', exact: true }).click();
   assert.equal(patches.length, 2, 'cancel must not save');
@@ -134,5 +154,5 @@ try {
   await page.screenshot({ path: '/tmp/wmind-share-password-en-mobile.png' });
   await english.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.deepEqual(errors, []);
-  console.log('PASS: 4位三类随机密码 / 账号策略隔离 / 两处查看复制与重设 / 旧哈希 / 失败与取消 / 刷新 / 无密码 / dialog复制降级 / 中英文375px / 无密码持久化');
+  console.log('PASS: 4位三类随机密码 / 账号策略隔离 / 两处重复查看复制与重设 / 关闭重开 / 刷新 / 旧哈希 / 失败与取消 / 无密码 / dialog复制降级 / 中英文375px / 无浏览器密码持久化');
 } finally { await browser.close(); }
