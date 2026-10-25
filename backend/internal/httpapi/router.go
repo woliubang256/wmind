@@ -84,6 +84,7 @@ func NewRouter(deps Deps) http.Handler {
 		middleware.RequestID(),
 		middleware.Logger(deps.Logger),
 		middleware.CORS(deps.Config.CORSOrigins),
+		middleware.RequestLimits(),
 		middleware.Maintenance(deps.Maintenance),
 	)
 
