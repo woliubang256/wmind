@@ -87,8 +87,55 @@ run(async () => {
     const dialog = page.getByRole('dialog');
     const prompt = dialog.getByRole('textbox', { name: '生成要求', exact: true });
     const generate = dialog.getByRole('button', { name: '生成导图', exact: true });
+    const form = dialog.locator('form');
+    const transfer = async (files) => page.evaluateHandle((items) => {
+      const data = new DataTransfer();
+      for (const item of items) data.items.add(new File([Uint8Array.from(atob(item.base64), (char) => char.charCodeAt(0))], item.name, { type: item.mimeType, lastModified: 123 }));
+      return data;
+    }, files.map(({ buffer, ...file }) => ({ ...file, base64: buffer.toString('base64') })));
+    const drop = async (data) => {
+      await form.dispatchEvent('dragenter', { dataTransfer: data });
+      await form.dispatchEvent('dragover', { dataTransfer: data });
+      await form.dispatchEvent('drop', { dataTransfer: data });
+    };
     await open();
     check('空输入禁用生成，上传包含已确认的格式', await generate.isDisabled() && (await dialog.locator('input[type=file]').getAttribute('accept')).includes('.docx,.xlsx,.pdf'));
+    const dropped = await transfer(aiFixtures().slice(0, 2));
+    await form.dispatchEvent('dragenter', { dataTransfer: dropped });
+    check('文件拖入高亮并显示松开提示', await form.getAttribute('data-file-drop-state') === 'active' && await dialog.getByRole('button', { name: '松开添加文件', exact: true }).isVisible());
+    await prompt.dispatchEvent('dragenter', { dataTransfer: dropped });
+    await prompt.dispatchEvent('dragleave', { dataTransfer: dropped });
+    check('在子元素间拖动不闪烁', await form.getAttribute('data-file-drop-state') === 'active');
+    await form.dispatchEvent('dragleave', { dataTransfer: dropped });
+    check('拖离恢复上传区域', await form.getAttribute('data-file-drop-state') === 'idle');
+    const textDrag = await form.evaluate((node) => {
+      const dataTransfer = new DataTransfer(); dataTransfer.setData('text/plain', '文字拖动');
+      return node.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+    });
+    check('文字拖动保持原生行为', textDrag && await form.getAttribute('data-file-drop-state') === 'idle');
+    await drop(dropped); await drop(dropped);
+    check('多文件拖入按顺序添加、重复拖入去重且不打开背景导入', await dialog.getByRole('listitem').count() === 2 && (await dialog.getByRole('listitem').allTextContents())[0].includes('需求.docx') && await page.getByRole('dialog').count() === 1 && await form.getAttribute('data-file-drop-state') === 'idle');
+    const invalidDrop = await transfer([{ name: '旧格式.doc', mimeType: 'application/msword', buffer: Buffer.from('old') }]);
+    await drop(invalidDrop);
+    check('拖入不支持格式时保留已有附件', await dialog.getByRole('alert').isVisible() && await dialog.getByRole('listitem').count() === 2);
+    const tooManyDrop = await transfer(aiFixtures().map((file, index) => ({ ...file, name: `额外${index}.pdf` })));
+    await drop(tooManyDrop);
+    check('拖入超数量限制不丢已有附件', await dialog.getByRole('alert').isVisible() && await dialog.getByRole('listitem').count() === 2);
+    const tooLargeDrop = await page.evaluateHandle(() => {
+      const data = new DataTransfer();
+      data.items.add(new File([new Uint8Array(20 * 1024 * 1024 + 1)], '过大.pdf', { type: 'application/pdf' }));
+      return data;
+    });
+    await drop(tooLargeDrop);
+    check('拖入超大小限制不丢已有附件', await dialog.getByRole('alert').isVisible() && await dialog.getByRole('listitem').count() === 2);
+    await dialog.getByRole('button', { name: '移除 需求.docx', exact: true }).click();
+    await dialog.getByRole('button', { name: '移除 预算.xlsx', exact: true }).click();
+    const chooserPromise = page.waitForEvent('filechooser');
+    await dialog.getByRole('button', { name: '上传或拖拽文件', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const chooser = await chooserPromise;
+    await chooser.setFiles([]);
+    check('键盘仍可打开文件选择器', await dialog.locator('input[type=file]').getAttribute('multiple') !== null);
     await prompt.fill('综合所有附件整理一个项目计划。');
     await dialog.locator('input[type=file]').setInputFiles(aiFixtures());
     check('五个附件按选择顺序显示', await dialog.getByRole('listitem').count() === 5 && await dialog.getByText('需求.docx', { exact: true }).isVisible());
@@ -125,6 +172,8 @@ run(async () => {
     generateMode = 'deferred'; await generate.click();
     await dialog.getByRole('button', { name: '正在生成…', exact: true }).waitFor();
     check('生成中禁用重复操作', await prompt.isDisabled() && await dialog.getByRole('button', { name: '正在生成…', exact: true }).isDisabled());
+    await drop(await transfer(aiFixtures().slice(0, 2)));
+    check('生成中拖放被拦截且不接收文件', await form.getAttribute('data-file-drop-state') === 'disabled' && await dialog.getByRole('listitem').count() === 0 && await page.getByRole('dialog').count() === 1);
     await dialog.getByRole('button', { name: '取消', exact: true }).click(); await open(); releaseGenerate();
     check('取消后重开为空，旧请求不会创建文件', await prompt.inputValue() === '' && creations.length === 2);
     await dialog.getByRole('button', { name: '取消', exact: true }).click();

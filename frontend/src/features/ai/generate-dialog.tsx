@@ -25,6 +25,8 @@ export function AIGenerateDialog({ onClose }: { onClose: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const running = useRef<AbortController | null>(null);
   const saving = useRef(false);
+  const dragDepth = useRef(0);
+  const [dragging, setDragging] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [generated, setGenerated] = useState<WmindDocument | null>(null);
@@ -112,8 +114,29 @@ export function AIGenerateDialog({ onClose }: { onClose: () => void }) {
       </Button>
     </>}>
     <form id={formId} onSubmit={(event) => { void generate(event); }} className="space-y-4" aria-busy={busy}
-      onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.stopPropagation(); } }}
-      onDrop={(event) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.stopPropagation(); if (!busy) addFiles(Array.from(event.dataTransfer.files)); } }}>
+      data-file-drop-state={busy ? 'disabled' : dragging ? 'active' : 'idle'}
+      onDragEnter={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault(); event.stopPropagation();
+        if (!busy) { dragDepth.current += 1; setDragging(true); }
+      }}
+      onDragLeave={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault(); event.stopPropagation();
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragging(false);
+      }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault(); event.stopPropagation();
+        event.dataTransfer.dropEffect = busy ? 'none' : 'copy';
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault(); event.stopPropagation();
+        dragDepth.current = 0; setDragging(false);
+        if (!busy) addFiles(Array.from(event.dataTransfer.files));
+      }}>
       <Textarea aria-label={t('ai.prompt')} placeholder={t('ai.placeholder')} rows={7} autoFocus value={prompt} disabled={busy}
         onChange={(event) => { setPrompt(event.target.value); resetResult(); }} className="min-h-44 text-sm leading-6" />
       {files.length > 0 && <ul className="space-y-2" aria-label={t('ai.attachments')}>
@@ -125,10 +148,10 @@ export function AIGenerateDialog({ onClose }: { onClose: () => void }) {
             onClick={() => { setFiles((previous) => previous.filter((_, at) => at !== index)); resetResult(); }}><Icon name="x" className="size-3.5" /></Button>
         </li>)}
       </ul>}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dashed p-3 ${dragging && !busy ? 'border-primary bg-primary/5' : 'border-border'}`}>
         <input ref={fileInput} type="file" accept={AI_ACCEPT} multiple className="hidden" aria-label={t('ai.upload')}
           onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
-        <Button variant="outline" size="sm" disabled={busy || files.length >= AI_LIMITS.files} onClick={() => fileInput.current?.click()}><Icon name="paperclip" className="size-4" />{t('ai.upload')}</Button>
+        <Button variant="outline" size="sm" disabled={busy || files.length >= AI_LIMITS.files} onClick={() => fileInput.current?.click()}><Icon name="paperclip" className="size-4" />{t(dragging && !busy ? 'ai.dropFiles' : 'ai.upload')}</Button>
         <span className="text-xs text-muted-foreground">{t('ai.formats')}</span>
       </div>
       {phase === 'extracting' && currentFile && <LoadingState inline label={t('ai.extracting', { name: currentFile })} className="text-xs" />}

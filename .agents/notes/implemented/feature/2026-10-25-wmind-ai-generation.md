@@ -20,6 +20,8 @@ Status: implemented
 
 实现覆盖后端配置和生成 API、浏览器附件提取、生成弹窗、原生文档转换与后台 AI 配置。最近列表的 AI 生成入口位于新建左侧，仅启用时显示；弹窗按需加载，允许文字、附件或组合输入。错误保留素材，取消中止旧请求且不创建文件；保存失败缓存已生成文档，仅重试保存，不再次计费调用 AI。保存阶段禁止关闭。后台短字段桌面并排、手机单列，追加提示词按需展开且只读。
 
+附件既可点击选择也可拖入弹窗表单，上传区域在文件进入时高亮；嵌套元素切换用进入深度计数避免闪烁，最后离开或松手时清除。仅拦截文件拖放并阻止冒泡到背景导图导入；文字拖动保持原生行为。解析、生成及保存中仍阻止文件默认导航，但不接收新文件。拖放与点击共用去重、格式及大小/数量限制，失败不丢已有附件。
+
 ## Related decisions
 
 - 兼容消息结构参考 [OpenAI Chat Completions API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)：user content 支持字符串或有序 text/image_url 内容块；只依赖基础消息契约，不假定兼容端实现所有 OpenAI 参数。
@@ -43,6 +45,7 @@ Status: implemented
 - `pnpm test`：96 个测试文件、1361 项全部通过；`pnpm exec tsc --noEmit` 通过。PDF.js 本地 worker/字体资源在浏览器中实际提取、渲染通过。
 - `dependency-loading.test.mjs` 在修复前证明缺少 PDF.js 预构建，修复后通过；独立临时 cacheDir 的全新 Vite 服务完成相同 21 项 E2E，无依赖发现导致的导航。`pnpm run build` 通过，PDF 模块仍为按需分块，既有大 chunk 警告不阻塞构建。
 - 后台布局回归脚本保存后将鼠标移离通知区域，避免指针悬停使 Sonner 暂停消失并遮挡下一次保存；不修改通知或业务行为。`node frontend/e2e/admin-settings-layout.mjs` 中英文、桌面及手机布局 38 项通过。
+- 拖放交互追加浏览器断言：文件进入/嵌套切换/离开高亮、文字原生拖动、多文件有序与去重、格式/数量/单文件大小超限保留已有项、生成中拦截及背景导入隔离、键盘上传；`node frontend/e2e/ai-generation.mjs` 31 项通过，桌面和手机截图已检查，`pnpm exec tsc --noEmit` 通过。
 - 管理员配置的真实 Provider（保留原有 model）使用自行创建的 docx/xlsx/文字 PDF/扫描 PDF/PNG 完成联调，新建独立“AI联调测试”导图 11 节点，保留研发预算 1200 并自动进入编辑器。一次无效模型输出被拒绝，重试成功；不自动重试付费请求、不保存失败占位。已有三份开发导图未覆盖。
 
 ## Consequences
