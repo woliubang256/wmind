@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/woliubang256/wmind/backend/internal/ai"
 	"github.com/woliubang256/wmind/backend/internal/auth"
 	"github.com/woliubang256/wmind/backend/internal/backup"
 	"github.com/woliubang256/wmind/backend/internal/config"
@@ -178,6 +179,10 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	}
 	t.Cleanup(func() { stopBackups(); backups.Wait() })
 
+	aiSvc, err := ai.New(sqlite.NewSettingsRepository(db), "http-test-encryption-key-long-enough")
+	if err != nil {
+		t.Fatal(err)
+	}
 	cookie := handler.DefaultCookieConfig(false, 7*24*time.Hour)
 	loginEncryption, err := service.NewLoginEncryption(sqlite.NewLoginChallengeRepository(db), "http-test-encryption-key-long-enough")
 	if err != nil {
@@ -196,7 +201,8 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Sessions:         svc,
 		RegistrationOpen: settingsSvc.RegistrationEnabled,
 		Users:            handler.NewUserHandler(userSvc, svc, cookie.Name, service.DefaultMaxAvatarBytes),
-		Site:             handler.NewSiteHandler(settingsSvc, "test-version"),
+		Site:             handler.NewSiteHandler(settingsSvc, "test-version", aiSvc.Enabled),
+		AI:               handler.NewAIHandler(aiSvc, adminSvc),
 		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
 		Backups:          handler.NewBackupHandler(backups),
 		Maintenance:      backups.Gate(),

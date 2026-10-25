@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
 
 	"github.com/woliubang256/wmind/backend/internal/httpapi/response"
@@ -11,12 +12,17 @@ import (
 type SiteHandler struct {
 	settings *settings.Service
 	// version 是构建版本，前端用来判断是否需要提示刷新。
-	version string
+	version   string
+	aiEnabled func(context.Context) bool
 }
 
 // NewSiteHandler 构造站点配置 handler。
-func NewSiteHandler(svc *settings.Service, version string) *SiteHandler {
-	return &SiteHandler{settings: svc, version: version}
+func NewSiteHandler(svc *settings.Service, version string, aiEnabled ...func(context.Context) bool) *SiteHandler {
+	h := &SiteHandler{settings: svc, version: version}
+	if len(aiEnabled) > 0 {
+		h.aiEnabled = aiEnabled[0]
+	}
+	return h
 }
 
 // siteConfig 是 GET /site/config 的响应体（docs/04 §5.1）。
@@ -34,6 +40,7 @@ type siteConfig struct {
 	RegistrationEnabled bool   `json:"registrationEnabled"`
 	PasswordMinLength   int    `json:"passwordMinLength"`
 	ImportEnabled       bool   `json:"importEnabled"`
+	AIEnabled           bool   `json:"aiEnabled"`
 	ExportEnabled       bool   `json:"exportEnabled"`
 	UserTemplateEnabled bool   `json:"userTemplateEnabled"`
 	ShareEnabled        bool   `json:"shareEnabled"`
@@ -58,6 +65,7 @@ func (h *SiteHandler) Config(c *gin.Context) {
 		RegistrationEnabled: snapshot.RegistrationEnabled(),
 		PasswordMinLength:   snapshot.PasswordMinLength(),
 		ImportEnabled:       snapshot.Bool("feature.import_enabled"),
+		AIEnabled:           h.aiEnabled != nil && h.aiEnabled(c.Request.Context()),
 		ExportEnabled:       snapshot.Bool("feature.export_enabled"),
 		UserTemplateEnabled: snapshot.Bool("feature.user_template_enabled"),
 		ShareEnabled:        snapshot.Bool("share.public_link_enabled"),

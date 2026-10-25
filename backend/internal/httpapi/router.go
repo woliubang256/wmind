@@ -50,6 +50,7 @@ type Deps struct {
 	Site          *handler.SiteHandler
 	AdminSettings *handler.AdminSettingsHandler
 	Backups       *handler.BackupHandler
+	AI            *handler.AIHandler
 	Maintenance   middleware.MaintenanceGate
 	// Admin 处理管理后台的用户、统计与审计接口。
 	Admin *handler.AdminHandler
@@ -113,6 +114,10 @@ func NewRouter(deps Deps) http.Handler {
 	registerTemplates(v1, deps)
 	registerFiles(v1, deps)
 	registerAdmin(v1, deps)
+	if deps.AI != nil && deps.Sessions != nil {
+		v1.POST("/ai/generate", middleware.RequireAuth(deps.Sessions),
+			middleware.NewRateLimiter(5, time.Minute, 5).Middleware(middleware.UserKey), deps.AI.Generate)
+	}
 
 	// 头像等上传文件由 API 直接提供。生产部署里 Nginx 把 /uploads/ 也代理到
 	// 本进程（见 deploy/nginx.conf），所以这里不需要额外的鉴权：头像本来就是
@@ -274,6 +279,10 @@ func registerAdmin(v1 *gin.RouterGroup, deps Deps) {
 		middleware.RequireAuth(deps.Sessions),
 		middleware.RequireRole(domain.RoleAdmin),
 	)
+	if deps.AI != nil {
+		g.GET("/ai", deps.AI.Get)
+		g.PUT("/ai", deps.AI.Save)
+	}
 	if deps.Backups != nil {
 		g.GET("/backups", deps.Backups.Get)
 		g.PUT("/backups/config", deps.Backups.Save)

@@ -102,8 +102,8 @@ func (s *Service) Reload(ctx context.Context) error {
 	}
 
 	for _, row := range rows {
-		// Private backup records are encrypted and managed by the backup service.
-		if strings.HasPrefix(row.Key, "backup.") {
+		// Private records are encrypted and managed by their own services.
+		if strings.HasPrefix(row.Key, "backup.") || strings.HasPrefix(row.Key, "ai.") {
 			continue
 		}
 		spec, ok := Lookup(row.Key)

@@ -1723,6 +1723,95 @@ paths:
         '502':
           $ref: '#/components/responses/Error'
 
+  /api/v1/admin/ai:
+    get:
+      tags: [admin]
+      summary: 读取 AI 配置（仅管理员，密钥只返回已设置状态）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 包含 enabled、baseUrl、apiKeySet、model 和只读 systemPrompt
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AIConfiguration' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [admin]
+      summary: 保存 AI 配置（仅管理员，空密钥保留旧值）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled: { type: boolean, default: false }
+                baseUrl: { type: string, format: uri }
+                apiKey: { type: string, writeOnly: true }
+                model: { type: string }
+                clearApiKey: { type: boolean, default: false }
+      responses:
+        '200':
+          description: 已保存，密钥不回传
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/ai/generate:
+    post:
+      tags: [maps]
+      summary: 从文字与附件素材生成导图树
+      description: >-
+        需要启用 AI。每用户每分钟 5 次、同一用户最多一个运行中请求，每实例最多 4 个。
+        请求上限 12 MiB，文字合计 100000 字符、最多 5 份附件、12 张图片。
+        返回受限树，客户端通过现有导图创建接口保存为新文件。
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                prompt: { type: string }
+                sources:
+                  type: array
+                  maxItems: 5
+                  items:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name: { type: string }
+                      text: { type: string }
+                      images:
+                        type: array
+                        items: { type: string, description: PNG/JPEG/WebP/GIF 的 base64 data URL }
+      responses:
+        '200':
+          description: 验证后的 title/children 树，最多 500 节点、12 层
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AINode' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1914,6 +2003,11 @@ components:
       type: string
       description: 稳定契约。完整表见 `docs/04-后端设计与API规范.md` §3.2。
       enum:
+        - AI_DISABLED
+        - AI_CONFIG_INVALID
+        - AI_INPUT_INVALID
+        - AI_PROVIDER_FAILED
+        - AI_OUTPUT_INVALID
         - BACKUP_BUSY
         - BACKUP_CONFIG_INVALID
         - BACKUP_REMOTE_FAILED
@@ -1969,6 +2063,25 @@ components:
         - MAIL_NOT_CONFIGURED
         - ENCRYPTION_KEY_MISSING
 
+    AIConfiguration:
+      type: object
+      properties:
+        enabled: { type: boolean, default: false }
+        baseUrl: { type: string }
+        apiKeySet: { type: boolean }
+        model: { type: string }
+        systemPrompt: { type: string, readOnly: true }
+
+    AINode:
+      type: object
+      additionalProperties: false
+      required: [title, children]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 500 }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/AINode' }
+
     SiteConfig:
       type: object
       required:
@@ -1985,6 +2098,7 @@ components:
         registrationEnabled: { type: boolean }
         passwordMinLength: { type: integer }
         importEnabled: { type: boolean }
+        aiEnabled: { type: boolean, default: false }
         exportEnabled: { type: boolean }
         userTemplateEnabled: { type: boolean }
         shareEnabled: { type: boolean }

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/woliubang256/wmind/backend/internal/ai"
 	"github.com/woliubang256/wmind/backend/internal/auth"
 	"github.com/woliubang256/wmind/backend/internal/backup"
 	"github.com/woliubang256/wmind/backend/internal/config"
@@ -246,6 +247,11 @@ func run() error {
 		return err
 	}
 
+	aiSvc, err := ai.New(settingsRepo, factorKey)
+	if err != nil {
+		return err
+	}
+
 	themeSvc, err := service.NewThemeService(service.ThemeServiceConfig{
 		Themes: themeRepo,
 	})
@@ -323,7 +329,8 @@ func run() error {
 		// 探测不该消耗 IP 的注册配额，也不该报成「请求太频繁」。
 		RegistrationOpen: settingsSvc.RegistrationEnabled,
 		Users:            handler.NewUserHandler(userSvc, authSvc, cookie.Name, service.DefaultMaxAvatarBytes),
-		Site:             handler.NewSiteHandler(settingsSvc, config.Version),
+		Site:             handler.NewSiteHandler(settingsSvc, config.Version, aiSvc.Enabled),
+		AI:               handler.NewAIHandler(aiSvc, adminSvc),
 		AdminSettings:    handler.NewAdminSettingsHandler(settingsSvc, adminSvc),
 		Backups:          handler.NewBackupHandler(backups),
 		Maintenance:      backups.Gate(),

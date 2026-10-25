@@ -10,6 +10,11 @@ type Code string
 
 // 一期错误码。与 docs/04-后端设计与API规范.md §6 的错误码表一一对应。
 const (
+	CodeAIDisabled                Code = "AI_DISABLED"
+	CodeAIConfigInvalid           Code = "AI_CONFIG_INVALID"
+	CodeAIInputInvalid            Code = "AI_INPUT_INVALID"
+	CodeAIProviderFailed          Code = "AI_PROVIDER_FAILED"
+	CodeAIOutputInvalid           Code = "AI_OUTPUT_INVALID"
 	CodeAuthLoginChallengeInvalid Code = "AUTH_LOGIN_CHALLENGE_INVALID"
 	CodeBadRequest                Code = "BAD_REQUEST"
 	CodeBackupBusy                Code = "BACKUP_BUSY"
@@ -92,6 +97,11 @@ type spec struct {
 }
 
 var registry = map[Code]spec{
+	CodeAIDisabled:                {http.StatusForbidden, "站点未启用 AI 生成功能"},
+	CodeAIConfigInvalid:           {http.StatusUnprocessableEntity, "AI 配置无效，请检查地址、密钥、模型和服务端加密密钥"},
+	CodeAIInputInvalid:            {http.StatusUnprocessableEntity, "素材为空、格式无效或超出限制，请减少内容后重试"},
+	CodeAIProviderFailed:          {http.StatusBadGateway, "AI 调用失败，请检查 Provider 配置、模型能力或稍后重试"},
+	CodeAIOutputInvalid:           {http.StatusBadGateway, "AI 未返回有效的导图结构，请减少内容或重新生成"},
 	CodeAuthLoginChallengeInvalid: {http.StatusUnprocessableEntity, "登录验证已失效，请重试"},
 	CodeBackupBusy:                {http.StatusConflict, "备份或恢复任务正在执行，请稍后重试"},
 	CodeBackupConfigInvalid:       {http.StatusUnprocessableEntity, "备份配置无效，请检查 Cron、时区和存储配置"},
