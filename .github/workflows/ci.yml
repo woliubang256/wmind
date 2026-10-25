@@ -225,11 +225,30 @@ jobs:
             "$base/api/v1/admin/backups")
           test "$backup_status" = '401'
           ! grep -qi '^location:' "$backup_headers"
-          compose exec -T api sh -ec 'printf "%s" "wmind-upload-probe" > /data/uploads/wmind-release-upload-smoke.txt'
-          uploaded=$(curl --fail --silent --show-error "$base/uploads/wmind-release-upload-smoke.txt")
-          test "$uploaded" = 'wmind-upload-probe'
+          public_avatar='avatar_01ARZ3NDEKTSV4RRFFQ69G5FAV_01ARZ3NDEKTSV4RRFFQ69G5FAW.png'
+          private_image='file_1_00000000000000000000000000000001.png'
+          unknown_image='wmind-release-unknown.png'
+          png_base64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII='
+          png_source="$RUNNER_TEMP/wmind-smoke-source.png"
+          printf '%s' "$png_base64" | base64 --decode > "$png_source"
+          printf '%s' "$png_base64" | compose exec -T api sh -ec '
+            base64 -d > "/data/uploads/$1"
+            cp "/data/uploads/$1" "/data/uploads/$2"
+            cp "/data/uploads/$1" "/data/uploads/$3"
+          ' sh "$public_avatar" "$private_image" "$unknown_image"
+          avatar_download="$RUNNER_TEMP/wmind-smoke-avatar.png"
+          avatar_headers="$RUNNER_TEMP/wmind-smoke-avatar-headers.txt"
+          curl --fail --silent --show-error --dump-header "$avatar_headers" \
+            --output "$avatar_download" "$base/uploads/$public_avatar"
+          cmp "$png_source" "$avatar_download"
+          grep -qi '^content-type: image/png' "$avatar_headers"
+          for name in "$private_image" "$unknown_image"; do
+            denied_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              "$base/uploads/$name")
+            test "$denied_status" = '404'
+          done
           missing_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-            "$base/uploads/wmind-release-missing-smoke.txt")
+            "$base/uploads/wmind-release-missing-smoke.png")
           test "$missing_status" = '404'
 
       - name: Promote both images to latest

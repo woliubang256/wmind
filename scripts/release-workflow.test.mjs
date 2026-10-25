@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { inflateSync } from 'node:zlib';
 
 test('构建前校验整理稿，发布页与附件和部署包共用同一日志输出', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
@@ -77,6 +78,31 @@ test('全新上传卷和 SQLite 整栈冒烟均在 latest 晋升之前运行并�
   assert.match(steps[sqlite], /up -d --no-build --wait/);
   assert.match(steps[sqlite], /\/api\/v1\/site\/config/);
   assert.match(steps[sqlite], /process\.env\.GITHUB_REF_NAME/);
-  assert.match(steps[sqlite], /\/uploads\/wmind-release-upload-smoke\.txt/);
   assert.match(steps[sqlite], /test "\$missing_status" = '404'/);
+});
+
+test('媒体部署冒烟只公开合法头像，已落盘私有及未知PNG匿名不可读', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const sqlite = workflow.split('\n      - name: ').find(step => step.startsWith('Smoke-test SQLite deployment\n'));
+  assert.ok(sqlite);
+  const avatar = sqlite.match(/public_avatar='([^']+)'/)?.[1];
+  const privateImage = sqlite.match(/private_image='([^']+)'/)?.[1];
+  const unknownImage = sqlite.match(/unknown_image='([^']+)'/)?.[1];
+  assert.match(avatar ?? '', /^avatar_[0-9A-HJKMNP-TV-Z]{26}_[0-9A-HJKMNP-TV-Z]{26}\.png$/);
+  assert.match(privateImage ?? '', /^file_[1-9][0-9]*_[a-f0-9]{32}\.png$/);
+  assert.match(unknownImage ?? '', /^wmind-release-unknown\.png$/);
+  const encoded = sqlite.match(/png_base64='([^']+)'/)?.[1];
+  assert.ok(encoded, '冒烟必须用真实PNG而非重命名的文本');
+  const png = Buffer.from(encoded, 'base64');
+  assert.deepEqual(png.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  assert.equal(png.toString('ascii', 12, 16), 'IHDR');
+  assert.equal(png.readUInt32BE(16), 1);
+  assert.equal(png.readUInt32BE(20), 1);
+  const idat = png.indexOf(Buffer.from('IDAT'));
+  assert.ok(idat > 0);
+  assert.deepEqual(inflateSync(png.subarray(idat + 4, idat + 4 + png.readUInt32BE(idat - 4))), Buffer.from([0, 255, 255, 255, 255]));
+  assert.match(sqlite, /cmp "\$png_source" "\$avatar_download"/, '公开头像须返回相同图片字节');
+  assert.match(sqlite, /for name in "\$private_image" "\$unknown_image"/);
+  assert.match(sqlite, /test "\$denied_status" = '404'/);
+  assert.doesNotMatch(sqlite, /wmind-upload-probe|wmind-release-upload-smoke\.txt/);
 });
