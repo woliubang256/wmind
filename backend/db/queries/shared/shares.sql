@@ -47,7 +47,9 @@ WHERE s.uid = sqlc.arg(uid) AND s.owner_id = sqlc.arg(owner_id);
 -- `m.deleted_at` is selected so the caller can fold "map in trash" into the
 -- same not-found answer as "token revoked".
 --
--- The users join supplies the owner NICKNAME only. uid and email must never
+-- The users join requires a live, active owner and supplies the NICKNAME only.
+-- A disabled or deleted owner has no public access, including password verify.
+-- uid and email must never
 -- reach the public payload (docs/04 5.7), so they are not selected at all --
 -- a column that is not read cannot be leaked by a later DTO edit.
 SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
@@ -58,7 +60,8 @@ SELECT s.id, s.uid, s.token, s.map_id, s.owner_id, s.password_hash,
 FROM share_links s
 JOIN maps m ON m.id = s.map_id
 JOIN users u ON u.id = s.owner_id
-WHERE s.token = sqlc.arg(token);
+WHERE s.token = sqlc.arg(token)
+  AND u.status = 'active' AND u.deleted_at IS NULL;
 
 -- name: ListSharesByMap :many
 -- Includes revoked rows: the per-map dialog shows history, and hiding revoked

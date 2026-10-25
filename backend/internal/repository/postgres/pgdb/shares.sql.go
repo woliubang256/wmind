@@ -134,6 +134,7 @@ FROM share_links s
 JOIN maps m ON m.id = s.map_id
 JOIN users u ON u.id = s.owner_id
 WHERE s.token = $1
+  AND u.status = 'active' AND u.deleted_at IS NULL
 `
 
 type GetShareByTokenRow struct {
@@ -165,7 +166,9 @@ type GetShareByTokenRow struct {
 // `m.deleted_at` is selected so the caller can fold "map in trash" into the
 // same not-found answer as "token revoked".
 //
-// The users join supplies the owner NICKNAME only. uid and email must never
+// The users join requires a live, active owner and supplies the NICKNAME only.
+// A disabled or deleted owner has no public access, including password verify.
+// uid and email must never
 // reach the public payload (docs/04 5.7), so they are not selected at all --
 // a column that is not read cannot be leaked by a later DTO edit.
 func (q *Queries) GetShareByToken(ctx context.Context, token string) (GetShareByTokenRow, error) {
