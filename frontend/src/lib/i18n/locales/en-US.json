@@ -714,7 +714,16 @@
     "title": "Share \"{{title}}\"",
     "copy": "Copy link",
     "copied": "Copied",
-    "copyFailed": "Could not copy. Select the link and copy it manually.",
+    "copyFailed": "Could not copy. Select the text and copy it manually.",
+    "password": {
+      "generate": "Generate",
+      "generateFailed": "Secure random is unavailable. Enter a password manually.",
+      "copy": "Copy password",
+      "unavailable": "Password unavailable",
+      "reset": "Reset password",
+      "saved": "Password updated",
+      "resetHint": "Resetting does not immediately end verified access. Revoke the link to stop access now."
+    },
     "revoke": "Revoke",
     "revoked": "Link revoked. That address no longer opens.",
     "views": "{{count}} views",

@@ -59,6 +59,7 @@ const SUITE = [
   ['share-collapse-a11y', '分享折叠键盘操作 / 可访问名称 / 焦点保持'],
   ['share-font-loading', '分享字体延迟 / 就绪后布局 / 保存视角'],
   ['share-defaults', '分享默认权限 / 期限 / 文案与异步配置'],
+  ['share-password-management', '4位随机密码 / 查看复制与重设 / 旧哈希兼容'],
 ];
 
 function probe(url) {

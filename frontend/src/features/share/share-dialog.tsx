@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Icon } from '@/components/ui/icon';
 import { LoadingState } from '@/components/ui/loading-state';
-import { SelectField, TextField } from '@/components/ui/input';
+import { SelectField } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/panel';
 import { Switch } from '@/components/ui/switch';
@@ -27,6 +27,8 @@ import { fieldErrorsFrom } from '@/lib/api/errors';
 import { resolveShareUrl, shareApi, type ShareLink } from '@/lib/api/shares';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { shareKeys } from './queries';
+import { copyToClipboard } from './share-password';
+import { SharePasswordControl, SharePasswordField, SharePasswordResetDialog } from './share-password-controls';
 
 export interface ShareDialogProps {
   open: boolean;
@@ -37,38 +39,6 @@ export interface ShareDialogProps {
 
 /** 有效期候选。0 表示永久有效；默认选中站点配置的期限（缺省 7 天）。 */
 const EXPIRY_CHOICES = [0, 1, 7, 30, 90, 365] as const;
-
-/**
- * 复制到剪贴板。
- *
- * `navigator.clipboard` 只在安全上下文（HTTPS / localhost）可用，自建站点
- * 用 IP 直接访问时它是 undefined。那种情况下退回 `execCommand('copy')`：
- * 虽然已废弃，但它是唯一在没有权限 API 的环境里还能工作的办法。
- */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // 权限被拒也继续走降级路径。
-  }
-  try {
-    const area = document.createElement('textarea');
-    area.value = text;
-    area.setAttribute('readonly', '');
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.select();
-    const ok = document.execCommand('copy');
-    area.remove();
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProps) {
   const { t } = useTranslation();
@@ -81,6 +51,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
   const [showNotes, setShowNotes] = useState(false);
   const [created, setCreated] = useState<ShareLink | null>(null);
   const [revoking, setRevoking] = useState<ShareLink | null>(null);
+  const [resetting, setResetting] = useState<ShareLink | null>(null);
   const [copiedUid, setCopiedUid] = useState<string | null>(null);
   const opened = useRef(false);
   const editedDefaults = useRef({ expiry: false, download: false });
@@ -98,6 +69,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
       setShowNotes(false);
       setCreated(null);
       setRevoking(null);
+      setResetting(null);
       setCopiedUid(null);
     }
     // 配置可能比弹窗晚返回；只补齐尚未编辑的默认字段，不能重置用户草稿。
@@ -171,14 +143,11 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
             <h3 className="text-sm font-medium">{t('share.create.title')}</h3>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                label={t('share.create.password')}
-                type="text"
+              <SharePasswordField
                 value={password}
-                placeholder={t('share.create.passwordPlaceholder')}
-                hint={t('share.create.passwordHint')}
                 error={createError.password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={setPassword}
+                disabled={create.isPending}
               />
               <SelectField
                 label={t('share.create.expiry')}
@@ -232,7 +201,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
                     <div className="flex flex-wrap items-center gap-2">
                       <code className="min-w-0 flex-1 truncate text-xs">{resolveShareUrl(link.url)}</code>
                       {link.revokedAt ? <Badge>{t('share.badge.revoked')}</Badge> : null}
-                      {link.hasPassword ? <Badge tone="primary">{t('share.badge.password')}</Badge> : null}
+                      <SharePasswordControl link={link} onReset={setResetting} />
                       <Badge tone={link.revokedAt ? 'neutral' : 'success'}>
                         {link.expiresAt
                           ? t('share.badge.expires', { time: new Date(link.expiresAt).toLocaleDateString() })
@@ -264,6 +233,9 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
           </section>
         </div>
       </Modal>
+
+      {open && resetting ? <SharePasswordResetDialog key={resetting.uid} link={resetting} onClose={() => setResetting(null)}
+        onSaved={(link) => setCreated((current) => current?.uid === link.uid ? link : current)} /> : null}
 
       <ConfirmDialog
         open={revoking !== null}

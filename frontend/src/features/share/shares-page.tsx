@@ -24,6 +24,8 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { Badge, EmptyState, PageHeader, Panel } from '@/components/ui/panel';
 import { resolveShareUrl, shareApi, type ShareLink } from '@/lib/api/shares';
 import { shareKeys } from './queries';
+import { copyToClipboard } from './share-password';
+import { SharePasswordControl, SharePasswordResetDialog } from './share-password-controls';
 
 const PAGE_SIZE = 20;
 
@@ -33,6 +35,7 @@ export function SharesPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [revoking, setRevoking] = useState<ShareLink | null>(null);
+  const [resetting, setResetting] = useState<ShareLink | null>(null);
 
   const query = useQuery({
     queryKey: [...shareKeys.mine(), page],
@@ -50,10 +53,9 @@ export function SharesPage() {
   });
 
   const copy = async (link: ShareLink) => {
-    try {
-      await navigator.clipboard.writeText(resolveShareUrl(link.url));
+    if (await copyToClipboard(resolveShareUrl(link.url))) {
       toast.success(t('share.copied'));
-    } catch {
+    } else {
       toast.error(t('share.copyFailed'));
     }
   };
@@ -89,7 +91,7 @@ export function SharesPage() {
                       {link.mapTitle}
                     </Link>
                     {link.revokedAt ? <Badge>{t('share.badge.revoked')}</Badge> : null}
-                    {link.hasPassword ? <Badge tone="primary">{t('share.badge.password')}</Badge> : null}
+                    <SharePasswordControl link={link} onReset={setResetting} />
                     <Badge tone={link.revokedAt ? 'neutral' : 'success'}>
                       {link.expiresAt
                         ? t('share.badge.expires', { time: new Date(link.expiresAt).toLocaleDateString() })
@@ -145,6 +147,8 @@ export function SharesPage() {
           </Button>
         </div>
       ) : null}
+
+      {resetting ? <SharePasswordResetDialog key={resetting.uid} link={resetting} onClose={() => setResetting(null)} /> : null}
 
       <ConfirmDialog
         open={revoking !== null}

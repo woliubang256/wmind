@@ -10,6 +10,8 @@ Status: implemented
 
 分享密码验证和属主查看分离：bcrypt 保持原来的公开验证职责，另加密文提供可查看的属主 API。分享密码下限保持4位，与账号密码策略无关。
 
+随机生成默认4位，以浏览器 crypto.getRandomValues 无偏采样并拒绝不含全部三类的候选，保证大小写字母和数字齐全；熵源不可用时明确报错，不回退 Math.random。新建保留空密码和手动输入。输入框右侧放生成按钮，两处管理入口共用行内密码控件和重设弹窗，避免新增独占整行的说明或重复“需要密码”标签；明文只留内存，不写浏览器持久存储。旧密码不可查看时明确提示并允许重设，已撤销行不提供重设。
+
 数据库迁移新增 password_ciphertext，bcrypt password_hash 继续独立负责访客验证。AES-256-GCM 使用现有稳定安全密钥源（专用 2FA 密钥优先、JWT 密钥回退），但以独立用途派生密钥，AAD 绑定分享 UID 与属主。管理端 DTO 的 password 为字符串或 null，仅经过属主过滤后解密，响应 no-store；公开查询不读取密文，公开 DTO 不包含密码、哈希或密文。审计不记敏感值。
 
 旧行不回填虚假密码；旧哈希或密钥变更/密文损坏时仍要求密码，验证继续使用哈希，管理端显示不可查看并允许重设。重设原子写入哈希与密文，其他设置修改保留两者，清密码同时清除两者。密钥必须随部署备份并保持稳定。
@@ -34,6 +36,7 @@ Status: implemented
 
 - `go test ./internal/auth ./internal/service ./internal/httpapi ./internal/repository/sqlite -run 'TestShare|TestRepositoryContract' -count=1` 验证密文非明文、随机化、防篡改、防跨属主/分享交换、密钥用途隔离；错误密钥不阻断 bcrypt 和重设。
 - HTTP 先复现属主无法查看密码，再验证创建、两类列表、重设、null/省略、越权404、公开隔离与 no-store；仓储契约覆盖双方言密文映射，SQLite覆盖0005旧行升级到0006。
+- 前端 `share-password.test.ts` 验证1000份随机结果、三类齐全、无偏采样和安全随机失败；`share-password-management.mjs` 以全拦截夹具覆盖两处管理、旧哈希、失败/取消、刷新、清密码、原生dialog复制降级、中英文375px及明文不进持久化存储。`share-defaults.mjs` 回归默认值与异步草稿保护。
 
 ## Consequences
 

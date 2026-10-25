@@ -714,7 +714,16 @@
     "title": "分享「{{title}}」",
     "copy": "复制链接",
     "copied": "已复制",
-    "copyFailed": "复制失败，请手动选中链接复制。",
+    "copyFailed": "复制失败，请手动选择复制。",
+    "password": {
+      "generate": "随机生成",
+      "generateFailed": "安全随机不可用，请手动输入密码。",
+      "copy": "复制密码",
+      "unavailable": "原密码不可查看",
+      "reset": "重设密码",
+      "saved": "密码已更新",
+      "resetHint": "重设不会立即失效已通过验证的访问；需要立即停用请撤销链接。"
+    },
     "revoke": "撤销",
     "revoked": "分享链接已撤销，该地址现在打不开了。",
     "views": "{{count}} 次访问",
