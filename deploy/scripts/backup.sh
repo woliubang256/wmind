@@ -101,7 +101,7 @@ if docker volume inspect "$UPLOADS_VOLUME" >/dev/null 2>&1; then
   docker run --rm \
     -v "$UPLOADS_VOLUME:/src:ro" \
     -v "$BACKUP_DIR:/backup" \
-    alpine:3.20 tar czf "/backup/$UPLOADS_ARTIFACT" -C /src .
+    alpine:3.24.3 tar czf "/backup/$UPLOADS_ARTIFACT" -C /src .
 else
   echo "警告：卷 $UPLOADS_VOLUME 不存在，跳过上传文件备份" >&2
 fi

@@ -95,7 +95,7 @@ else
     -v "$UPLOADS_VOLUME:/data" \
     -v "$(dirname "$DB_DUMP")":/backup:ro \
     -e SRC="$(basename "$DB_DUMP")" \
-    alpine:3.20 sh -c '
+    alpine:3.24.3 sh -c '
       mv /data/wmind.db /data/wmind.db.before-restore 2>/dev/null || true
       # 旧的 -wal / -shm 必须一起删：它们属于旧库，留着会让 SQLite
       # 拒绝打开新库，或者静默丢弃已提交的数据。
@@ -114,7 +114,7 @@ if [[ -n "$UPLOADS_TAR" ]]; then
     -v "$UPLOADS_VOLUME:/data" \
     -v "$(dirname "$UPLOADS_TAR")":/backup:ro \
     -e SRC="$(basename "$UPLOADS_TAR")" \
-    alpine:3.20 sh -c '
+    alpine:3.24.3 sh -c '
       mkdir -p /data/uploads
       rm -rf /data/uploads/*
       tar xzf "/backup/$SRC" -C /data/uploads

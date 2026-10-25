@@ -32,7 +32,7 @@ AI 功能默认关闭，在「网站设置 → AI」配置 OpenAI 兼容 Provide
 
 | 模块 | 技术 |
 | --- | --- |
-| 后端 | Go 1.25 + Gin，模块化单体 |
+| 后端 | Go 1.26 + Gin，模块化单体 |
 | 前端 | React + TypeScript + Vite + Tailwind CSS v4，纯 SPA |
 | 编辑器 | 自研 SVG 渲染与布局引擎 |
 | 数据库 | SQLite（默认）/ PostgreSQL |

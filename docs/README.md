@@ -45,7 +45,7 @@ wmind 是一套可私有化部署、数据自主可控、体验对标 XMind 的 
 
 | 维度 | 结论 |
 | --- | --- |
-| 后端 | Go 1.25 + Gin v1.12 + **SQLite（`modernc.org/sqlite`）/ PostgreSQL 16（pgx）双方言** + sqlc 双 target，模块化单体 |
+| 后端 | Go 1.26 + Gin v1.12 + **SQLite（`modernc.org/sqlite`）/ PostgreSQL 16（pgx）双方言** + sqlc 双 target，模块化单体 |
 | 数据库 | **双方言由 `WMIND_DB_DRIVER` 选择，默认 SQLite**；本地开发用 SQLite（不需要任何数据库服务），线上两套 compose；无跨方言自动搬迁（见 ADR-015 / Q-11） |
 | 前端 | React 19 + TypeScript + Vite + shadcn/ui + lucide-react，**纯 SPA** |
 | 编辑器 | 自研 SVG 渲染 + 自研布局引擎（8 种结构）+ 只读查看器 |

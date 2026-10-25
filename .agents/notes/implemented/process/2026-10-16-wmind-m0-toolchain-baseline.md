@@ -12,6 +12,8 @@ M0 要在写业务代码之前把工具链定死：Go 版本、Web 框架版本�
 
 ## Decision
 
+Go 版本与基础镜像约束由[安全工具链基线](2026-10-26-wmind-security-toolchain-baseline.md)部分取代。下文 Go 1.25 段落保留 M0 的选型理由；现行安全更新采用 Go 1.26.10，Node 原生类型剥离与零新增校验依赖的决定继续生效。
+
 ### 依赖基线：Go 1.25 + Gin v1.12.0
 
 M0 的双方言依赖另有一项关键兼容约束，已记录在 [dual-database](../architecture/2026-10-16-wmind-dual-database.md)：SQLite 选用 `modernc.org/sqlite v1.51.0`，且通过锁定 `modernc.org/libc v1.72.3`、`modernc.org/ccgo/v4 v4.34.0` 与 `golang.org/x/*` 至 Go 1.25 兼容线，避免无意把构建基线抬至 Go 1.26。

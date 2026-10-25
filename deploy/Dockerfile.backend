@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine3.24 AS builder
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG VERSION=dev
@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -ldflags="-s -w -X github.com/woliubang256/wmind/backend/internal/config.Version=$VERSION" \
     -o /out/wmind ./cmd/server
 
-FROM alpine:3.20
+FROM alpine:3.24.3
 RUN apk add --no-cache ca-certificates tzdata wget \
     && addgroup -S -g 10001 wmind \
     && adduser -S -D -H -u 10001 -G wmind wmind \
