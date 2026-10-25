@@ -31,22 +31,33 @@ const SystemPrompt = `你是思维导图整理助手。根据用户要求和附�
 所有节点必须有非空 title 和 children 数组。中心主题不超过 200 字符，其他标题不超过 500 字符。最多 500 个节点，最多 12 层。不得输出 HTML、链接、样式或任何其他字段。`
 
 type Configuration struct {
-	Enabled bool   `json:"enabled"`
-	BaseURL string `json:"baseUrl"`
-	APIKey  string `json:"apiKey,omitempty"`
-	Model   string `json:"model"`
+	Enabled         bool   `json:"enabled"`
+	BaseURL         string `json:"baseUrl"`
+	APIKey          string `json:"apiKey,omitempty"`
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
 type PublicConfiguration struct {
-	Enabled      bool   `json:"enabled"`
-	BaseURL      string `json:"baseUrl"`
-	APIKeySet    bool   `json:"apiKeySet"`
-	Model        string `json:"model"`
-	SystemPrompt string `json:"systemPrompt"`
+	Enabled         bool   `json:"enabled"`
+	BaseURL         string `json:"baseUrl"`
+	APIKeySet       bool   `json:"apiKeySet"`
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoningEffort"`
+	SystemPrompt    string `json:"systemPrompt"`
 }
 
 func (c Configuration) Public() PublicConfiguration {
-	return PublicConfiguration{c.Enabled, c.BaseURL, c.APIKey != "", c.Model, SystemPrompt}
+	return PublicConfiguration{Enabled: c.Enabled, BaseURL: c.BaseURL, APIKeySet: c.APIKey != "", Model: c.Model, ReasoningEffort: c.ReasoningEffort, SystemPrompt: SystemPrompt}
+}
+
+func validReasoningEffort(value string) bool {
+	switch value {
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max":
+		return true
+	default:
+		return false
+	}
 }
 
 type Service struct {
@@ -128,7 +139,7 @@ func (s *Service) Save(ctx context.Context, cfg Configuration, clearKey bool, ac
 	cfg.Model = strings.TrimSpace(cfg.Model)
 	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
 	u, urlErr := url.Parse(cfg.BaseURL)
-	if len(cfg.BaseURL) > 2048 || len(cfg.Model) > 200 || len(cfg.APIKey) > 8192 || strings.ContainsAny(cfg.APIKey, "\r\n") ||
+	if !validReasoningEffort(cfg.ReasoningEffort) || len(cfg.BaseURL) > 2048 || len(cfg.Model) > 200 || len(cfg.APIKey) > 8192 || strings.ContainsAny(cfg.APIKey, "\r\n") ||
 		(cfg.BaseURL != "" && (urlErr != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "")) ||
 		(cfg.Enabled && (cfg.BaseURL == "" || cfg.Model == "" || cfg.APIKey == "")) {
 		return PublicConfiguration{}, apperr.New(apperr.CodeAIConfigInvalid, "")

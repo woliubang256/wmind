@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-- 单个 OpenAI 兼容 Provider 使用 `/chat/completions`，配置包含 enabled（默认 false）、baseUrl、apiKey、model。`ai.config` 存在现有 settings 表，以独立域的 AES-GCM 加密；管理员响应只带 apiKeySet，空密钥保留旧值。每次读取配置从库读取，避免恢复和跨实例的过时开关。公开站点配置只增加 aiEnabled。
+- 单个 OpenAI 兼容 Provider 使用 `/chat/completions`，配置包含 enabled（默认 false）、baseUrl、apiKey、model、reasoningEffort。思考等级默认空字符串，旧配置缺字段也解释为空；此时 Provider 请求必须完全省略 `reasoning_effort`，不传 null，也不替换成 none。显式选择 none/minimal/low/medium/high/xhigh/max 时按原值发送，服务端拒绝其他值。`ai.config` 存在现有 settings 表，以独立域的 AES-GCM 加密；管理员响应只带 apiKeySet，空密钥保留旧值。每次读取配置从库读取，避免恢复和跨实例的过时开关。公开站点配置只增加 aiEnabled。
 - 服务端固定追加提示词并在管理接口中只读展示，拒绝客户端传入替代提示词；用户明确要求先发用户输入和全部附件，再在同一 user 消息末尾追加格式指令，不使用前置 system 消息。纯文本保持字符串，有图片使用有序内容块，最后一块始终是追加提示词。不依赖兼容端可能不实现的 structured-output 参数。模型仅输出 title/children 的 JSON 树，服务端限制响应大小、节点数、深度及标题长度。Provider 错误不回传原始正文或凭据。
 - 生成接口只返回验证后的树，原生文档构造和保存沿用客户端既有工厂与创建 API；后端不复制编辑器的默认主题。生成不预建空导图，失败或取消没有需要清理的占位文件。保存继续受到属主和配额约束。
 - 素材契约是用户要求加有序的 name/text/images 附件，每份至少有文本或图片。后端不信任浏览器提取结果，独立验证 100000 字符、5 份附件、12 张图片、实际 MIME/尺寸与 8 MiB 图片字节预算；请求上限 12 MiB。素材内容不得充当系统指令。
@@ -35,6 +35,7 @@ Status: implemented
 - 模型直接输出完整 wmind 文档：可以单请求创建；但模型容易漏掉复杂样式字段，后端也必须复制默认主题。采用受限树加现有文档工厂，格式与主题不分叉。
 - 前端直接调用 Provider：少一层后端转发、取消直观；但会把全站共享密钥暴露给所有用户，且无法强制开关和提示词，因此调用只在后端进行。
 - 使用 OpenAI 文件上传或 response_format JSON Schema：结构可靠、原文件省去提取；兼容服务对这两类能力支持不同，选用通用文本/图片消息与服务端验证。
+- 根据模型名推断思考等级并自动降级重试：可隐藏模型能力差异，但兼容 Provider 的别名无法可靠推断，而且重试可能再次计费。管理员显式选择、默认不传；不自动换模型、降级或重试，模型不支持时反馈调用失败。
 
 ## Verification
 
@@ -46,11 +47,13 @@ Status: implemented
 - `dependency-loading.test.mjs` 在修复前证明缺少 PDF.js 预构建，修复后通过；独立临时 cacheDir 的全新 Vite 服务完成相同 21 项 E2E，无依赖发现导致的导航。`pnpm run build` 通过，PDF 模块仍为按需分块，既有大 chunk 警告不阻塞构建。
 - 后台布局回归脚本保存后将鼠标移离通知区域，避免指针悬停使 Sonner 暂停消失并遮挡下一次保存；不修改通知或业务行为。`node frontend/e2e/admin-settings-layout.mjs` 中英文、桌面及手机布局 38 项通过。
 - 拖放交互追加浏览器断言：文件进入/嵌套切换/离开高亮、文字原生拖动、多文件有序与去重、格式/数量/单文件大小超限保留已有项、生成中拦截及背景导入隔离、键盘上传；`node frontend/e2e/ai-generation.mjs` 31 项通过，桌面和手机截图已检查，`pnpm exec tsc --noEmit` 通过。
+- 思考等级后端测试覆盖旧密文缺字段、全部枚举保存重载与空密钥保留、非法值不落库、默认请求字段不存在、显式 none 与其他等级原样发送、拒绝普通用户覆盖、公开配置不泄漏等级、Provider 拒绝后只调用一次且不改模型。相关 `go test ./internal/ai ./internal/settings ./internal/httpapi -run 'TestAI|TestConfiguration|TestGenerate|TestRejectsInvalid|TestSiteConfig|TestOpenAPI|TestAdminSettings' -count=1` 通过。
 - 管理员配置的真实 Provider（保留原有 model）使用自行创建的 docx/xlsx/文字 PDF/扫描 PDF/PNG 完成联调，新建独立“AI联调测试”导图 11 节点，保留研发预算 1200 并自动进入编辑器。一次无效模型输出被拒绝，重试成功；不自动重试付费请求、不保存失败占位。已有三份开发导图未覆盖。
 
 ## Consequences
 
 - 图片与扫描 PDF 依赖所选模型支持视觉；上下文与输出容量因 Provider 而异，限制内的请求仍可能被其拒绝。
+- 思考等级枚举以官方 Chat Completions 契约为界，不代表每个模型均支持全部值；默认省略保持兼容，显式选择需管理员确认 Provider 和模型支持。后续官方扩展枚举时须同步后端校验、OpenAPI 与前端选项。
 - 树契约隔离复杂文件格式，允许复用默认主题与普通创建权限；代价是生成与保存分两次请求。AI 输出是整理结果，可能遗漏或产生错误，用户需检查。
 - 浏览器解析省去服务端 Office/PDF 运行组件，代价是按需下载 PDF.js 及本地资源、浏览器内存占用；带文字 PDF 中的内嵌图片当前不另传。扫描页不提供页内 OCR，由视觉模型理解页面图片。
 - 配置按请求读库，在配置与生成频率下省去跨实例缓存失效机制；代价是公开配置请求也增加一次设置表读取。如果设置表规模增长，应增加按键仓储读取，不应缓存紧急关闭开关。

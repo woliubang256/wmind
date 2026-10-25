@@ -140,10 +140,14 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*Node, error)
 		}
 		userContent = strings.Join(texts, "\n\n")
 	}
-	body, _ := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"model": cfg.Model, "stream": false,
 		"messages": []map[string]any{{"role": "user", "content": userContent}},
-	})
+	}
+	if cfg.ReasoningEffort != "" {
+		payload["reasoning_effort"] = cfg.ReasoningEffort
+	}
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(cfg.BaseURL), bytes.NewReader(body))
 	if err != nil {
 		return nil, apperr.New(apperr.CodeAIConfigInvalid, "")

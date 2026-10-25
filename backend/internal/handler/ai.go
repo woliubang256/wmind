@@ -54,16 +54,17 @@ func decodeAIRequest(c *gin.Context, out any, limit int64) bool {
 
 func (h *AIHandler) Save(c *gin.Context) {
 	var req struct {
-		Enabled     bool   `json:"enabled"`
-		BaseURL     string `json:"baseUrl"`
-		APIKey      string `json:"apiKey"`
-		Model       string `json:"model"`
-		ClearAPIKey bool   `json:"clearApiKey"`
+		Enabled         bool   `json:"enabled"`
+		BaseURL         string `json:"baseUrl"`
+		APIKey          string `json:"apiKey"`
+		Model           string `json:"model"`
+		ReasoningEffort string `json:"reasoningEffort"`
+		ClearAPIKey     bool   `json:"clearApiKey"`
 	}
 	if !decodeAIRequest(c, &req, 32<<10) {
 		return
 	}
-	cfg, err := h.ai.Save(c.Request.Context(), ai.Configuration{Enabled: req.Enabled, BaseURL: req.BaseURL, APIKey: req.APIKey, Model: req.Model}, req.ClearAPIKey, middleware.UserDBID(c))
+	cfg, err := h.ai.Save(c.Request.Context(), ai.Configuration{Enabled: req.Enabled, BaseURL: req.BaseURL, APIKey: req.APIKey, Model: req.Model, ReasoningEffort: req.ReasoningEffort}, req.ClearAPIKey, middleware.UserDBID(c))
 	if err != nil {
 		response.Fail(c, err)
 		return

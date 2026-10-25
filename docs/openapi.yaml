@@ -1730,7 +1730,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: 包含 enabled、baseUrl、apiKeySet、model 和只读 systemPrompt
+          description: 包含 enabled、baseUrl、apiKeySet、model、reasoningEffort 和只读 systemPrompt
           content:
             application/json:
               schema:
@@ -1757,6 +1757,7 @@ paths:
                 baseUrl: { type: string, format: uri }
                 apiKey: { type: string, writeOnly: true }
                 model: { type: string }
+                reasoningEffort: { $ref: '#/components/schemas/AIReasoningEffort' }
                 clearApiKey: { type: boolean, default: false }
       responses:
         '200':
@@ -2070,7 +2071,14 @@ components:
         baseUrl: { type: string }
         apiKeySet: { type: boolean }
         model: { type: string }
+        reasoningEffort: { $ref: '#/components/schemas/AIReasoningEffort' }
         systemPrompt: { type: string, readOnly: true }
+
+    AIReasoningEffort:
+      type: string
+      enum: ['', none, minimal, low, medium, high, xhigh, max]
+      default: ''
+      description: 空字符串表示不向 Provider 发送 reasoning_effort；显式值原样发送，各模型支持范围不同，不自动降级或重试。
 
     AINode:
       type: object
