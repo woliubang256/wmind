@@ -699,7 +699,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 ```
 
 - `token` 明文返回（属主可随时复制），`url` 由 `site.base_url` 拼接。
-- `password` 仅在属主响应返回，均为 `Cache-Control: no-store`；无密码、旧哈希或密钥不可用时为 `null`。`hasPassword` 独立表示访问是否受保护，不能用 `password == null` 判断。创建/重设同时保存 bcrypt 与 AES-GCM 密文，公开接口不读取密文或返回密码。旧密码不可查看时可通过 PATCH 重设。
+- `password` 仅在属主响应返回，均为 `Cache-Control: no-store`，可反复读取，不是一次性展示；无密码、仅有旧哈希或旧密文不可解密时为 `null`。`hasPassword` 独立表示访问是否受保护，不能用 `password == null` 判断。创建/重设同时保存 bcrypt 与 `plain:<原密码>` 明文副本，新值回显不依赖密钥；旧 `v1:` 密文只读兼容，无法恢复时可通过 PATCH 重设。公开查询不读取可读副本，公开接口不返回密码；明文会包含在数据库备份中。
 - 前端复制的HTTP链接可附带编码后的 `?psw=...`，API `url` 本身不含密码。公开页只预填、仍需主动提交；读取后从地址栏移除参数，不把原密码写入持久化存储。带密码链接等于同时发送链接与密码，不应用于需要分渠道传密的场景。
 - `site.base_url` **为空时 `url` 是相对路径**（`/s/<token>`），前端用 `window.location.origin` 补全。这是刻意的：反代后面的服务端看到的 `Host` 往往不是用户实际访问的域名（内网地址、容器名、端口都不对），在服务端猜绝对地址比让浏览器补更错。
 - `share.public_link_enabled = false` → 403 `SHARE_DISABLED`。
