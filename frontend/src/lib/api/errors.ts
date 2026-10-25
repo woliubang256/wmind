@@ -11,6 +11,11 @@ import i18n from '@/lib/i18n';
  * 码本身是后端契约（docs/04 §3.2），不翻译；只有给人看的那句话翻译。
  */
 export const errorMessageKeys: Record<string, string> = {
+  AI_DISABLED: 'errors.AI_DISABLED',
+  AI_CONFIG_INVALID: 'errors.AI_CONFIG_INVALID',
+  AI_INPUT_INVALID: 'errors.AI_INPUT_INVALID',
+  AI_PROVIDER_FAILED: 'errors.AI_PROVIDER_FAILED',
+  AI_OUTPUT_INVALID: 'errors.AI_OUTPUT_INVALID',
   AUTH_LOGIN_CHALLENGE_INVALID: 'errors.AUTH_LOGIN_CHALLENGE_INVALID',
   AUTH_2FA_INVALID: 'errors.AUTH_2FA_INVALID',
   AUTH_2FA_EXPIRED: 'errors.AUTH_2FA_EXPIRED',

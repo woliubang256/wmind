@@ -14,9 +14,10 @@ export default defineConfig({
    * 刷新，用户手上的编辑状态直接没了。
    *
    * 写进 `include` 让它和 react 一起在冷启动时预构建，之后不再触发重优化。
+   * PDF.js 也由附件解析按需发现，同样须提前预构建；这不改变浏览器按需下载。
    */
   optimizeDeps: {
-    include: ['react-dom/server', 'mathjax-full/js/mathjax.js', 'mathjax-full/js/input/tex.js', 'mathjax-full/js/output/svg.js', 'mathjax-full/js/adaptors/liteAdaptor.js', 'mathjax-full/js/handlers/html.js', 'mathjax-full/js/input/tex/ams/AmsConfiguration.js'],
+    include: ['react-dom/server', 'pdfjs-dist', 'mathjax-full/js/mathjax.js', 'mathjax-full/js/input/tex.js', 'mathjax-full/js/output/svg.js', 'mathjax-full/js/adaptors/liteAdaptor.js', 'mathjax-full/js/handlers/html.js', 'mathjax-full/js/input/tex/ams/AmsConfiguration.js'],
   },
   build: {
     rollupOptions: {

@@ -16,6 +16,7 @@ const FALLBACK: SiteConfig = {
   registrationEnabled: false,
   passwordMinLength: 8,
   importEnabled: true,
+  aiEnabled: false,
   exportEnabled: true,
   userTemplateEnabled: true,
   shareEnabled: true,

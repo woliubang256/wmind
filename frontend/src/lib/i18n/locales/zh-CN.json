@@ -1,4 +1,41 @@
 {
+  "ai": {
+    "title": "AI生成",
+    "settingsTab": "AI",
+    "enabled": "启用 AI 功能",
+    "prompt": "生成要求",
+    "placeholder": "描述你想生成的导图，也可以上传资料…",
+    "attachments": "附件",
+    "upload": "上传文件",
+    "formats": ".docx、.xlsx、PDF、图片 · 最多 5 个，每个 20 MB",
+    "removeFile": "移除 {{name}}",
+    "generate": "生成导图",
+    "generating": "正在生成…",
+    "preparing": "正在解析…",
+    "extracting": "正在解析 {{name}}…",
+    "retrySave": "重试保存",
+    "providerNotice": "文字和附件内容将发送给站点配置的 AI Provider。",
+    "failed": "生成失败，请重试。",
+    "loadFailed": "无法加载 AI 配置",
+    "saved": "AI 配置已保存",
+    "keyRetained": "API Key 留空保留已保存的密钥。",
+    "clearKey": "清除密钥",
+    "systemPrompt": "追加提示词",
+    "fileFailed": "{{name}}：{{reason}}",
+    "fileError": {
+      "unsupported": "支持 .docx、.xlsx、PDF、PNG、JPEG、WebP 和 GIF。",
+      "fileSize": "文件超过 20 MB，或图片像素超过限制，请缩小后重试。",
+      "totalSize": "附件合计不能超过 30 MB。",
+      "fileCount": "最多上传 5 个文件。",
+      "parse": "无法读取文件，请检查文件是否完整或换一个文件。",
+      "empty": "文件中没有可读取的内容。",
+      "textLimit": "文字合计超过 10 万字符，请减少内容。",
+      "imageLimit": "图片合计超过 12 张或体积限制，请减少图片或扫描页。",
+      "pdfPages": "每个 PDF 最多 20 页，请拆分后上传。",
+      "encrypted": "请先移除 PDF 密码后上传。",
+      "zipLimit": "文档解压后过大，请减少内容后上传。"
+    }
+  },
   "common": {
     "loading": "正在加载…",
     "login": "登录",
@@ -860,6 +897,11 @@
     }
   },
   "errors": {
+    "AI_DISABLED": "站点未启用 AI 生成功能。",
+    "AI_CONFIG_INVALID": "AI 配置无效，请检查地址、密钥、模型和服务端加密密钥。",
+    "AI_INPUT_INVALID": "素材为空、格式无效或超出限制，请减少内容后重试。",
+    "AI_PROVIDER_FAILED": "AI 调用失败，请检查 Provider 配置、模型是否支持这些素材，或稍后重试。",
+    "AI_OUTPUT_INVALID": "AI 未返回有效的导图结构，请减少内容或重新生成。",
     "BAD_REQUEST": "请求格式不正确，请检查后重试。",
     "AUTH_INVALID_CREDENTIALS": "账号或密码错误。",
     "AUTH_TOKEN_EXPIRED": "登录状态已过期。",

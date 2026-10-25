@@ -43,6 +43,7 @@ import { TemplatePicker } from '@/features/templates/template-picker';
  * 会话根本不会导入。静态引入会让每个打开首页的人都先下载它。
  */
 const ImportDialog = lazy(() => import('@/features/dashboard/import-dialog').then((module) => ({ default: module.ImportDialog })));
+const AIGenerateDialog = lazy(() => import('@/features/ai/generate-dialog').then((module) => ({ default: module.AIGenerateDialog })));
 
 /** 一页 24 张：3 列 / 4 列 / 6 列都能整除，不会在最后一行留下半排。 */
 const PAGE_SIZE = 24;
@@ -62,6 +63,7 @@ export function RecentPage() {
   const [creating, setCreating] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [aiOpen, setAIOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [dropping, setDropping] = useState(false);
   const [renaming, setRenaming] = useState<MapSummary | null>(null);
@@ -215,6 +217,7 @@ export function RecentPage() {
                 {t('import.dialog.title')}
               </Button>
             ) : null}
+            {config.aiEnabled && <Button variant="outline" onClick={() => setAIOpen(true)}><Icon name="sparkles" className="size-4" />{t('ai.title')}</Button>}
             <Button onClick={() => setPickerOpen(true)} disabled={creating}>
               <Icon name="file-plus" className="size-4" />
               {t('maps.create')}
@@ -398,6 +401,7 @@ export function RecentPage() {
         }}
       />
 
+      {aiOpen && <Suspense fallback={<LoadingState className="fixed inset-0 z-40 bg-background/90" />}><AIGenerateDialog onClose={() => setAIOpen(false)} /></Suspense>}
       {importOpen ? (
         <Suspense fallback={<LoadingState className="fixed inset-0 z-40 bg-background/90" />}>
           <ImportDialog

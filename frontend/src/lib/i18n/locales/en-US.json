@@ -1,4 +1,41 @@
 {
+  "ai": {
+    "title": "Generate with AI",
+    "settingsTab": "AI",
+    "enabled": "Enable AI",
+    "prompt": "Generation instructions",
+    "placeholder": "Describe your mind map, or upload source material…",
+    "attachments": "Attachments",
+    "upload": "Upload files",
+    "formats": ".docx, .xlsx, PDF, images · Up to 5 files, 20 MB each",
+    "removeFile": "Remove {{name}}",
+    "generate": "Generate mind map",
+    "generating": "Generating…",
+    "preparing": "Reading files…",
+    "extracting": "Reading {{name}}…",
+    "retrySave": "Retry save",
+    "providerNotice": "Text and attachment content will be sent to the site's configured AI provider.",
+    "failed": "Generation failed. Please try again.",
+    "loadFailed": "Could not load AI settings",
+    "saved": "AI settings saved",
+    "keyRetained": "Leave API Key blank to keep the saved key.",
+    "clearKey": "Clear key",
+    "systemPrompt": "Appended prompt",
+    "fileFailed": "{{name}}: {{reason}}",
+    "fileError": {
+      "unsupported": "Supported: .docx, .xlsx, PDF, PNG, JPEG, WebP and GIF.",
+      "fileSize": "The file exceeds 20 MB or the image pixel limit. Reduce its size and try again.",
+      "totalSize": "Attachments must not exceed 30 MB in total.",
+      "fileCount": "You can upload up to 5 files.",
+      "parse": "Could not read the file. Check that it is complete or choose another file.",
+      "empty": "The file has no readable content.",
+      "textLimit": "Text exceeds 100,000 characters in total. Reduce the content.",
+      "imageLimit": "Images exceed the limit of 12 or the total size limit. Remove images or scanned pages.",
+      "pdfPages": "Each PDF can have up to 20 pages. Split it before uploading.",
+      "encrypted": "Remove the PDF password before uploading.",
+      "zipLimit": "The document is too large when uncompressed. Reduce its content."
+    }
+  },
   "common": {
     "loading": "Loading…",
     "login": "Sign in",
@@ -860,6 +897,11 @@
     }
   },
   "errors": {
+    "AI_DISABLED": "AI generation is disabled on this site.",
+    "AI_CONFIG_INVALID": "Invalid AI settings. Check the URL, API key, model and server encryption key.",
+    "AI_INPUT_INVALID": "Source material is empty, invalid or exceeds the limits. Reduce it and try again.",
+    "AI_PROVIDER_FAILED": "The AI request failed. Check the provider settings and model capabilities, or try again later.",
+    "AI_OUTPUT_INVALID": "AI did not return a valid mind map. Reduce the content or generate again.",
     "BAD_REQUEST": "The request is malformed. Check it and try again.",
     "AUTH_INVALID_CREDENTIALS": "Wrong username or password.",
     "AUTH_TOKEN_EXPIRED": "Your session has expired.",

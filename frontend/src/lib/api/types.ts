@@ -38,6 +38,7 @@ export interface SiteConfig {
   registrationEnabled: boolean;
   passwordMinLength: number;
   importEnabled: boolean;
+  aiEnabled: boolean;
   exportEnabled: boolean;
   userTemplateEnabled: boolean;
   shareEnabled: boolean;
