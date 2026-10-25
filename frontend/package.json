@@ -21,6 +21,7 @@
     "i18next": "^25.3.2",
     "immer": "^10.1.1",
     "mathjax-full": "3.2.2",
+    "pdfjs-dist": "6.4.299",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^15.6.1",

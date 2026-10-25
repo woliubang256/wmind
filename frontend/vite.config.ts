@@ -34,6 +34,8 @@ export default defineConfig({
          */
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
+          // The AI attachment parser is only needed after choosing a PDF.
+          if (id.includes('/pdfjs-dist/')) return 'pdfjs';
           /**
            * `react-dom/server` 必须**不**归入 react chunk。
            *
