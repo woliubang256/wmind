@@ -9,7 +9,7 @@ Status: implemented
 ## Decision
 
 - 单个 OpenAI 兼容 Provider 使用 `/chat/completions`，配置包含 enabled（默认 false）、baseUrl、apiKey、model。`ai.config` 存在现有 settings 表，以独立域的 AES-GCM 加密；管理员响应只带 apiKeySet，空密钥保留旧值。每次读取配置从库读取，避免恢复和跨实例的过时开关。公开站点配置只增加 aiEnabled。
-- 服务端固定追加提示词并在管理接口中只读展示，拒绝客户端传入替代提示词；不依赖兼容端可能不实现的 structured-output 参数。模型仅输出 title/children 的 JSON 树，服务端限制响应大小、节点数、深度及标题长度。Provider 错误不回传原始正文或凭据。
+- 服务端固定追加提示词并在管理接口中只读展示，拒绝客户端传入替代提示词；用户明确要求先发用户输入和全部附件，再在同一 user 消息末尾追加格式指令，不使用前置 system 消息。纯文本保持字符串，有图片使用有序内容块，最后一块始终是追加提示词。不依赖兼容端可能不实现的 structured-output 参数。模型仅输出 title/children 的 JSON 树，服务端限制响应大小、节点数、深度及标题长度。Provider 错误不回传原始正文或凭据。
 - 生成接口只返回验证后的树，原生文档构造和保存沿用客户端既有工厂与创建 API；后端不复制编辑器的默认主题。生成不预建空导图，失败或取消没有需要清理的占位文件。保存继续受到属主和配额约束。
 - 素材契约是用户要求加有序的 name/text/images 附件，每份至少有文本或图片。后端不信任浏览器提取结果，独立验证 100000 字符、5 份附件、12 张图片、实际 MIME/尺寸与 8 MiB 图片字节预算；请求上限 12 MiB。素材内容不得充当系统指令。
 - 浏览器附件模块支持 docx/xlsx/PDF/PNG/JPEG/WebP/GIF：Office 复用 fflate 与 XML 解析器，解压前仅接受已知文本条目、单条 8 MiB、总解压 16 MiB，拒绝 DTD；Excel 按 workbook 顺序读取工作表，保留稀疏单元格坐标、共享/内联字符串及公式缓存值。原文件每份 20 MiB、合计 30 MiB，Office 不读取内嵌图片与版式。

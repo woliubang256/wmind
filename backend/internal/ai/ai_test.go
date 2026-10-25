@@ -96,12 +96,15 @@ func TestGenerateUsesCompatibleWireAndValidatedTree(t *testing.T) {
 			t.Error(err)
 		}
 		messages := req["messages"].([]any)
-		if len(messages) != 2 || messages[0].(map[string]any)["content"] != SystemPrompt || req["model"] != "custom-model" || req["response_format"] != nil || req["stream"] != false {
+		if len(messages) != 1 || messages[0].(map[string]any)["role"] != "user" || req["model"] != "custom-model" || req["response_format"] != nil || req["stream"] != false {
 			t.Error("incompatible request")
 		}
-		user := messages[1].(map[string]any)["content"].(string)
+		user := messages[0].(map[string]any)["content"].(string)
 		if !strings.Contains(user, "plan.docx") || !strings.Contains(user, "章节内容") || !strings.Contains(user, "生成项目计划") {
 			t.Error("lost material")
+		}
+		if !strings.HasPrefix(user, "用户要求：\n生成项目计划") || !strings.HasSuffix(user, "\n\n"+SystemPrompt) || strings.Count(user, SystemPrompt) != 1 {
+			t.Error("fixed prompt must be appended after user input and all material")
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": "```json\n{\"title\":\" 项目计划 \",\"children\":[{\"title\":\"需求\",\"children\":[]}]}\n```"}, "finish_reason": "stop"}}})
 	}))
@@ -178,6 +181,7 @@ func TestGenerateSendsActualImageAndRejectsRedirect(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Messages []struct {
+				Role    string          `json:"role"`
 				Content json.RawMessage `json:"content"`
 			} `json:"messages"`
 		}
@@ -185,7 +189,10 @@ func TestGenerateSendsActualImageAndRejectsRedirect(t *testing.T) {
 			t.Error("bad JSON")
 		}
 		var parts []contentPart
-		if json.Unmarshal(req.Messages[1].Content, &parts) != nil || len(parts) != 3 || parts[2].ImageURL.URL != dataURL {
+		if len(req.Messages) != 1 || req.Messages[0].Role != "user" {
+			t.Error("must send material then appended prompt in one user message")
+		}
+		if json.Unmarshal(req.Messages[0].Content, &parts) != nil || len(parts) != 4 || parts[2].ImageURL == nil || parts[2].ImageURL.URL != dataURL || parts[3].Type != "text" || parts[3].Text != SystemPrompt {
 			t.Error("lost image part")
 		}
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"title\":\"image\",\"children\":[]}"},"finish_reason":"stop"}]}`))

@@ -123,6 +123,8 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*Node, error)
 			parts = append(parts, contentPart{Type: "image_url", ImageURL: &imageURL{URL: url}})
 		}
 	}
+	// The fixed format instructions follow every user-supplied material part.
+	parts = append(parts, contentPart{Type: "text", Text: SystemPrompt})
 	// Plain strings preserve compatibility with text-only providers.
 	var userContent any = parts
 	hasImages := false
@@ -140,7 +142,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*Node, error)
 	}
 	body, _ := json.Marshal(map[string]any{
 		"model": cfg.Model, "stream": false,
-		"messages": []map[string]any{{"role": "system", "content": SystemPrompt}, {"role": "user", "content": userContent}},
+		"messages": []map[string]any{{"role": "user", "content": userContent}},
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(cfg.BaseURL), bytes.NewReader(body))
 	if err != nil {
