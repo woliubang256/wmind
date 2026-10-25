@@ -546,8 +546,22 @@ func Run(t *testing.T, r Repos) {
 			t.Fatalf("kept token = %#v, %v; want still usable", kept, err)
 		}
 
-		if revokedCount, err := r.Tokens.RevokeAllForUser(ctx, owner.ID, now.Add(4*time.Minute)); err != nil || revokedCount != 1 {
-			t.Fatalf("RevokeAllForUser = %d, %v; want 1", revokedCount, err)
+		boundary := now.Add(4 * time.Minute)
+		if revokedCount, err := r.Tokens.RevokeAllForUser(ctx, owner.ID, boundary); err != nil || revokedCount != 3 {
+			t.Fatalf("RevokeAllForUser = %d, %v; want 3 (active and unexpired rotated history)", revokedCount, err)
+		}
+		for _, tokenHash := range []string{hash, keepHash, dropHash} {
+			row, err := r.Tokens.GetByHash(ctx, tokenHash)
+			if err != nil || !row.Revoked() || !row.ExpiresAt.Equal(boundary) {
+				t.Fatalf("security-revoked token = %#v, %v", row, err)
+			}
+		}
+		expired, err = r.Tokens.GetByHash(ctx, expiredHash)
+		if err != nil || !expired.ExpiresAt.Equal(now.Add(-time.Minute)) {
+			t.Fatal("global revocation extended an expired token", err)
+		}
+		if changed, err := r.Tokens.RevokeAllForUser(ctx, owner.ID, boundary.Add(time.Minute)); err != nil || changed != 0 {
+			t.Fatalf("repeated global revocation = %d, %v", changed, err)
 		}
 
 		// Only the expired row qualifies for cleanup; the rest expire in an hour.
@@ -811,13 +825,25 @@ func Run(t *testing.T, r Repos) {
 		// Update is a full write: passing nil expires_at clears the expiry.
 		updated, err := shares.Update(ctx, domain.UpdateShareInput{
 			UID: link.UID, OwnerID: owner.ID, PasswordHash: "",
-			AllowDownload: true, ShowNotes: true, ExpiresAt: nil,
+			ExpectedPasswordHash: link.PasswordHash,
+			AllowDownload:        true, ShowNotes: true, ExpiresAt: nil,
 		})
 		if err != nil {
 			t.Fatalf("Update: %v", err)
 		}
 		if updated.PasswordHash != "" || updated.PasswordCiphertext != "" || !updated.AllowDownload || !updated.ShowNotes || updated.ExpiresAt != nil {
 			t.Fatalf("update did not apply every field: %#v", updated)
+		}
+		// A request that read the previous password cannot write it back after
+		// another request cleared or rotated the password.
+		if _, err := shares.Update(ctx, domain.UpdateShareInput{
+			UID: link.UID, OwnerID: owner.ID, PasswordHash: link.PasswordHash,
+			PasswordCiphertext: link.PasswordCiphertext, ExpectedPasswordHash: link.PasswordHash,
+		}); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("stale password revision update = %v; want ErrNotFound", err)
+		}
+		if current, err := shares.GetByUID(ctx, link.UID, owner.ID); err != nil || current.PasswordHash != "" {
+			t.Fatalf("stale update restored the old password: %#v, %v", current, err)
 		}
 
 		// View counting.

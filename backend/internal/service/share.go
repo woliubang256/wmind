@@ -240,13 +240,14 @@ func (s *ShareService) Update(ctx context.Context, shareUID string, ownerID int6
 	}
 
 	next := domain.UpdateShareInput{
-		UID:                current.UID,
-		OwnerID:            ownerID,
-		PasswordHash:       current.PasswordHash,
-		PasswordCiphertext: current.PasswordCiphertext,
-		AllowDownload:      current.AllowDownload,
-		ShowNotes:          current.ShowNotes,
-		ExpiresAt:          current.ExpiresAt,
+		UID:                  current.UID,
+		OwnerID:              ownerID,
+		PasswordHash:         current.PasswordHash,
+		ExpectedPasswordHash: current.PasswordHash,
+		PasswordCiphertext:   current.PasswordCiphertext,
+		AllowDownload:        current.AllowDownload,
+		ShowNotes:            current.ShowNotes,
+		ExpiresAt:            current.ExpiresAt,
 	}
 
 	if in.Password != nil {
@@ -348,7 +349,7 @@ func (s *ShareService) ReadPublic(ctx context.Context, token, accessToken, ip st
 		return nil, apperr.New(apperr.CodeShareNotFound, "")
 	}
 	if share.HasPassword() {
-		if err := s.checkAccessToken(accessToken, share.UID); err != nil {
+		if err := s.checkAccessToken(accessToken, share.UID, share.PasswordHash); err != nil {
 			return nil, err
 		}
 	}
@@ -401,23 +402,23 @@ func (s *ShareService) VerifyPassword(ctx context.Context, token, password strin
 		// 返回的错误里不带任何「差多少」的信息：密码校验失败只有一种答案。
 		return "", 0, apperr.New(apperr.CodeSharePasswordInvalid, "")
 	}
-	accessToken, expiresIn, err := s.tokens.Issue(share.UID)
+	accessToken, expiresIn, err := s.tokens.Issue(share.UID, share.PasswordHash)
 	if err != nil {
 		return "", 0, apperr.Wrap(apperr.CodeInternalError, err)
 	}
 	return accessToken, expiresIn, nil
 }
 
-// checkAccessToken 校验访问凭证是否属于这条分享。
+// checkAccessToken 校验访问凭证是否属于这条分享及其当前密码修订。
 //
 // 凭证无效与凭证属于**别的**分享，都返回 SHARE_PASSWORD_REQUIRED 而不是
 // SHARE_PASSWORD_INVALID：对前端来说这两种情况的处理完全一样（弹出密码框），
 // 而区分它们只会多一条没人用的分支。
-func (s *ShareService) checkAccessToken(raw, shareUID string) error {
+func (s *ShareService) checkAccessToken(raw, shareUID, passwordHash string) error {
 	if strings.TrimSpace(raw) == "" {
 		return apperr.New(apperr.CodeSharePasswordRequired, "")
 	}
-	uid, err := s.tokens.Parse(raw)
+	uid, err := s.tokens.Parse(raw, passwordHash)
 	if err != nil || uid != shareUID {
 		return apperr.New(apperr.CodeSharePasswordRequired, "")
 	}

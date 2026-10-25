@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -30,6 +33,8 @@ const DefaultShareAccessTTL = 30 * time.Minute
 type ShareClaims struct {
 	// Typ 固定为 "share"。
 	Typ string `json:"typ"`
+	// PasswordVersion is an opaque, keyed fingerprint, never the bcrypt hash.
+	PasswordVersion string `json:"pv"`
 	jwt.RegisteredClaims
 }
 
@@ -65,10 +70,14 @@ func (i *ShareTokenIssuer) SetClock(now func() time.Time) {
 }
 
 // Issue 为指定分享签发访问令牌，返回令牌与有效期秒数。
-func (i *ShareTokenIssuer) Issue(shareUID string) (string, int, error) {
+func (i *ShareTokenIssuer) Issue(shareUID, passwordHash string) (string, int, error) {
+	if shareUID == "" || passwordHash == "" {
+		return "", 0, fmt.Errorf("%w: 缺少分享或密码版本", ErrTokenInvalid)
+	}
 	now := i.now().UTC()
 	claims := ShareClaims{
-		Typ: shareTokenType,
+		Typ:             shareTokenType,
+		PasswordVersion: i.passwordVersion(shareUID, passwordHash),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   shareUID,
 			Issuer:    shareIssuerName,
@@ -85,11 +94,11 @@ func (i *ShareTokenIssuer) Issue(shareUID string) (string, int, error) {
 	return signed, int(i.ttl.Seconds()), nil
 }
 
-// Parse 校验令牌并返回它对应的分享 uid。
+// Parse 校验令牌与当前密码修订并返回它对应的分享 uid。
 //
 // 与 Access Token 的 Parse 一样钉死 HS256：允许令牌自己声明 alg 是 JWT 最
 // 经典的算法混淆漏洞。
-func (i *ShareTokenIssuer) Parse(raw string) (string, error) {
+func (i *ShareTokenIssuer) Parse(raw, passwordHash string) (string, error) {
 	claims := &ShareClaims{}
 	_, err := jwt.ParseWithClaims(raw, claims, func(*jwt.Token) (any, error) {
 		return i.secret, nil
@@ -111,5 +120,14 @@ func (i *ShareTokenIssuer) Parse(raw string) (string, error) {
 	if claims.Subject == "" {
 		return "", fmt.Errorf("%w: 缺少 sub", ErrTokenInvalid)
 	}
+	if passwordHash == "" || claims.PasswordVersion == "" || !hmac.Equal([]byte(claims.PasswordVersion), []byte(i.passwordVersion(claims.Subject, passwordHash))) {
+		return "", fmt.Errorf("%w: 分享密码版本已失效", ErrTokenInvalid)
+	}
 	return claims.Subject, nil
+}
+
+func (i *ShareTokenIssuer) passwordVersion(shareUID, passwordHash string) string {
+	mac := hmac.New(sha256.New, i.secret)
+	_, _ = mac.Write([]byte("wmind-share-password-v1\x00" + shareUID + "\x00" + passwordHash))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

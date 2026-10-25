@@ -118,19 +118,21 @@ type CreateShareInput struct {
 // 每个字段都是「合并后的最终值」，不是补丁：仓储只做一次全量写入
 // （原因见 queries/shared/shares.sql 里 UpdateShare 的注释）。
 type UpdateShareInput struct {
-	UID                string
-	OwnerID            int64
-	PasswordHash       string
-	PasswordCiphertext string
-	AllowDownload      bool
-	ShowNotes          bool
-	ExpiresAt          *time.Time
+	UID          string
+	OwnerID      int64
+	PasswordHash string
+	// ExpectedPasswordHash prevents a delayed settings write from restoring an old password.
+	ExpectedPasswordHash string
+	PasswordCiphertext   string
+	AllowDownload        bool
+	ShowNotes            bool
+	ExpiresAt            *time.Time
 }
 
 // ShareRepo 是分享链接仓储接口。
 //
 // 属主类方法都带 ownerID：越权访问返回 ErrNotFound，不是「无权限」。
-// GetByToken 是唯一的匿名入口，它不筛属主——令牌本身就是凭证。
+// GetByToken 是唯一的匿名入口，不接收 ownerID，但只读取启用且未删除属主的分享。
 type ShareRepo interface {
 	Create(ctx context.Context, in CreateShareInput) (*ShareLink, error)
 

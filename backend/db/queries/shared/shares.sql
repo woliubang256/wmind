@@ -113,9 +113,9 @@ WHERE map_id = sqlc.arg(map_id) AND revoked_at IS NULL;
 -- the CASE expressions that would express that are exactly what sqlc's SQLite
 -- engine fails to rewrite (see the ORDER BY note in queries/shared/maps.sql).
 -- The service reads the row, merges, and writes everything back. The two
--- statements are not atomic, so two concurrent PATCHes on the same link are
--- last-write-wins; the fields are independent toggles flipped by one person
--- from one dialog, so the practical impact is nil.
+-- statements are not atomic. The expected_password_hash predicate prevents a
+-- stale settings PATCH from restoring a password that another request changed.
+-- Concurrent writes within the same password revision remain last-write-wins.
 --
 -- The `revoked_at IS NULL` guard means a revoked link cannot be resurrected by
 -- patching it.
@@ -127,6 +127,7 @@ SET password_hash = sqlc.arg(password_hash),
     show_notes = sqlc.arg(show_notes),
     expires_at = sqlc.narg(expires_at)
 WHERE uid = sqlc.arg(uid) AND owner_id = sqlc.arg(owner_id) AND revoked_at IS NULL
+  AND password_hash = sqlc.arg(expected_password_hash)
 RETURNING *;
 
 -- name: RevokeShare :execrows

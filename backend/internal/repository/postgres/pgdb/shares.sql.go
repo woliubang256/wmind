@@ -464,17 +464,19 @@ SET password_hash = $1,
     show_notes = $4,
     expires_at = $5
 WHERE uid = $6 AND owner_id = $7 AND revoked_at IS NULL
+  AND password_hash = $8
 RETURNING id, uid, token, map_id, owner_id, password_hash, allow_download, show_notes, expires_at, view_count, last_viewed_at, revoked_at, created_at, password_ciphertext
 `
 
 type UpdateShareParams struct {
-	PasswordHash       string
-	PasswordCiphertext string
-	AllowDownload      bool
-	ShowNotes          bool
-	ExpiresAt          pgtype.Timestamptz
-	Uid                string
-	OwnerID            int64
+	PasswordHash         string
+	PasswordCiphertext   string
+	AllowDownload        bool
+	ShowNotes            bool
+	ExpiresAt            pgtype.Timestamptz
+	Uid                  string
+	OwnerID              int64
+	ExpectedPasswordHash string
 }
 
 // A full write of every mutable column, not a partial patch.
@@ -483,9 +485,9 @@ type UpdateShareParams struct {
 // the CASE expressions that would express that are exactly what sqlc's SQLite
 // engine fails to rewrite (see the ORDER BY note in queries/shared/maps.sql).
 // The service reads the row, merges, and writes everything back. The two
-// statements are not atomic, so two concurrent PATCHes on the same link are
-// last-write-wins; the fields are independent toggles flipped by one person
-// from one dialog, so the practical impact is nil.
+// statements are not atomic. The expected_password_hash predicate prevents a
+// stale settings PATCH from restoring a password that another request changed.
+// Concurrent writes within the same password revision remain last-write-wins.
 //
 // The `revoked_at IS NULL` guard means a revoked link cannot be resurrected by
 // patching it.
@@ -498,6 +500,7 @@ func (q *Queries) UpdateShare(ctx context.Context, arg UpdateShareParams) (Share
 		arg.ExpiresAt,
 		arg.Uid,
 		arg.OwnerID,
+		arg.ExpectedPasswordHash,
 	)
 	var i ShareLink
 	err := row.Scan(

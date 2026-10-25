@@ -176,13 +176,14 @@ func (r *ShareRepository) CountActiveByMap(ctx context.Context, mapID int64) (in
 
 func (r *ShareRepository) Update(ctx context.Context, in domain.UpdateShareInput) (*domain.ShareLink, error) {
 	v, err := queries(ctx, r.db).UpdateShare(ctx, sqlitedb.UpdateShareParams{
-		PasswordHash:       in.PasswordHash,
-		PasswordCiphertext: in.PasswordCiphertext,
-		AllowDownload:      boolToSQLite(in.AllowDownload),
-		ShowNotes:          boolToSQLite(in.ShowNotes),
-		ExpiresAt:          sqliteOptionalTime(in.ExpiresAt),
-		Uid:                in.UID,
-		OwnerID:            in.OwnerID,
+		PasswordHash:         in.PasswordHash,
+		ExpectedPasswordHash: in.ExpectedPasswordHash,
+		PasswordCiphertext:   in.PasswordCiphertext,
+		AllowDownload:        boolToSQLite(in.AllowDownload),
+		ShowNotes:            boolToSQLite(in.ShowNotes),
+		ExpiresAt:            sqliteOptionalTime(in.ExpiresAt),
+		Uid:                  in.UID,
+		OwnerID:              in.OwnerID,
 	})
 	if err != nil {
 		return nil, mapSQLiteError(err)

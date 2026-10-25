@@ -163,7 +163,7 @@ func (r *fakeShareRepo) Update(_ context.Context, in domain.UpdateShareInput) (*
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	row := r.find(in.UID, in.OwnerID)
-	if row == nil || row.RevokedAt != nil {
+	if row == nil || row.RevokedAt != nil || row.PasswordHash != in.ExpectedPasswordHash {
 		return nil, domain.ErrNotFound
 	}
 	row.PasswordHash = in.PasswordHash
