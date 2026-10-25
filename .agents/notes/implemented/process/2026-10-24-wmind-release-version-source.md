@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+更新日志来源部分由[按版本整理的用户说明](2026-10-25-wmind-curated-release-notes.md)取代；下述按提交区间汇总的段落保留原决定，版本进位、元数据一致性与部署包边界仍有效。
+
 根目录 VERSION 保存不带 v 的版本，两个 package.json 保持相同值。scripts/release.mjs 提供 check、version、bump、changelog、package 命令；bump 将 1.0.9 进为 1.1.0，1.9.9 进为 2.0.0，只更新元数据，不自动提交或发布。Makefile 正式构建从 VERSION 注入版本，开发服务继续显示 dev。
 
 changelog 读取本版本可达历史中最近的较小正式版本，按 Conventional Commit 类型整理区间提交；首次发布包含全部历史。package 为 Linux amd64/arm64 交叉编译独立服务，注入 v 前缀版本，只复制静态前端、示例配置、Compose、运维脚本、许可、版本和当次日志，生成 tar.gz 与 SHA256SUMS。压缩包内 Compose 移除源码 build 声明并固定当前镜像版本，直接拉取发布镜像。
@@ -16,6 +18,7 @@ changelog 读取本版本可达历史中最近的较小正式版本，按 Conven
 
 - [标签发布流程](2026-10-24-wmind-tag-release.md) 部分重叠：本文负责元数据和产物边界，流水线负责调用及远程发布。
 - [工具链基线](2026-10-16-wmind-m0-toolchain-baseline.md) 部分重叠：继续由 go.mod 与锁文件控制编译工具和依赖版本。
+- [用户版发布日志](2026-10-25-wmind-curated-release-notes.md) 部分取代：日志从对应版本整理稿读取，不再用提交区间生成正文。
 
 ## Alternatives considered
 

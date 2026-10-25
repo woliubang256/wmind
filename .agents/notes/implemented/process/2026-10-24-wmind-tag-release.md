@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+正文中 Conventional Commit 更新日志的内容来源由[按版本整理的用户说明](2026-10-25-wmind-curated-release-notes.md)取代，并在依赖安装前校验稿件；以下保留原编排决定，tag 触发、完整检查、镜像晋升和最后创建 Release 的约束不变。
+
 发布流水线仅由 `v*` 标签触发，保留原有数据库、前端、字体、配色和笔记检查。根 `VERSION` 是版本来源，两个 package 版本与其同步；`scripts/release.mjs check` 先验证标签一致性并运行发布工具测试，再经 `changelog` 和 `package` 生成更新日志、交叉编译 Linux amd64/arm64 服务并打包前端和部署文件。API/Web 构建仅推送 GHCR 的固定版本标签；两镜像均成功后再用 `buildx imagetools create` 将同标签镜像晋升为各自 `latest`，最后才创建或更新正式 Release，附上 Conventional Commit 更新日志、双架构部署包和 SHA256SUMS。
 
 Go 和 Node 构建阶段固定为 BUILDPLATFORM，Go 通过 TARGETOS/TARGETARCH 交叉编译；仅 API 最终 Alpine 初始化需要目标平台模拟，避免在 QEMU 中编译 Go 或前端。Docker 构建参数 VERSION 写入后端 config.Version。Compose 默认使用 GHCR 镜像并保留本地 build 配置。
@@ -21,6 +23,7 @@ API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `
 ## Related notes
 
 - [版本来源与部署包](2026-10-24-wmind-release-version-source.md) 负责版本同步、更新日志区间和打包白名单；本篇负责触发、质量闸门、镜像与最终 Release 的编排。
+- [用户版发布日志](2026-10-25-wmind-curated-release-notes.md) 部分取代：发布页、日志附件和部署包共用经过前置校验的版本整理稿，不再直接展示提交清单。
 - [M0 CI 闸门](2026-10-17-wmind-m0-ci-gates.md) 部分重叠：保留检查内容和本机无 Docker 的边界；新方案取代每次 push/PR 触发的决定，不改写旧理由。
 - [工具链版本基线](2026-10-16-wmind-m0-toolchain-baseline.md) 部分重叠：沿用 Go/Node/pnpm 版本配置。
 - [备份恢复](../architecture/2026-10-21-wmind-backup-restore.md) 仅涉及部署包中既有脚本，不改变备份恢复行为。
