@@ -1,2 +1,6 @@
 packages:
   - .
+
+# speech-rule-engine pins an affected xmldom; keep the override scoped to that edge.
+overrides:
+  'speech-rule-engine>@xmldom/xmldom': 0.9.12
