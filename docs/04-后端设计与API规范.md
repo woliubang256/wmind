@@ -1387,6 +1387,8 @@ func (s *MapService) Save(ctx context.Context, in SaveInput) (*Map, error) {
 
 `GET/PUT /api/v1/admin/ai` 仅限管理员，配置默认关闭；密钥只写入、不返回，空密钥保留旧值，`clearApiKey` 显式清除。`systemPrompt` 为只读的应用固定追加提示词，PUT 不允许提交。公开 `/site/config` 仅增加 `aiEnabled`。配置存储与加密边界见[数据模型 §4.3](03-数据模型与文件格式.md#43-敏感配置的加密存储)。
 
+`reasoningEffort` 为管理员配置的思考等级，默认空字符串（历史配置缺字段时同义），此时完全省略 Provider 请求中的 `reasoning_effort`，不是 `null` 或 `none`。显式值 `none/minimal/low/medium/high/xhigh/max` 原样发送，非法值返回 `AI_CONFIG_INVALID`；不同模型支持范围不同，不自动降级或重试计费请求。普通用户不能通过生成接口覆盖该设置。
+
 `POST /api/v1/ai/generate` 需要登录并启用 AI，接收 `prompt` 和有序 `sources[{name,text,images}]`；图片是实际 MIME 匹配的 data URL，不接受外部 URL。用户要求、附件素材、固定提示词依次放入同一 user 消息，固定提示词始终在最后。兼容端使用 `/chat/completions`，保留 Base URL 自定义前缀，拒绝重定向，100 秒超时。
 
 请求最多 12 MiB、10 万 Unicode 字符、5 份附件、12 张图片、8 MiB 图片总字节；每用户每分钟 5 次、同用户并发 1 次、每实例并发 4 次。响应最多 1 MiB，只接受 `title/children` 树，最多 500 节点、12 层。生成接口不创建导图，客户端验证并使用既有 `/maps` 接口保存；无效、失败、取消均不留下空导图。错误码为 `AI_DISABLED`（403）、`AI_CONFIG_INVALID` / `AI_INPUT_INVALID`（422）、`AI_PROVIDER_FAILED` / `AI_OUTPUT_INVALID`（502）。Provider 原始错误正文和密钥不进入响应与日志。完整请求字段以 [OpenAPI](openapi.yaml) 为准。
