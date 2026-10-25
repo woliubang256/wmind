@@ -53,47 +53,53 @@ export function bumpVersion(root = ROOT) {
   return version;
 }
 
-function git(root, ...args) {
-  return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-}
-
-function versionIndex(version) {
-  const { major, minor, patch } = parseVersion(version);
-  return major * 100n + BigInt(minor * 10 + patch);
-}
-
-const GROUPS = [
-  ['feat', '新增功能'], ['fix', '问题修复'], ['perf', '性能改进'], ['refactor', '代码优化'],
-  ['build', '构建与发布'], ['ci', '持续集成'], ['doc', '文档'], ['test', '测试'], ['chore', '维护'], ['other', '其他变更'],
-];
+const CHANGELOG_GROUPS = ['新增功能', '问题修复', '性能改进'];
 
 export function changelog(tag, root = ROOT) {
   checkTag(tag, root);
-  const tags = git(root, 'tag', '--list').split('\n');
-  const target = tags.includes(tag) ? `refs/tags/${tag}` : 'HEAD';
-  const candidates = git(root, 'tag', '--merged', target, '--list', 'v*').split('\n')
-    .filter(value => value.startsWith('v') && VERSION_RE.test(value.slice(1)) && versionIndex(value.slice(1)) < versionIndex(tag.slice(1)))
-    .sort((a, b) => versionIndex(a.slice(1)) > versionIndex(b.slice(1)) ? -1 : 1);
-  const previous = candidates[0];
-  const range = previous ? `${previous}..${target}` : target;
-  const groups = new Map(GROUPS.map(([key]) => [key, []]));
-  for (const line of git(root, 'log', '--reverse', '--format=%h%x09%s', range).split('\n').filter(Boolean)) {
-    const separator = line.indexOf('\t');
-    const hash = line.slice(0, separator);
-    const subject = line.slice(separator + 1);
-    const match = /^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/.exec(subject);
-    let type = match?.[1];
-    if (type === 'docs') type = 'doc';
-    const items = groups.get(type) ?? groups.get('other');
-    const description = match ? `${match[3] ? '**不兼容变更** ' : ''}${match[2] ? `${match[2]}：` : ''}${match[4]}` : subject;
-    items.push(`- ${description} (\`${hash}\`)`);
+  const source = `changelogs/${tag}.md`;
+  if (!existsSync(join(root, source))) throw new Error(`缺少发布整理稿：${source}，请先整理用户可见变化`);
+  const lines = readFileSync(join(root, source), 'utf8').trim().split(/\r?\n/);
+  if (lines[0] !== `# ${tag}`) throw new Error(`${source} 标题必须为 # ${tag}`);
+  const groups = new Map();
+  const seen = new Set();
+  let current;
+  for (const raw of lines.slice(1)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('## ')) {
+      current = line.slice(3);
+      if (!CHANGELOG_GROUPS.includes(current)) throw new Error(`更新日志分类只允许：${CHANGELOG_GROUPS.join(' / ')}`);
+      if (groups.has(current)) throw new Error(`更新日志重复分类：${current}`);
+      groups.set(current, []);
+      continue;
+    }
+    if (!current) throw new Error('更新日志条目必须放在分类下');
+    const match = /^- (\S.*)$/.exec(line);
+    if (!match) throw new Error(`更新日志格式错误，条目须为单行 - 文案：${line}`);
+    const item = match[1];
+    if (/^(?:TODO|TBD|待补充|待整理|暂无)[。.!！…\s]*$/i.test(item)) throw new Error('更新日志不能包含占位条目');
+    if (/^(?:feat|fix|perf|refactor|build|ci|docs?|test|chore)(?:\([^)]+\))?!?:\s*/i.test(item) || /\(`?[a-f0-9]{7,40}`?\)$/i.test(item)) {
+      throw new Error('更新日志不能照搬提交标题或附带提交哈希，请整理为用户可见结果');
+    }
+    const key = item.normalize('NFC').replace(/\s+/g, ' ');
+    if (seen.has(key)) throw new Error(`更新日志重复条目：${item}`);
+    seen.add(key);
+    groups.get(current).push(item);
   }
-  const lines = [`# ${tag}`, '', previous ? `自 ${previous} 以来的更新。` : '首次正式发布，包含以下历史变更。', ''];
-  for (const [key, title] of GROUPS) {
-    if (groups.get(key).length) lines.push(`## ${title}`, '', ...groups.get(key), '');
+  if (!seen.size) throw new Error('更新日志必须至少一条用户可见变化');
+  const output = [`# ${tag}`];
+  for (const title of CHANGELOG_GROUPS) {
+    if (!groups.has(title)) continue;
+    const items = groups.get(title);
+    if (!items.length) throw new Error(`更新日志不能包含空分类：${title}`);
+    output.push('', `## ${title}`, '', ...items.map(item => `- ${item}`));
   }
-  if (previous) lines.push(`[完整变更](https://github.com/woliubang256/wmind/compare/${previous}...${tag})`, '');
-  return `${lines.join('\n')}\n`;
+  return `${output.join('\n')}\n`;
+}
+
+function checkNotesFile(tag, root, notes) {
+  if (readFileSync(notes, 'utf8') !== changelog(tag, root)) throw new Error('待打包日志与当前版本整理稿不一致，请重新生成 CHANGELOG.md');
 }
 
 function copyRegular(source, destination) {
@@ -146,6 +152,7 @@ export function packageRelease(tag, output, root = ROOT) {
   const out = resolve(output);
   const notes = join(out, 'CHANGELOG.md');
   if (!existsSync(notes)) throw new Error('请先生成输出目录下的 CHANGELOG.md');
+  checkNotesFile(tag, root, notes);
   mkdirSync(out, { recursive: true });
   const temp = mkdtempSync(join(tmpdir(), 'wmind-release-'));
   const checksums = [];
