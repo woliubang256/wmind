@@ -56,8 +56,10 @@ test('真实 Nginx 静态资源、API 与上传缓存响应', { skip: !nginx && 
   }
   upstream = createServer((request, response) => {
     response.setHeader('X-Mock-Path', request.url);
-    response.setHeader('Cache-Control', request.url.startsWith('/uploads/private') ? 'no-store' : 'public, max-age=300');
-    response.statusCode = request.url.includes('missing') ? 404 : 200;
+    if (!request.url.startsWith('/uploads/missing') && !request.url.startsWith('/uploads/no-policy')) {
+      response.setHeader('Cache-Control', request.url.startsWith('/uploads/private') ? 'no-store' : 'public, max-age=300');
+    }
+    response.statusCode = request.url.includes('missing') ? 404 : request.url.includes('error-policy') ? 500 : 200;
     response.end('mock API');
   });
   upstream.listen(0, '127.0.0.1');
@@ -159,11 +161,21 @@ test('真实 Nginx 静态资源、API 与上传缓存响应', { skip: !nginx && 
       assert.equal(response.headers.get('cache-control'), path.includes('private') ? 'no-store' : 'public, max-age=300', path);
     }
   });
+  await t.test('上传未知路径、错误和缺少缓存策略时禁止缓存', async () => {
+    for (const [path, status] of [['/uploads/missing/nested.png', 404], ['/uploads/no-policy.jpg', 200], ['/uploads/error-policy.jpg', 500]]) {
+      const { response } = await request(path);
+      assert.equal(response.status, status, path);
+      assert.equal(response.headers.get('cache-control'), 'no-store', path);
+    }
+  });
   await t.test('代理连接失败的 API 响应也不缓存', async () => {
     upstream.closeAllConnections();
     await new Promise((resolve) => upstream.close(resolve));
     const { response } = await request('/api/v1/site/config');
     assert.equal(response.status, 502);
     assert.equal(response.headers.get('cache-control'), 'no-store');
+    const uploaded = await request('/uploads/avatar.jpg');
+    assert.equal(uploaded.response.status, 502);
+    assert.equal(uploaded.response.headers.get('cache-control'), 'no-store');
   });
 });
