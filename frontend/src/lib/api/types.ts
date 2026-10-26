@@ -71,7 +71,10 @@ export interface AuditLog {
   action: string;
   targetType: string;
   targetId: string;
-  detail: Record<string, unknown>;
+  /** Historical entries may contain non-object JSON; presentation must validate it. */
+  detail: unknown;
+  actor?: { uid: string; username: string; nickname: string } | null;
+  targetName?: string;
   ip: string;
   createdAt: string;
 }

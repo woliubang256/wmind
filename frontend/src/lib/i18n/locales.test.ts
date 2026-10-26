@@ -174,6 +174,15 @@ function literalKeys(source: string): string[] {
 }
 
 describe('语言包', () => {
+  it('操作日志条数按真实数字选择中英文单复数', async () => {
+    const instance = createInstance();
+    await instance.init({ resources: { 'zh-CN': { translation: zhCN }, 'en-US': { translation: enUS } }, lng: 'zh-CN', interpolation: { escapeValue: false } });
+    for (const count of [0, 1, 2, 30]) {
+      expect(instance.t('admin.audit.total', { lng: 'zh-CN', count })).toBe(`共 ${count} 条记录`);
+      expect(instance.t('admin.audit.total', { lng: 'en-US', count })).toBe(`${count} ${count === 1 ? 'entry' : 'entries'}`);
+    }
+  });
+
   it('回收站剩余天数按英文单复数渲染，中文保持相同量词', async () => {
     const instance = createInstance();
     await instance.init({

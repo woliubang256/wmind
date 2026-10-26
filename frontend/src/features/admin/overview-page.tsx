@@ -5,36 +5,9 @@ import { Icon, type IconName } from '@/components/ui/icon';
 import { LoadingState } from '@/components/ui/loading-state';
 import { Badge, EmptyState, PageHeader, Panel } from '@/components/ui/panel';
 import { adminApi } from '@/lib/api/endpoints';
-import type { AuditLog } from '@/lib/api/types';
-import { formatBytes, formatDateTime, formatDayMonth, formatList, formatNumber, formatRelative } from '@/lib/format';
+import { formatBytes, formatNumber } from '@/lib/format';
 import { adminKeys } from './queries';
-
-/**
- * 审计动作 → i18n key。
- *
- * 不写成 `t('admin.audit.' + action)`：动作名本身带点（`user.create`），拼出来
- * 的键要先按分隔符切开再逐级找，找不到还得回退到扁平查找——中间任何一步的
- * 行为差异都会让某个动作在某种语言下露出原始英文动作名。显式映射查不到时
- * 直接退回动作名，行为可预期。
- */
-const ACTION_LABEL: Record<string, string> = {
-  'user.create': 'admin.audit.createUser',
-  'user.update': 'admin.audit.updateUser',
-  'user.disable': 'admin.audit.disableUser',
-  'user.enable': 'admin.audit.enableUser',
-  'user.delete': 'admin.audit.deleteUser',
-  'user.role': 'admin.audit.changeRole',
-  'user.reset_password': 'admin.audit.resetPassword',
-  'settings.update': 'admin.audit.updateSettings',
-};
-
-const ACTION_TONE: Record<string, 'primary' | 'warning' | 'danger' | 'neutral'> = {
-  'user.create': 'primary',
-  'user.disable': 'warning',
-  'user.delete': 'danger',
-  'user.reset_password': 'warning',
-  'settings.update': 'neutral',
-};
+import { AuditRow } from './audit-row';
 
 export function AdminOverviewPage() {
   const { t } = useTranslation();
@@ -52,7 +25,7 @@ export function AdminOverviewPage() {
       <PageHeader
         title={t('admin.overview.title')}
         actions={
-          <Button loading={stats.isFetching} variant="outline" size="sm" onClick={() => void stats.refetch()} disabled={stats.isFetching}>
+          <Button loading={stats.isFetching || audit.isFetching} variant="outline" size="sm" onClick={() => { void stats.refetch(); void audit.refetch(); }} disabled={stats.isFetching || audit.isFetching}>
             <Icon name="clock" className="size-4" />
             {stats.isFetching ? t('admin.overview.refreshing') : t('admin.overview.refresh')}
           </Button>
@@ -107,13 +80,16 @@ export function AdminOverviewPage() {
           title={t('admin.overview.auditTitle')}
           actions={
             <Badge tone="neutral">
-              {t('admin.overview.auditCount', { count: formatNumber(audit.data?.pagination.total ?? 0) })}
+              {t('admin.audit.total', { count: audit.data?.pagination.total ?? 0 })}
             </Badge>
           }
           bodyClassName="p-0"
         >
           {audit.isError ? (
-            <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t('admin.overview.auditFailed')}</p>
+            <div className="space-y-3 px-5 py-8 text-center text-sm text-muted-foreground">
+              <p>{t('admin.overview.auditFailed')}</p>
+              <Button variant="outline" size="sm" onClick={() => void audit.refetch()}>{t('common.retry')}</Button>
+            </div>
           ) : audit.isPending ? (
             <LoadingState small className="min-h-40" />
           ) : (audit.data?.items.length ?? 0) === 0 ? (
@@ -200,46 +176,4 @@ function TrendChart({ points }: { points: { date: string; newUsers: number; newM
       </div>
     </div>
   );
-}
-
-function AuditRow({ log }: { log: AuditLog }) {
-  const { t } = useTranslation();
-  const labelKey = ACTION_LABEL[log.action];
-  const label = labelKey === undefined ? log.action : t(labelKey);
-  const tone = ACTION_TONE[log.action] ?? 'neutral';
-  const detail = summarizeDetail(log);
-
-  return (
-    <li className="flex items-start justify-between gap-3 px-5 py-3">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={tone}>{label}</Badge>
-          {detail ? <span className="truncate text-sm">{detail}</span> : null}
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {log.ip || t('admin.overview.unknownSource')} · {formatRelative(log.createdAt)}
-        </p>
-      </div>
-      <time className="shrink-0 text-xs text-muted-foreground" dateTime={log.createdAt} title={formatDateTime(log.createdAt)}>
-        {formatDayMonth(log.createdAt)}
-      </time>
-    </li>
-  );
-}
-
-/** 从 detail 里挑一句人话。detail 的形状由后端决定，所以逐字段兜底。 */
-function summarizeDetail(log: AuditLog): string {
-  const detail = log.detail ?? {};
-  const keys = (detail as { keys?: unknown }).keys;
-  if (Array.isArray(keys) && keys.length > 0) {
-    return formatList(keys.map(String));
-  }
-  const username = (detail as { username?: unknown }).username;
-  if (typeof username === 'string' && username) return username;
-  const changes = (detail as { changes?: unknown }).changes;
-  if (changes && typeof changes === 'object') {
-    return formatList(Object.keys(changes as Record<string, unknown>));
-  }
-  if (log.targetId) return log.targetId;
-  return '';
 }

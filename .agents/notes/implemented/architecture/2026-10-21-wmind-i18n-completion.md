@@ -43,11 +43,12 @@ Status: implemented
 ### 2. 常量表只存 key
 
 `SettingField.label` → `labelKey`、`WEIGHTS[].label` → `labelKey`、
-`FONT_DEFINITIONS.label` → `labelKey`、`ACTION_LABEL` 的值改成 `admin.audit.*`。
+`FONT_DEFINITIONS.label` → `labelKey`；操作日志的 `audit-presenter.ts` 使用 `AUDIT_ACTIONS` 与显式摘要映射，值指向 `admin.audit.*`。
 渲染时才 `t()`。这是本笔记里唯一一条「以后加新表也必须遵守」的约定。
 
-`ACTION_LABEL` 刻意写成显式映射而不是 `t('admin.audit.' + action)`：拼出来的
-key 守卫测试看不见，漏一条只会在界面上显示成标识符。
+审计动作刻意使用显式映射而不是拼接翻译 key：拼出来的 key 守卫测试看不见，漏一条只会在界面上显示成标识符。分享动作、设置字段、角色变化、未知对象与权限详情共用语义 presenter；设置字段复用表单 labelKey，未知字段只显示本地化兜底。历史 detail 视为 unknown，只读取白名单字段，不 stringify 任意 JSON。未知动作码只允许出现在展开详情，映射查找排除对象原型继承键。
+
+概览日志使用操作者、动作及对象组成摘要，时间与 IP 在同一元数据行；超长摘要折叠为两行，展开恢复全文。条数传原始数字供 i18next 选择英文单复数，中英文键、占位符与真实运行选择均有守卫；七项语义测试覆盖已知动作、设置翻译、角色前后值、凭据不展示、历史/畸形详情及原型同名键。
 
 ### 3. 格式化按语言建实例并缓存
 
