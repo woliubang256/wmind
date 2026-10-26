@@ -68,7 +68,19 @@ jobs:
       - name: Validate and render curated changelog
         run: node scripts/release.mjs changelog "$GITHUB_REF_NAME" release/CHANGELOG.md
 
+      - name: Install Nginx for HTTP cache verification
+        run: |
+          if command -v nginx >/dev/null 2>&1; then
+            exit 0
+          fi
+          sudo systemctl mask --runtime nginx.service
+          trap 'sudo systemctl unmask --runtime nginx.service' EXIT
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nginx
+
       - name: Test release tooling
+        env:
+          WMIND_REQUIRE_NGINX: '1'
         run: npm run test:release
 
       - name: Install frontend dependencies

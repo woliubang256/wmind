@@ -10,7 +10,7 @@ EdgeOne 遵循源站 Cache-Control。Vite 的 JS/CSS 已有内容哈希，但 pu
 
 Vite 构建插件生成内容哈希 URL：字体分片先哈希，重写所属 CSS 的分片引用后再哈希 CSS，内置 Logo 单独哈希。共享虚拟模块让字体注册表、应用 Logo 和 HTML 图标引用同一产物；开发模式保留源路径。public 源文件和 docs 原图原位保留，旧固定 URL 继续随部署包提供，避免旧页面立刻失去资源。
 
-派生文件放在既有长期缓存的 /assets/ 命名空间；这里只改变内置资源的内容身份，不改变 API 与上传访问权限。字体注册表在开发时仍解析到 /fonts/，生产时由虚拟模块提供派生 URL，加载器和导出模块自然共用同一地址。字体源码校验检查 publicAssetUrl 包装中的固定源路径，继续核对源 manifest 与字重。
+派生文件放在长期缓存的 /assets/ 命名空间，响应状态与旧 URL 策略见[Nginx 缓存边界](../bug-fix/2026-10-26-wmind-nginx-cache-boundaries.md)；这里只改变内置资源的内容身份，不改变 API 与上传访问权限。字体注册表在开发时仍解析到 /fonts/，生产时由虚拟模块提供派生 URL，加载器和导出模块自然共用同一地址。字体源码校验检查 publicAssetUrl 包装中的固定源路径，继续核对源 manifest 与字重。
 
 ### 旧笔记归属
 

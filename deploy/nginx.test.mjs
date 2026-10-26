@@ -23,7 +23,7 @@ function backupContract(source) {
   assert.match(upload, /proxy_pass\s+http:\/\/api:8080\s*;/);
   assert.doesNotMatch(source, /location\s+\^~\s+\/api\/v1\/admin\/backups\//, '普通备份控制路由不能继承2GiB上传额度');
   assert.equal(source.match(/client_max_body_size\s+2g\s*;/g)?.length, 1, '大额度只存在于恢复预检ZIP上传');
-  const api = /location\s+\/api\/\s*\{([^}]+)\}/.exec(source)?.[1];
+  const api = /location\s+\^~\s+\/api\/\s*\{([^}]+)\}/.exec(source)?.[1];
   assert.ok(api);
   assert.doesNotMatch(api, /client_max_body_size\s+2g/, '不能扩大普通 API 的上传限制');
 }
