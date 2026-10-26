@@ -12,7 +12,7 @@ Status: implemented
 
 `domain.BackupRepository` 定义一致导出、格式校验与事务恢复契约。`internal/backupformat` 保存固定表顺序和有界逐行格式，SQL 标识符不从归档接受。文件安装回调在数据库提交之前执行，提交失败调用文件撤回函数。
 
-`backup.Gate` 在独占维护前拒绝新业务请求并排空已进入的请求；恢复或捕获完成释放闸门。此原语只约束单进程，不能宣称具备跨实例维护互斥。
+`backup.Gate` 在独占维护前拒绝新业务请求并排空已进入的请求；恢复或捕获完成释放闸门。[共享维护门](../bug-fix/2026-10-26-wmind-shared-maintenance-gate.md)在上传卷父目录增加稳定文件锁，补齐所有采用同一协议、共享支持 flock 的本地卷的实例之间的维护互斥；不将此保证扩展到旧实例或对象存储。
 
 SQLite 与 PostgreSQL 适配器采用固定表 JSONL 导出，分别使用读事务和 repeatable-read 事务。恢复逐行校验列集合、按外键逆序清空和正序插入；事务内轮换所有用户的 SessionVersion，清除刷新令牌、一次性令牌与待验证挑战，保留已启用 2FA 的密文。PostgreSQL 自增序列只前移，不在可回滚事务里降低非事务性序列。恢复要求至少一个有效管理员。
 

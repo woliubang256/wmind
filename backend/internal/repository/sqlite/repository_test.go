@@ -30,4 +30,5 @@ func TestRepositoryContract(t *testing.T) {
 		TwoFactor: NewTwoFactorRepository(db),
 	})
 	contracttest.RunLoginChallenges(t, NewLoginChallengeRepository(db), NewTxManager(db))
+	contracttest.RunUploadReferences(t, NewUploadReferencesRepository(db), NewUserRepository(db), NewMapRepository(db), NewTemplateRepository(db), NewSettingsRepository(db))
 }
