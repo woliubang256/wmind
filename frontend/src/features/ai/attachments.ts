@@ -1,6 +1,7 @@
 import type { AISource } from './api';
-import { AIFileError, AI_LIMITS, fileExtension, textLength, validateFiles } from './limits';
+import { AIFileError, AI_LIMITS, AI_TEXT_EXTENSIONS, fileExtension, textLength, validateFiles } from './limits';
 import { extractDocx, extractXlsx } from './office';
+import { extractText } from './text';
 
 async function imageData(file: File, signal: AbortSignal): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -54,9 +55,11 @@ export async function extractAttachments(files: File[], prompt: string, signal: 
           const { extractPDF } = await import('./pdf');
           signal.throwIfAborted();
           source = await extractPDF(bytes, file.name, signal);
-        } else {
+        } else if (AI_TEXT_EXTENSIONS.includes(extension)) {
+          source = { name: file.name, text: extractText(bytes), images: [] };
+        } else if (extension === 'docx' || extension === 'xlsx') {
           source = { name: file.name, text: extension === 'docx' ? extractDocx(bytes) : extractXlsx(bytes), images: [] };
-        }
+        } else throw new AIFileError('unsupported', file.name);
       }
       signal.throwIfAborted();
       if (!source.text.trim() && !source.images.length) throw new AIFileError('empty', file.name);

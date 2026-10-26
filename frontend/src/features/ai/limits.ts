@@ -10,7 +10,8 @@ export const AI_LIMITS = {
   imageEdge: 1600,
 } as const;
 
-export const AI_ACCEPT = '.docx,.xlsx,.pdf,.png,.jpg,.jpeg,.webp,.gif';
+export const AI_TEXT_EXTENSIONS: readonly string[] = ['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'log', 'ini', 'conf', 'toml'];
+export const AI_ACCEPT = ['docx', 'xlsx', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', ...AI_TEXT_EXTENSIONS].map((extension) => `.${extension}`).join(',');
 export type AIFileErrorCode = 'unsupported' | 'fileSize' | 'totalSize' | 'fileCount' | 'parse' | 'empty' | 'textLimit' | 'imageLimit' | 'pdfPages' | 'encrypted' | 'zipLimit';
 
 export class AIFileError extends Error {
