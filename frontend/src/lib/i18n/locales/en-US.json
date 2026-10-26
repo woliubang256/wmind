@@ -11,7 +11,7 @@
     "attachments": "Attachments",
     "upload": "Upload or drop files",
     "dropFiles": "Release to add files",
-    "formats": ".docx, .xlsx, PDF, images · Up to 5 files, 20 MB each",
+    "formats": "TXT/MD and other text, DOCX, XLSX, PDF, images · Up to 5 files, 20 MB each",
     "removeFile": "Remove {{name}}",
     "generate": "Generate mind map",
     "generating": "Generating…",
@@ -27,7 +27,7 @@
     "systemPrompt": "Appended prompt",
     "fileFailed": "{{name}}: {{reason}}",
     "fileError": {
-      "unsupported": "Supported: .docx, .xlsx, PDF, PNG, JPEG, WebP and GIF.",
+      "unsupported": "Supported: TXT/MD and other common text files, DOCX, XLSX, PDF, PNG, JPEG, WebP and GIF.",
       "fileSize": "The file exceeds 20 MB or the image pixel limit. Reduce its size and try again.",
       "totalSize": "Attachments must not exceed 30 MB in total.",
       "fileCount": "You can upload up to 5 files.",

@@ -10,13 +10,13 @@
 - **布局与外观**：9 种布局结构、19 套内置配色和自定义主题，支持浅色 / 深色模式与中英文切换。
 - **多画布与大纲**：一份文档管理多个画布，随时切换大纲视图，支持 ZEN 专注模式与模板复用。
 - **导入与导出**：导入 XMind / Markdown / OPML，导出 JPEG / PNG / SVG / PDF / XMind / Markdown / OPML，也可保存为 `.wmind` 文档。
-- **AI 生成**：组合文字、Word、Excel、PDF 和图片生成可编辑导图，支持多文件拖拽上传。
+- **AI 生成**：组合文字、TXT/Markdown 等文本文件、Word、Excel、PDF 和图片生成可编辑导图，支持多文件拖拽上传。
 - **链接分享**：设置有效期、访问密码、下载与备注权限，访客可缩放画布、折叠和展开节点。
 - **私有部署与管理**：支持 SQLite / PostgreSQL、用户管理与双因素认证，提供 S3 / WebDAV 备份恢复、定时备份、保留份数和可选去重。
 
 PDF 导出为单页图片，文字不可选中。
 
-AI 功能默认关闭，在「网站设置 → AI」配置 OpenAI 兼容 Provider 的 Base URL、API Key、Model 并启用；思考等级可选，默认不传。支持 `.docx`、`.xlsx`，图片与扫描 PDF 需要视觉模型；素材会发送给所配置的 Provider。详细说明见[使用手册](./docs/10-用户使用手册.md#ai-生成)。
+AI 功能默认关闭，在「网站设置 → AI」配置 OpenAI 兼容 Provider 的 Base URL、API Key、Model 并启用；思考等级可选，默认不传。支持常见文本文件、`.docx`、`.xlsx`，图片与扫描 PDF 需要视觉模型；素材会发送给所配置的 Provider。详细说明见[使用手册](./docs/10-用户使用手册.md#ai-生成)。
 
 ## 界面预览
 

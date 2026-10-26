@@ -31,6 +31,7 @@ const SUITE = [
   ['import-tabs', '文件与 Markdown 文本导入'],
   ['import-batch', '批量导入 / 原生 XMind 连线 / 最后成功项'],
   ['ai-generation', 'AI配置 / 多格式素材 / 生成保存 / 取消与重试'],
+  ['ai-text-attachments', 'AI文本附件 / 编码 / 原文与预算 / 点击与拖放'],
   ['user-menu', '用户导航 / 权限 / 键盘与窄屏'],
   ['two-factor', '账户双因素认证'],
   ['login-encryption', '登录密码公钥加密与防重放'],

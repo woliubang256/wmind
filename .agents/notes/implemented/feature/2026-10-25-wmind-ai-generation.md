@@ -47,7 +47,8 @@ Status: implemented
 - `go test ./internal/ai ./internal/settings ./internal/httpapi -run 'TestAI|TestConfiguration|TestGenerate|TestRejectsInvalid|TestSiteConfig|TestOpenAPI' -count=1`：默认关闭、匿名/普通用户管理权限、只读提示词拒绝写入、密文存储、重建服务后解密、不同密钥失败、空密钥保留、其他实例立即读取更新；mock HTTP 验证文本/图片消息、完整路径与认证、取消、重定向拒绝、错误脱敏、模型树与输入预算。
 - 路由与 OpenAPI 对等检查包含新增 3 个操作，公开响应仅增加 aiEnabled，通用设置响应不包含 ai.config。
 - `pnpm test src/features/ai/attachments.test.ts`：独立 OOXML 样本验证 Word 段落、表格与拆分文本，Excel 多表顺序、字符串和坐标；验证损坏、空文件、DTD、压缩炸弹与共享字符/图片预算。生成文件经过真实 parseDocument，无归一化修复，保留完整层级、默认主题和字面标题。
-- `text-attachments.test.ts` 在接入前 27 项因格式拒绝失败；接入后覆盖全部文本扩展名、大写与空 MIME、原文结构、UTF-8/BOM、UTF-16 双端序、GBK 与 GB18030 四字节、完整二进制检查、空文件、精确字符上限、混合 Office 顺序及取消。与既有附件/i18n 守卫共同验证，不更改后端素材或提示词契约。
+- `text-attachments.test.ts` 在接入前 27 项因格式拒绝失败；接入后 29 项覆盖全部文本扩展名、大写与空 MIME、原文结构、UTF-8/BOM、UTF-16 双端序、GBK 与 GB18030 四字节、完整二进制检查、空文件、精确字符上限、混合 Office 顺序及取消。与既有附件/i18n 守卫共 41 项通过，类型检查通过，不更改后端素材或提示词契约。
+- 独立 `node frontend/e2e/ai-text-attachments.mjs` 不读取真实配置，33 项浏览器夹具验证选择与拖放共用格式/去重/限制、有序原文及 DTD 字面保留、二进制/空白/超限不发请求、UTF-16/GBK、取消、自动创建可编辑导图、中英文提示与 375/1440px 无横向溢出；桌面上传提示与按钮保持同一行，测试接入既有 E2E runner。README 与手册同步实际扩展名及编码限制，生产构建通过，保留既有大型 chunk 提示。
 - `node frontend/e2e/ai-generation.mjs`：独立接口夹具覆盖默认隐藏、后台只读与密钥保存、桌面/手机布局、Tab 循环、五份附件真实浏览器提取、PDF 超页拒绝、生成失败保留、错误树拒绝、保存重试不重复调用、取消后重开无旧写入、中英文，21 项通过。夹具不修改开发数据库。
 - `pnpm test`：96 个测试文件、1361 项全部通过；`pnpm exec tsc --noEmit` 通过。PDF.js 本地 worker/字体资源在浏览器中实际提取、渲染通过。
 - `dependency-loading.test.mjs` 在修复前证明缺少 PDF.js 预构建，修复后通过；独立临时 cacheDir 的全新 Vite 服务完成相同 21 项 E2E，无依赖发现导致的导航。`pnpm run build` 通过，PDF 模块仍为按需分块，既有大 chunk 警告不阻塞构建。
