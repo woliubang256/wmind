@@ -82,6 +82,7 @@ func NewRouter(deps Deps) http.Handler {
 	// RateLimit / RequireAuth / RequireRole 在 M1 接入。
 	r.Use(
 		middleware.Recover(deps.Logger),
+		middleware.APICachePolicy(),
 		middleware.RequestID(),
 		middleware.Logger(deps.Logger),
 		middleware.CORS(deps.Config.CORSOrigins),
