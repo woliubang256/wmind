@@ -26,13 +26,13 @@ type Actor struct {
 
 // AuditEntry 是一条待写入的审计记录。
 //
-// Detail 用 map 而不是 JSON 文本：序列化与「剔除敏感字段」的责任集中在
-// recordAudit 一处，调用点只描述「发生了什么」。
+// Detail 只接受各动作允许的字段；Record 添加身份快照并统一序列化。
 type AuditEntry struct {
 	Actor      Actor
 	Action     string
 	TargetType string
 	TargetID   string
+	TargetName string
 	Detail     map[string]any
 }
 
@@ -54,6 +54,8 @@ type AdminServiceConfig struct {
 	Users     domain.UserRepo
 	Tokens    domain.RefreshTokenRepo
 	Audit     domain.AuditRepo
+	Maps      domain.MapRepo
+	Shares    domain.ShareRepo
 	Site      SiteConfigProvider
 	TwoFactor domain.TwoFactorRepo
 	Tx        domain.TxManager
@@ -68,6 +70,8 @@ type AdminService struct {
 	users     domain.UserRepo
 	tokens    domain.RefreshTokenRepo
 	audit     domain.AuditRepo
+	maps      domain.MapRepo
+	shares    domain.ShareRepo
 	site      SiteConfigProvider
 	twoFactor domain.TwoFactorRepo
 	tx        domain.TxManager
@@ -101,6 +105,7 @@ func NewAdminService(cfg AdminServiceConfig) (*AdminService, error) {
 	return &AdminService{
 		stats: cfg.Stats, uploads: cfg.Uploads,
 		users: cfg.Users, tokens: cfg.Tokens, audit: cfg.Audit, site: cfg.Site,
+		maps: cfg.Maps, shares: cfg.Shares,
 		twoFactor: cfg.TwoFactor, tx: cfg.Tx, logger: cfg.Logger, now: cfg.Now,
 	}, nil
 }
@@ -112,8 +117,9 @@ func NewAdminService(cfg AdminServiceConfig) (*AdminService, error) {
 // 第二次会生成第二个密码）。
 func (s *AdminService) Record(ctx context.Context, entry AuditEntry) error {
 	detail := "{}"
-	if len(entry.Detail) > 0 {
-		encoded, err := json.Marshal(entry.Detail)
+	contextDetail := s.auditEventDetail(ctx, entry)
+	if len(contextDetail) > 0 {
+		encoded, err := json.Marshal(contextDetail)
 		if err != nil {
 			// 序列化失败也别丢掉这条记录：记下动作本身，细节用空对象。
 			s.logger.Error("审计细节序列化失败", "action", entry.Action, "err", err)
@@ -202,7 +208,7 @@ func (s *AdminService) CreateUser(ctx context.Context, in CreateUserInput, actor
 	}
 
 	_ = s.Record(ctx, AuditEntry{
-		Actor: actor, Action: domain.AuditUserCreate, TargetType: "user", TargetID: user.UID,
+		Actor: actor, Action: domain.AuditUserCreate, TargetType: "user", TargetID: user.UID, TargetName: auditUserName(user),
 		Detail: map[string]any{"username": user.Username, "email": user.Email, "role": string(user.Role)},
 	})
 	return user, nil
@@ -322,7 +328,7 @@ func (s *AdminService) auditUserChange(
 ) {
 	if user.Role != oldRole {
 		_ = s.Record(ctx, AuditEntry{
-			Actor: actor, Action: domain.AuditUserRoleChange, TargetType: "user", TargetID: user.UID,
+			Actor: actor, Action: domain.AuditUserRoleChange, TargetType: "user", TargetID: user.UID, TargetName: auditUserName(user),
 			Detail: map[string]any{"from": string(oldRole), "to": string(user.Role)},
 		})
 	}
@@ -332,14 +338,14 @@ func (s *AdminService) auditUserChange(
 			action = domain.AuditUserDisable
 		}
 		_ = s.Record(ctx, AuditEntry{
-			Actor: actor, Action: action, TargetType: "user", TargetID: user.UID,
+			Actor: actor, Action: action, TargetType: "user", TargetID: user.UID, TargetName: auditUserName(user),
 			Detail: map[string]any{"from": string(oldStatus), "to": string(user.Status)},
 		})
 	}
 	if user.Role == oldRole && user.Status == oldStatus {
 		// 只改了资料（昵称/邮箱）。邮箱是登录标识，值得单独留痕。
 		_ = s.Record(ctx, AuditEntry{
-			Actor: actor, Action: domain.AuditUserUpdate, TargetType: "user", TargetID: user.UID,
+			Actor: actor, Action: domain.AuditUserUpdate, TargetType: "user", TargetID: user.UID, TargetName: auditUserName(user),
 			Detail: map[string]any{"email": user.Email, "nickname": user.Nickname},
 		})
 	}
@@ -394,7 +400,7 @@ func (s *AdminService) DeleteUser(ctx context.Context, uid string, actor Actor) 
 		return err
 	}
 	_ = s.Record(ctx, AuditEntry{
-		Actor: actor, Action: domain.AuditUserDelete, TargetType: "user", TargetID: deleted.UID,
+		Actor: actor, Action: domain.AuditUserDelete, TargetType: "user", TargetID: deleted.UID, TargetName: auditUserName(deleted),
 		Detail: map[string]any{"username": deleted.Username, "email": deleted.Email},
 	})
 	return nil
@@ -449,7 +455,7 @@ func (s *AdminService) ResetPassword(ctx context.Context, uid, password string, 
 
 	// 审计只记「发生了重置」与「是否随机生成」，绝不记密码本身。
 	_ = s.Record(ctx, AuditEntry{
-		Actor: actor, Action: domain.AuditUserPasswordReset, TargetType: "user", TargetID: user.UID,
+		Actor: actor, Action: domain.AuditUserPasswordReset, TargetType: "user", TargetID: user.UID, TargetName: auditUserName(user),
 		Detail: map[string]any{"generated": generated, "username": user.Username},
 	})
 	return &ResetPasswordResult{Password: password, Generated: generated}, nil
@@ -498,6 +504,9 @@ type AuditQuery struct {
 
 // ListAuditLogs 返回审计日志与总数。
 func (s *AdminService) ListAuditLogs(ctx context.Context, query AuditQuery) ([]*domain.AuditLog, int64, error) {
+	if query.From != nil && query.To != nil && query.From.After(*query.To) {
+		return nil, 0, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{"to": "结束时间不能早于开始时间"})
+	}
 	filter := domain.AuditFilter{Action: query.Action, From: query.From, To: query.To}
 	if uid := strings.TrimSpace(query.ActorUID); uid != "" {
 		actorUser, err := s.users.GetByUID(ctx, uid)
@@ -520,7 +529,7 @@ func (s *AdminService) ListAuditLogs(ctx context.Context, query AuditQuery) ([]*
 	if err != nil {
 		return nil, 0, apperr.Wrap(apperr.CodeInternalError, err)
 	}
-	return logs, total, nil
+	return s.withAuditContext(ctx, logs), total, nil
 }
 
 // withUserSecurity follows the login/refresh lock order: security row, then user

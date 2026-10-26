@@ -38,6 +38,16 @@ type AuditLog struct {
 	Detail     string
 	IP         string
 	CreatedAt  time.Time
+	// Actor / TargetName are read-only display context derived from event snapshots.
+	Actor      *AuditActor
+	TargetName string
+}
+
+// AuditActor contains only identity names, never email or credentials.
+type AuditActor struct {
+	UID      string `json:"uid"`
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
 }
 
 // 审计动作名。集中定义，避免各处手写字符串导致统计口径分裂。

@@ -1459,10 +1459,18 @@ paths:
           schema: { type: string }
         - name: from
           in: query
-          schema: { type: string, format: date-time }
+          description: RFC3339 时间或 UTC 日期（YYYY-MM-DD），包含起点。
+          schema:
+            oneOf:
+              - { type: string, format: date-time }
+              - { type: string, format: date }
         - name: to
           in: query
-          schema: { type: string, format: date-time }
+          description: RFC3339 时间或 UTC 日期；纯日期包含该日全天。无效格式或早于 from 返回 422。
+          schema:
+            oneOf:
+              - { type: string, format: date-time }
+              - { type: string, format: date }
       responses:
         '200':
           description: 审计日志
@@ -1477,6 +1485,8 @@ paths:
                         type: array
                         items: { $ref: '#/components/schemas/AuditLog' }
         '403':
+          $ref: '#/components/responses/Error'
+        '422':
           $ref: '#/components/responses/Error'
 
   /api/v1/admin/settings:
@@ -2450,18 +2460,42 @@ components:
 
     AuditLog:
       type: object
-      required: [id, action, targetType, targetId, createdAt]
+      required: [id, actor, action, targetType, targetId, targetName, createdAt]
       properties:
         id: { type: integer, format: int64 }
         actorId: { type: [integer, 'null'], format: int64 }
+        actor:
+          description: 事件发生时保存的操作者身份；旧日志仅在账号仍存在时补充，无法识别时为 null。
+          anyOf:
+            - $ref: '#/components/schemas/AuditActor'
+            - type: 'null'
         action: { type: string }
         targetType: { type: string }
         targetId: { type: string }
+        targetName:
+          type: string
+          description: 事件发生时的用户名称或导图标题；旧记录按仍存在的对象补充，无法识别时为空字符串。
         detail:
-          type: object
-          additionalProperties: true
+          description: 新记录是按动作白名单生成的对象及 actor/targetName 名称快照；设置仅记录 keys，不保存设置值、密码或令牌。兼容历史 JSON 值，历史非 JSON 文本作为字符串返回。
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+            - type: string
+            - type: number
+            - type: boolean
+            - type: 'null'
         ip: { type: string }
         createdAt: { type: string, format: date-time }
+
+    AuditActor:
+      type: object
+      required: [uid, username, nickname]
+      properties:
+        uid: { type: string }
+        username: { type: string }
+        nickname: { type: string }
 
     SettingsMap:
       type: object

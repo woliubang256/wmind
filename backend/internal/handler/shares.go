@@ -193,13 +193,17 @@ func (h *ShareHandler) Revoke(c *gin.Context) {
 		return
 	}
 	uid := c.Param("uid")
-	if err := h.shares.Revoke(c.Request.Context(), uid, owner); err != nil {
+	link, err := h.shares.RevokeWithContext(c.Request.Context(), uid, owner)
+	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 	// 撤销之后 detail 里没有 token：审计表是 append-only，一个已经失效的
 	// 令牌仍然没必要留在里面。
-	h.record(c, domain.AuditShareRevoke, &domain.ShareLink{UID: uid}, nil)
+	h.record(c, domain.AuditShareRevoke, link, map[string]any{
+		"hasPassword": link.HasPassword(), "allowDownload": link.AllowDownload,
+		"showNotes": link.ShowNotes, "expiresAt": formatTimePtr(link.ExpiresAt),
+	})
 	response.NoContent(c)
 }
 
@@ -290,6 +294,9 @@ func (h *ShareHandler) record(c *gin.Context, action string, link *domain.ShareL
 	if link.MapUID != "" {
 		detail["mapUid"] = link.MapUID
 	}
+	if link.MapTitle != "" {
+		detail["mapTitle"] = link.MapTitle
+	}
 	_ = h.auditor.Record(c.Request.Context(), service.AuditEntry{
 		Actor: service.Actor{
 			ID:  middleware.UserDBID(c),
@@ -299,6 +306,7 @@ func (h *ShareHandler) record(c *gin.Context, action string, link *domain.ShareL
 		Action:     action,
 		TargetType: "share",
 		TargetID:   link.UID,
+		TargetName: link.MapTitle,
 		Detail:     detail,
 	})
 }

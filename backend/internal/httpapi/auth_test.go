@@ -115,6 +115,7 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		Stats: sqlite.NewAdminStatsRepository(db), Uploads: avatarStore,
 		Users: userRepo, Tokens: sqlite.NewRefreshTokenRepository(db),
 		Audit: sqlite.NewAuditRepository(db), Site: settingsSvc,
+		Maps: sqlite.NewMapRepository(db), Shares: sqlite.NewShareRepository(db),
 		TwoFactor: sqlite.NewTwoFactorRepository(db), Tx: txManager, Logger: logger,
 	})
 	if err != nil {

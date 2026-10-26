@@ -64,6 +64,14 @@ g := v1.Group("/admin",
 
 表里存 `actor_id`（自增主键），前端只有 `uid`。转换放在 `AdminService.ListAuditLogs`：拿 uid 查一次用户，`ErrNotFound` 时**返回空列表而不是 404**——「筛不到」是正常查询结果。
 
+### 事件身份与对象名称保存在 detail 快照中
+
+`Record` 按动作白名单接受细节，并从用户仓储取得操作者的 uid、username、nickname。新记录把 `actor` 与调用点提供的 `targetName` 写进现有 JSON，不新增列。用户删除前捕获目标名；分享创建与撤销均捕获导图标题、UID、权限和到期时间，不保存密码、密钥或分享 token。
+
+读取返回派生的 `actor` 和 `targetName`，优先采用事件快照。旧记录只读补充仍存在的账号或对象，查不到就保留空值；按页缓存查询，分享/导图查找始终携带原操作者 owner_id。读路径不改历史行，改名或删除不能覆盖新记录的历史名称。DTO 不直接序列化 User 或 ShareLink，避免把认证字段带进响应。
+
+审计查询接受 RFC3339 或 UTC 纯日期，纯结束日期包含当日全天；非法及逆序区间返回 422。前端本地日界线须先转成 RFC3339，结束上界保留纳秒精度，不能把本地日期直接当 UTC。
+
 ### SQL 里用 `COALESCE(narg, col)` 而不是 `narg IS NULL OR col = narg`
 
 第一版写的是后者（更符合直觉，也更能用上索引），但 sqlc 会把参数类型推断成 `interface{}`——`IS NULL` 测试没有提供任何类型信息，两个方言都生成 `interface{}` 字段，等于把类型检查推迟到运行时。
@@ -92,6 +100,7 @@ g := v1.Group("/admin",
 
 ## Verification
 
+- `go test ./internal/service ./internal/handler ./internal/httpapi -run 'TestAudit|TestAdmin|TestShare|TestAI' -count=1`：关联回归通过；新增七条上下文/日期回归覆盖快照改名删除、旧记录只读回退、owner 隔离与页缓存、权限、凭据白名单、整日边界和分页。`TestOpenAPI` 与服务构建通过。
 - `go test ./internal/auth/...`：生成的随机密码长度正确、能过自身策略、字符集内无易混淆字符、64 次生成无重复。
 - `go test ./internal/repository/...`：契约测试新增审计筛选断言——按 action 计数、按未知 action 计数为 0、按 actor 计数、时间窗内 2 条、上界在过去时为 0（这条会在时间格式不一致时失败）。
 - `go test ./internal/httpapi/...`：管理路由未登录 401 / 普通用户 403（5 个入口各验一遍）；列表带分页信封；创建用户 201 与弱密码 422、重复邮箱 409、非法角色 422；禁用后 `/auth/me` 立刻 403 且无法登录、重新启用后恢复；唯一管理员不可降级/禁用/删除；重置密码随机生成 16 位以上、新密码可登录旧密码不可、重置自己 409、指定弱密码 422、审计含 `generated` 但不含密码明文；审计按 action 筛选、未知 `actor_uid` 返回空列表；统计字段齐全；删除用户 204 后无法登录、重复删除 404、审计留痕。

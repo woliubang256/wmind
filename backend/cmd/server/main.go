@@ -234,6 +234,7 @@ func run() error {
 	adminSvc, err := service.NewAdminService(service.AdminServiceConfig{
 		Stats: statsRepo, Uploads: avatarStore,
 		Users: userRepo, Tokens: tokenRepo, Audit: auditRepo,
+		Maps: mapRepo, Shares: shareRepo,
 		Site: settingsSvc, TwoFactor: factorRepo, Tx: txManager, Logger: log,
 	})
 	if err != nil {

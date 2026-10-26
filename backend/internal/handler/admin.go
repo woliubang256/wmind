@@ -202,14 +202,16 @@ func (h *AdminHandler) Stats(c *gin.Context) {
 }
 
 type auditLogDTO struct {
-	ID         int64  `json:"id"`
-	ActorID    *int64 `json:"actorId"`
-	Action     string `json:"action"`
-	TargetType string `json:"targetType"`
-	TargetID   string `json:"targetId"`
-	Detail     any    `json:"detail"`
-	IP         string `json:"ip"`
-	CreatedAt  string `json:"createdAt"`
+	ID         int64              `json:"id"`
+	ActorID    *int64             `json:"actorId"`
+	Actor      *domain.AuditActor `json:"actor"`
+	TargetName string             `json:"targetName"`
+	Action     string             `json:"action"`
+	TargetType string             `json:"targetType"`
+	TargetID   string             `json:"targetId"`
+	Detail     any                `json:"detail"`
+	IP         string             `json:"ip"`
+	CreatedAt  string             `json:"createdAt"`
 }
 
 // ListAuditLogs 处理 GET /api/v1/admin/audit-logs。
@@ -220,11 +222,26 @@ func (h *AdminHandler) ListAuditLogs(c *gin.Context) {
 		ActorUID: strings.TrimSpace(c.Query("actor_uid")),
 		Page:     domain.NewPage(page, pageSize),
 	}
+	fields := make(map[string]string)
 	if from, ok := parseQueryTime(c.Query("from")); ok {
 		query.From = &from
+	} else if strings.TrimSpace(c.Query("from")) != "" {
+		fields["from"] = "开始时间格式无效"
 	}
 	if to, ok := parseQueryTime(c.Query("to")); ok {
+		if len(strings.TrimSpace(c.Query("to"))) == 10 {
+			to = to.AddDate(0, 0, 1).Add(-time.Nanosecond)
+		}
 		query.To = &to
+	} else if strings.TrimSpace(c.Query("to")) != "" {
+		fields["to"] = "结束时间格式无效"
+	}
+	if query.From != nil && query.To != nil && query.From.After(*query.To) {
+		fields["to"] = "结束时间不能早于开始时间"
+	}
+	if len(fields) > 0 {
+		response.Fail(c, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(fields))
+		return
 	}
 
 	logs, total, err := h.admin.ListAuditLogs(c.Request.Context(), query)
@@ -236,6 +253,7 @@ func (h *AdminHandler) ListAuditLogs(c *gin.Context) {
 	for _, entry := range logs {
 		items = append(items, auditLogDTO{
 			ID: entry.ID, ActorID: entry.ActorID, Action: entry.Action,
+			Actor: entry.Actor, TargetName: entry.TargetName,
 			TargetType: entry.TargetType, TargetID: entry.TargetID,
 			// detail 是 JSON 文本；原样透传会让前端拿到一个字符串再自己 parse。
 			// 这里解开成对象，解不开就退回字符串（历史数据可能不是合法 JSON）。

@@ -321,7 +321,20 @@ func (s *ShareService) ownerPassword(link *domain.ShareLink) *domain.ShareLink {
 //
 // 不删行：撤销之后「这条链接被看过多少次」才是最想知道的信息（docs/04 §5.7）。
 func (s *ShareService) Revoke(ctx context.Context, shareUID string, ownerID int64) error {
-	return mapShareError(s.shares.Revoke(ctx, shareUID, ownerID, s.now()))
+	_, err := s.RevokeWithContext(ctx, shareUID, ownerID)
+	return err
+}
+
+// RevokeWithContext returns the owner-scoped event context before revocation.
+func (s *ShareService) RevokeWithContext(ctx context.Context, shareUID string, ownerID int64) (*domain.ShareLink, error) {
+	link, err := s.shares.GetByUID(ctx, shareUID, ownerID)
+	if err != nil {
+		return nil, mapShareError(err)
+	}
+	if err := s.shares.Revoke(ctx, shareUID, ownerID, s.now()); err != nil {
+		return nil, mapShareError(err)
+	}
+	return link, nil
 }
 
 // ReadPublic 解析一次公开访问，返回可直接渲染的数据。
