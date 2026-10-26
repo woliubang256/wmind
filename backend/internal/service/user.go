@@ -169,13 +169,12 @@ func (s *UserService) UpdateAvatar(ctx context.Context, uid string, data []byte)
 		return nil, apperr.Wrap(apperr.CodeFileTypeNotAllowed, err)
 	}
 
-	user, err := s.users.GetByUID(ctx, uid)
-	if err != nil {
+	if _, err := s.users.GetByUID(ctx, uid); err != nil {
 		return nil, mapUserError(err)
 	}
 
 	// 文件名带 ULID：同一用户连续上传不会互相覆盖（时间戳在同一毫秒内会撞），
-	// 旧文件随后删除。
+	// 旧文件可能仍被站点 Logo 或导图引用，交给引用感知回收器处理。
 	key := fmt.Sprintf("avatar_%s_%s.png", uid, id.New())
 	url, err := s.avatars.Save(ctx, key, encoded)
 	if err != nil {
@@ -191,27 +190,7 @@ func (s *UserService) UpdateAvatar(ctx context.Context, uid string, data []byte)
 		return nil, mapUserError(err)
 	}
 
-	s.deletePreviousAvatar(ctx, user.AvatarURL)
 	return updated, nil
-}
-
-// deletePreviousAvatar 删除上一张由本服务托管的头像。
-//
-// 只删自己前缀下的文件：AvatarURL 也可能指向外部地址（二期对象存储），
-// 那种值不该被当成键去删。
-func (s *UserService) deletePreviousAvatar(ctx context.Context, previousURL string) {
-	if previousURL == "" || s.avatars == nil {
-		return
-	}
-	prefix := s.avatars.URL("")
-	if !strings.HasPrefix(previousURL, prefix) {
-		return
-	}
-	key := strings.TrimPrefix(previousURL, prefix)
-	if key == "" {
-		return
-	}
-	_ = s.avatars.Delete(ctx, key)
 }
 
 func mapUserError(err error) error {

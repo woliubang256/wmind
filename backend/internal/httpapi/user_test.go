@@ -224,7 +224,7 @@ func TestUploadAvatarOverHTTP(t *testing.T) {
 		t.Fatalf("头像尺寸 = %dx%d; 期望 256x256", cfg.Width, cfg.Height)
 	}
 
-	// 3. 再传一张：新地址必须不同，旧文件被删掉（目录里只剩一个文件）。
+	// 3. 再传一张：新地址必须不同，旧文件由引用感知回收器延迟处理。
 	status, body = s.upload("/api/v1/users/me/avatar", token, "me2.png", testPNG(t, 300, 300))
 	if status != http.StatusOK {
 		t.Fatalf("二次上传 = %d %#v", status, body.Error)
@@ -235,12 +235,12 @@ func TestUploadAvatarOverHTTP(t *testing.T) {
 	}
 	if entries, err := os.ReadDir(s.uploads); err != nil {
 		t.Fatalf("读取上传目录: %v", err)
-	} else if len(entries) != 1 {
+	} else if len(entries) != 2 {
 		names := make([]string, 0, len(entries))
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		t.Fatalf("上传目录应只剩新头像，实际 %v", names)
+		t.Fatalf("上传目录应暂时保留新旧头像，实际 %v", names)
 	}
 
 	// 4. 不是图片 → 415 FILE_TYPE_NOT_ALLOWED（靠解码判定，不看扩展名）。
@@ -262,6 +262,27 @@ func TestUploadAvatarOverHTTP(t *testing.T) {
 	// 6. 未登录 → 401。
 	if status, body := s.upload("/api/v1/users/me/avatar", "", "me.png", testPNG(t, 10, 10)); status != http.StatusUnauthorized {
 		t.Fatalf("未登录上传 = %d %#v", status, body.Error)
+	}
+}
+
+func TestAvatarReferencedByMapSurvivesReplacement(t *testing.T) {
+	s := newAuthTestServer(t)
+	token := s.registerUser("avatar-reference")
+	status, uploaded := s.upload("/api/v1/users/me/avatar", token, "first.png", testPNG(t, 12, 12))
+	if status != http.StatusOK {
+		t.Fatal(status)
+	}
+	first := uploaded.Data["avatarUrl"].(string)
+	status, body := s.do(http.MethodPost, "/api/v1/maps", token, map[string]any{"title": "avatar as picture", "document": docWithImage(first)})
+	if status != http.StatusCreated {
+		t.Fatalf("create image reference = %d %#v", status, body.Error)
+	}
+	status, _ = s.upload("/api/v1/users/me/avatar", token, "second.png", testPNG(t, 16, 16))
+	if status != http.StatusOK {
+		t.Fatal(status)
+	}
+	if status, _, _ := s.mediaRequest(http.MethodGet, first, "", ""); status != http.StatusPartialContent {
+		t.Fatalf("replacing avatar removed a map's picture: %d", status)
 	}
 }
 

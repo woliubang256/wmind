@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -128,7 +129,7 @@ func TestUpdateAvatar(t *testing.T) {
 		t.Fatalf("文件未落盘: %v", store.files)
 	}
 
-	// 再传一次：新文件写入，旧文件被删。
+	// 再传一次：新文件写入，旧文件交给引用感知回收，可能仍是站点 Logo 或导图图片。
 	second, err := svc.UpdateAvatar(ctx, user.UID, testPNG(t, 100, 100))
 	if err != nil {
 		t.Fatalf("再次上传头像: %v", err)
@@ -136,8 +137,8 @@ func TestUpdateAvatar(t *testing.T) {
 	if second.AvatarURL == first.AvatarURL {
 		t.Fatal("新头像应使用不同的文件名")
 	}
-	if len(store.deleted) != 1 || store.deleted[0] != key {
-		t.Fatalf("旧头像未删除: %v", store.deleted)
+	if len(store.deleted) != 0 || store.files[key] == nil {
+		t.Fatalf("头像替换不能直接删除仍可能被引用的旧文件: %v", store.deleted)
 	}
 }
 
@@ -155,4 +156,30 @@ func TestUpdateAvatarRejectsBadInput(t *testing.T) {
 
 	_, err = svc.UpdateAvatar(ctx, user.UID, []byte("this is not an image"))
 	requireCode(t, err, apperr.CodeFileTypeNotAllowed)
+}
+
+type rejectedAvatarWrite struct{ domain.UserRepo }
+
+func (r rejectedAvatarWrite) UpdateProfile(context.Context, domain.UpdateProfileInput) (*domain.User, error) {
+	return nil, errors.New("profile write unavailable")
+}
+
+func TestRejectedAvatarWriteRemovesOnlyNewUpload(t *testing.T) {
+	svc, users, store := newUserFixture(t)
+	user := mustSeedUser(t, users, "alice", "alice@example.com")
+	first, err := svc.UpdateAvatar(t.Context(), user.UID, testPNG(t, 8, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing, err := NewUserService(rejectedAvatarWrite{UserRepo: users}, UserServiceConfig{Avatars: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := failing.UpdateAvatar(t.Context(), user.UID, testPNG(t, 16, 16)); err == nil {
+		t.Fatal("expected database failure")
+	}
+	key := first.AvatarURL[len("/uploads/"):]
+	if len(store.files) != 1 || store.files[key] == nil || len(store.deleted) != 1 || store.deleted[0] == key {
+		t.Fatalf("failed update must retain current avatar and remove the new upload: files=%d deleted=%v", len(store.files), store.deleted)
+	}
 }
