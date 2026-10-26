@@ -111,14 +111,21 @@ export function MindMapViewer({
   // 受控 / 非受控两用：工具栏要「缩放到适应」就必须能读能写视口，
   // 所以页面可以接管；分享页不需要工具栏，就不传，内部自己管。
   const viewport = controlledViewport ?? innerViewport;
+  // Consecutive pointer events can arrive before React renders their parent update.
+  // Accumulate against the last applied viewport, while accepting explicit host changes.
+  const viewportState = useRef({ rendered: viewport, current: viewport, sheetId: sheet.id });
+  if (viewportState.current.rendered !== viewport || viewportState.current.sheetId !== sheet.id) {
+    viewportState.current = { rendered: viewport, current: viewport, sheetId: sheet.id };
+  }
 
   const setViewport = useCallback<ViewerContextValue['setViewport']>(
     (next) => {
-      const value = typeof next === 'function' ? next(viewport) : next;
+      const value = typeof next === 'function' ? next(viewportState.current.current) : next;
+      viewportState.current.current = value;
       if (!controlledViewport) setInnerViewport(value);
       onViewportChange?.(value);
     },
-    [controlledViewport, viewport, onViewportChange],
+    [controlledViewport, onViewportChange],
   );
 
   const layout = useMemo(

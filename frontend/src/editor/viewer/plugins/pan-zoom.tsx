@@ -9,17 +9,18 @@
  * - 滚轮 / 触控板双指平移
  * - `Shift + 滚轮` 横向平移
  * - `Space + 拖拽` 或中键拖拽平移
+ * - 触摸空白单指平移，双指以中点缩放和平移
  *
  * 为什么缩放要以光标为锚点：如果按视口中心缩放，用户想放大的位置会飘走，
  * 得再平移一次才能找回焦点，连续缩放时体验极差。
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useViewer } from '../viewer-context';
 import { useLatest } from './use-latest';
+import { canvasGestures, forgetCanvasGestures, MAX_ZOOM, MIN_ZOOM, shouldSuppressCanvasClick, type GestureChange } from './canvas-gestures';
 
-export const MIN_ZOOM = 0.2;
-export const MAX_ZOOM = 4;
+export { MIN_ZOOM, MAX_ZOOM } from './canvas-gestures';
 
 function clampZoom(value: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
@@ -32,13 +33,21 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function PanZoomPlugin() {
-  const { svgRef } = useViewer();
+  const { svgRef, sheet, readOnly } = useViewer();
   const latest = useLatest(useViewer());
   const spaceDown = useRef(false);
+
+  // The SVG is reused across sheets and preview mode; old pointers must not edit the next view.
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    if (svg) canvasGestures(svg).cancelNavigation?.();
+  }, [svgRef, sheet.id, readOnly]);
 
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return undefined;
+    const runtime = canvasGestures(svg);
+    let changingCapture = false;
 
     const localPoint = (clientX: number, clientY: number) => {
       const rect = svg.getBoundingClientRect();
@@ -79,80 +88,110 @@ export function PanZoomPlugin() {
       latest.current.setViewport((prev) => ({ ...prev, x: prev.x - dx, y: prev.y - dy }));
     };
 
-    let panning = false;
-    let lastX = 0;
-    let lastY = 0;
-    let pointerId = -1;
-
+    const cursor = () => { svg.style.cursor = runtime.tracker.active ? 'grabbing' : spaceDown.current ? 'grab' : ''; };
+    const apply = (change: GestureChange, event?: PointerEvent) => {
+      changingCapture = true;
+      try {
+        if (change.cancelEditing) for (const cancel of [...runtime.cancelListeners]) cancel();
+        for (const id of change.capture ?? []) {
+          // A pointer can have been cancelled by the browser between queued events.
+          try { svg.setPointerCapture(id); } catch { /* no live pointer to capture */ }
+        }
+        for (const id of change.release ?? []) {
+          if (svg.hasPointerCapture(id)) svg.releasePointerCapture(id);
+        }
+      } finally { changingCapture = false; }
+      if (change.transform) latest.current.setViewport(change.transform);
+      cursor();
+      if (change.claimed && event) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    };
+    const cancelGesture = () => apply(runtime.tracker.cancel());
+    runtime.cancelNavigation = cancelGesture;
     const onPointerDown = (event: PointerEvent) => {
-      const middle = event.button === 1;
-      const withSpace = event.button === 0 && spaceDown.current;
-      if (!middle && !withSpace) return;
-
-      event.preventDefault();
-      panning = true;
-      pointerId = event.pointerId;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      svg.setPointerCapture(event.pointerId);
-      svg.style.cursor = 'grabbing';
+      if (event.button !== 0 && event.button !== 1) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const blank = !target?.closest('[data-topic-id], [data-summary-id], [data-relationship-id], [data-routing-relationship-id], [data-boundary-id], [data-collapse-toggle], [data-topic-content-kind]');
+      const readOnlySurface = latest.current.readOnly && !target?.closest('[data-collapse-toggle], [data-topic-content-kind]');
+      apply(runtime.tracker.down({
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        point: localPoint(event.clientX, event.clientY),
+        canPan: blank || readOnlySurface,
+        forcePan: event.button === 1 || (event.button === 0 && spaceDown.current),
+      }), event);
     };
-
     const onPointerMove = (event: PointerEvent) => {
-      if (!panning || event.pointerId !== pointerId) return;
-      const dx = event.clientX - lastX;
-      const dy = event.clientY - lastY;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      latest.current.setViewport((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      if (runtime.tracker.hasPointer(event.pointerId)) apply(runtime.tracker.move(event.pointerId, localPoint(event.clientX, event.clientY)), event);
     };
-
-    const endPan = (event: PointerEvent) => {
-      if (!panning || event.pointerId !== pointerId) return;
-      panning = false;
-      pointerId = -1;
-      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
-      svg.style.cursor = spaceDown.current ? 'grab' : '';
+    const onPointerUp = (event: PointerEvent) => {
+      if (runtime.tracker.hasPointer(event.pointerId)) apply(runtime.tracker.up(event.pointerId), event);
+    };
+    const onPointerCancel = (event: PointerEvent) => {
+      if (runtime.tracker.hasPointer(event.pointerId)) apply(runtime.tracker.cancel(), event);
+    };
+    const onLostCapture = (event: PointerEvent) => {
+      if (!changingCapture && runtime.tracker.hasPointer(event.pointerId) && !svg.hasPointerCapture(event.pointerId)) cancelGesture();
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!shouldSuppressCanvasClick(event)) return;
+      event.preventDefault(); event.stopImmediatePropagation();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && runtime.tracker.active) {
+        event.preventDefault(); cancelGesture(); return;
+      }
       if (event.code !== 'Space' || isTypingTarget(event.target)) return;
       // 空格默认会滚动页面，必须拦掉。
       event.preventDefault();
       if (!spaceDown.current) {
         spaceDown.current = true;
-        svg.style.cursor = 'grab';
+        cursor();
       }
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code !== 'Space') return;
       spaceDown.current = false;
-      svg.style.cursor = '';
+      cursor();
     };
 
     // 失焦时清掉空格状态：切换窗口时 keyup 收不到，否则会一直处于「抓手」态。
     const onBlur = () => {
       spaceDown.current = false;
-      svg.style.cursor = '';
+      cancelGesture();
     };
 
     // wheel 必须显式 passive: false 才能 preventDefault。
     svg.addEventListener('wheel', onWheel, { passive: false });
-    svg.addEventListener('pointerdown', onPointerDown);
-    svg.addEventListener('pointermove', onPointerMove);
-    svg.addEventListener('pointerup', endPan);
-    svg.addEventListener('pointercancel', endPan);
+    // Navigation takes ownership before topic/relationship editing listeners.
+    svg.addEventListener('pointerdown', onPointerDown, true);
+    // Relationships finish on window capture and stop propagation; bookkeeping runs first.
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('pointercancel', onPointerCancel, true);
+    svg.addEventListener('lostpointercapture', onLostCapture);
+    svg.addEventListener('click', onClick, true);
+    svg.addEventListener('dblclick', onClick, true);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
 
     return () => {
       svg.removeEventListener('wheel', onWheel);
-      svg.removeEventListener('pointerdown', onPointerDown);
-      svg.removeEventListener('pointermove', onPointerMove);
-      svg.removeEventListener('pointerup', endPan);
-      svg.removeEventListener('pointercancel', endPan);
+      cancelGesture();
+      runtime.cancelNavigation = undefined;
+      forgetCanvasGestures(svg);
+      svg.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointermove', onPointerMove, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+      window.removeEventListener('pointercancel', onPointerCancel, true);
+      svg.removeEventListener('lostpointercapture', onLostCapture);
+      svg.removeEventListener('click', onClick, true);
+      svg.removeEventListener('dblclick', onClick, true);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);

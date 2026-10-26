@@ -46,6 +46,7 @@ import { layoutAnnotations, unionRect } from '@/editor/layout/annotations';
 import type { LayoutResult } from '@/editor/layout/types';
 import { zoomedViewport } from '@/editor/viewer/plugins/pan-zoom';
 import { EDITOR_PLUGINS, READ_ONLY_PLUGINS } from '@/editor/viewer/plugins';
+import { shouldSuppressCanvasClick } from '@/editor/viewer/plugins/canvas-gestures';
 import { MindMapViewer } from '@/editor/viewer/mind-map-viewer';
 import { topicElementId } from '@/editor/viewer/a11y-ids';
 import type { Topic } from '@/editor/model/types';
@@ -799,6 +800,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
     } else if (safeTopicHref(topic.href)) window.open(topic.href, '_blank', 'noopener,noreferrer');
   };
   const contentClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (shouldSuppressCanvasClick(event)) { event.preventDefault(); event.stopPropagation(); return; }
     const target = (event.target as Element).closest('[data-topic-content-kind]');
     const topicId = target?.closest('[data-topic-id]')?.getAttribute('data-topic-id');
     if (!target || !topicId) return;

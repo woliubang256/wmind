@@ -41,6 +41,7 @@ const SUITE = [
   ['editor-appearance', '控件字号 / 全画布形状 / 分支连线'],
   ['zoom-presets', '底部快捷缩放 / 中心锚点 / 键盘'],
   ['canvas', '多画布 / 大纲 / ZEN'],
+  ['mobile-canvas', '移动工具栏横滑 / 单指平移与双指缩放 / PC操作兼容'],
   ['canvas-navigation', '单行底栏 / 画布菜单 / 滚动条 / 中心定位'],
   ['canvas-view-reload', '作者视角 / 冲突重载 / 草稿恢复 / 浏览零写入'],
   ['a11y', '画布无障碍'],

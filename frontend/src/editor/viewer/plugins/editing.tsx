@@ -10,6 +10,7 @@
 import { useEffect } from 'react';
 import { useViewer } from '../viewer-context';
 import { useLatest } from './use-latest';
+import { shouldSuppressCanvasClick } from './canvas-gestures';
 
 export function EditingPlugin() {
   const { svgRef, readOnly } = useViewer();
@@ -21,6 +22,7 @@ export function EditingPlugin() {
     if (!svg) return undefined;
 
     const onDoubleClick = (event: MouseEvent) => {
+      if (shouldSuppressCanvasClick(event)) return;
       const target = event.target as Element | null;
       const node = target?.closest('[data-topic-id], [data-summary-id]');
       if (!node) return;

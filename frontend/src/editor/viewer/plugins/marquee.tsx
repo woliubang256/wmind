@@ -15,6 +15,7 @@ import type { Point, Rect } from '../../layout/types';
 import { useViewer } from '../viewer-context';
 import { useLatest } from './use-latest';
 import { boxesInRect } from '../../interaction/drop-target';
+import { PointerSession, subscribeCanvasGestureCancel } from './canvas-gestures';
 
 /** 小于这个位移就当成点击（SelectionPlugin 已经把选区清空了）。 */
 const MIN_SIZE = 4;
@@ -23,7 +24,7 @@ const ACCENT = 'var(--wmind-selection, #1E88E5)';
 export function MarqueePlugin() {
   const { svgRef } = useViewer();
   const latest = useLatest(useViewer());
-  const start = useRef<Point | null>(null);
+  const start = useRef(new PointerSession<Point>());
   const [rect, setRect] = useState<Rect | null>(null);
 
   useEffect(() => {
@@ -31,20 +32,21 @@ export function MarqueePlugin() {
     if (!svg) return undefined;
 
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || event.pointerType === 'touch') return;
       const target = event.target as Element | null;
       // 按在节点或折叠按钮上，交给选中 / 拖拽插件。
       if (!target || target.closest('[data-topic-id], [data-summary-id], [data-relationship-id], [data-boundary-id]') || target.closest('[data-collapse-toggle]')) {
         return;
       }
-      // 空格拖拽是平移，不画选框。
+      // Preserve the existing modifier behavior; Space is intercepted by PanZoom.
       if (event.shiftKey) return;
-      start.current = latest.current.toWorld(event.clientX, event.clientY);
+      if (!start.current.begin(event.pointerId, latest.current.toWorld(event.clientX, event.clientY))) return;
+      svg.setPointerCapture(event.pointerId);
       setRect(null);
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      const origin = start.current;
+      const origin = start.current.get(event.pointerId);
       if (!origin) return;
       const point = latest.current.toWorld(event.clientX, event.clientY);
       const next = {
@@ -58,10 +60,10 @@ export function MarqueePlugin() {
     };
 
     const finish = (event: PointerEvent) => {
-      const origin = start.current;
-      start.current = null;
-      setRect(null);
+      const origin = start.current.finish(event.pointerId);
       if (!origin) return;
+      setRect(null);
+      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
       const { layout, annotations, toWorld, setSelection } = latest.current;
       const point = toWorld(event.clientX, event.clientY);
       const width = point.x - origin.x;
@@ -70,16 +72,38 @@ export function MarqueePlugin() {
       if (Math.abs(width) < MIN_SIZE && Math.abs(height) < MIN_SIZE) return;
       setSelection(boxesInRect(new Map([...layout.boxes, ...annotations.summaries.map((item) => [item.id, { id: item.id, ...item.rect }] as const)]), { x: origin.x, y: origin.y, width, height }));
     };
+    const cancel = () => {
+      const pointerId = start.current.id;
+      start.current.cancel();
+      setRect(null);
+      if (pointerId !== null && svg.hasPointerCapture(pointerId)) svg.releasePointerCapture(pointerId);
+    };
+    const onCancel = (event: PointerEvent) => {
+      if (start.current.get(event.pointerId)) cancel();
+    };
+    const onLostCapture = (event: PointerEvent) => {
+      if (!svg.hasPointerCapture(event.pointerId)) onCancel(event);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') cancel(); };
+    const unsubscribe = subscribeCanvasGestureCancel(svg, cancel);
 
     svg.addEventListener('pointerdown', onPointerDown);
     svg.addEventListener('pointermove', onPointerMove);
     svg.addEventListener('pointerup', finish);
-    svg.addEventListener('pointercancel', finish);
+    svg.addEventListener('pointercancel', onCancel);
+    svg.addEventListener('lostpointercapture', onLostCapture);
+    window.addEventListener('blur', cancel);
+    window.addEventListener('keydown', onKeyDown);
     return () => {
       svg.removeEventListener('pointerdown', onPointerDown);
       svg.removeEventListener('pointermove', onPointerMove);
       svg.removeEventListener('pointerup', finish);
-      svg.removeEventListener('pointercancel', finish);
+      unsubscribe();
+      cancel();
+      svg.removeEventListener('pointercancel', onCancel);
+      svg.removeEventListener('lostpointercapture', onLostCapture);
+      window.removeEventListener('blur', cancel);
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, [svgRef, latest]);
 

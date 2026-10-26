@@ -18,6 +18,7 @@ import type { Point, Rect } from '../../layout/types';
 import { useViewer } from '../viewer-context';
 import { useLatest } from './use-latest';
 import { resolveDrop, type DropCandidate, type DropRejection } from '../../interaction/drop-target';
+import { PointerSession, subscribeCanvasGestureCancel } from './canvas-gestures';
 
 const DRAG_THRESHOLD = 4;
 const ACCENT = 'var(--wmind-selection, #1E88E5)';
@@ -62,7 +63,7 @@ export function DragPlugin() {
   const { svgRef, layout } = useViewer();
   const latest = useLatest(useViewer());
 
-  const session = useRef<DragSession | null>(null);
+  const session = useRef(new PointerSession<DragSession>());
   const frame = useRef(0);
   const latestPoint = useRef<Point | null>(null);
   const [view, setView] = useState<DragView | null>(null);
@@ -93,7 +94,7 @@ export function DragPlugin() {
     const flush = () => {
       frame.current = 0;
       const pointer = latestPoint.current;
-      const current = session.current;
+      const current = session.current.current();
       if (!pointer || !current) return;
       const { layout: currentLayout, sheet, viewport } = latest.current;
       setView({
@@ -127,18 +128,18 @@ export function DragPlugin() {
       // 拖动已选中的节点时带上整个选区：多选拖拽是基本操作，
       // 否则用户得一个一个拖。
       const ids = selection.has(id) ? [...selection] : [id];
-      session.current = {
+      session.current.begin(event.pointerId, {
         ids,
         anchorId: id,
         additive: event.shiftKey || event.metaKey || event.ctrlKey,
         startClient: { x: event.clientX, y: event.clientY },
         startWorld: toWorld(event.clientX, event.clientY),
         active: false,
-      };
+      });
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      const current = session.current;
+      const current = session.current.get(event.pointerId);
       if (!current) return;
       // 概要没有树移动语义。混合选区整批不拖动，不能悄悄只移动其中的主题。
       if (current.ids.some((id) => !latest.current.layout.boxes.has(id))) return;
@@ -157,16 +158,14 @@ export function DragPlugin() {
     };
 
     const onPointerUp = (event: PointerEvent) => {
-      const current = session.current;
-      session.current = null;
+      const current = session.current.finish(event.pointerId);
+      if (!current) return;
       latestPoint.current = null;
       if (frame.current) {
         cancelAnimationFrame(frame.current);
         frame.current = 0;
       }
       setView(null);
-      if (!current) return;
-
       if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
 
       const { layout: currentLayout, sheet, viewport, toWorld, setSelection, moveTopics, detachTopics } =
@@ -194,23 +193,45 @@ export function DragPlugin() {
       }
     };
 
-    // Esc 中断拖拽：拖到一半发现拖错了，用户的第一反应是取消。
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !session.current) return;
-      session.current = null;
+    const cancel = () => {
+      const pointerId = session.current.id;
+      session.current.cancel();
+      latestPoint.current = null;
+      if (frame.current) cancelAnimationFrame(frame.current);
+      frame.current = 0;
       setView(null);
+      if (pointerId !== null && svg.hasPointerCapture(pointerId)) svg.releasePointerCapture(pointerId);
+    };
+    const onCancel = (event: PointerEvent) => {
+      if (session.current.get(event.pointerId)) cancel();
+    };
+    const onLostCapture = (event: PointerEvent) => {
+      if (!svg.hasPointerCapture(event.pointerId)) onCancel(event);
+    };
+    const unsubscribe = subscribeCanvasGestureCancel(svg, cancel);
+
+    // Esc and browser cancellation discard a preview, never commit a drop.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cancel();
     };
 
     svg.addEventListener('pointerdown', onPointerDown);
-    svg.addEventListener('pointermove', onPointerMove);
-    svg.addEventListener('pointerup', onPointerUp);
-    svg.addEventListener('pointercancel', onPointerUp);
+    // Track even a first move that jumps outside SVG before the capture threshold.
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onCancel);
+    svg.addEventListener('lostpointercapture', onLostCapture);
+    window.addEventListener('blur', cancel);
     window.addEventListener('keydown', onKeyDown);
     return () => {
       svg.removeEventListener('pointerdown', onPointerDown);
-      svg.removeEventListener('pointermove', onPointerMove);
-      svg.removeEventListener('pointerup', onPointerUp);
-      svg.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      unsubscribe();
+      cancel();
+      window.removeEventListener('pointercancel', onCancel);
+      svg.removeEventListener('lostpointercapture', onLostCapture);
+      window.removeEventListener('blur', cancel);
       window.removeEventListener('keydown', onKeyDown);
       if (frame.current) cancelAnimationFrame(frame.current);
       frame.current = 0;

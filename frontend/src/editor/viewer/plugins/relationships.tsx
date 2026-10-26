@@ -5,6 +5,7 @@ import type { Point } from '../../layout/types';
 import type { RelationshipRouting } from '../../model/types';
 import { useViewer } from '../viewer-context';
 import { useLatest } from './use-latest';
+import { shouldSuppressCanvasClick, subscribeCanvasGestureCancel } from './canvas-gestures';
 
 /** 联系命中与控制柄独立于主题选区；拖动预览不写入文档历史。 */
 export function RelationshipsPlugin() {
@@ -41,7 +42,7 @@ export function RelationshipsPlugin() {
     };
     const onPointerDown = (event: PointerEvent) => {
       const id = idOf(event);
-      if (!id || event.button !== 0) return;
+      if (!id || event.button !== 0 || drag) return;
       event.preventDefault(); event.stopPropagation();
       const control = controlOf(event);
       const item = latest.current.annotations.relationships.find((entry) => entry.id === id);
@@ -68,11 +69,17 @@ export function RelationshipsPlugin() {
       else latest.current.previewRelationshipRouting(old.id, null);
     };
     const onDoubleClick = (event: MouseEvent) => {
+      if (shouldSuppressCanvasClick(event)) return;
       const id = idOf(event);
       if (!id) return;
       event.preventDefault(); event.stopPropagation();
       if (!controlOf(event)) latest.current.beginRelationshipEdit(id);
     };
+    const onCancel = (event: PointerEvent) => { if (drag?.pointerId === event.pointerId) cancel(); };
+    const onLostCapture = (event: PointerEvent) => {
+      if (!svg.hasPointerCapture(event.pointerId)) onCancel(event);
+    };
+    const unsubscribe = subscribeCanvasGestureCancel(svg, cancel);
     const onKeyDown = (event: KeyboardEvent) => {
       if (drag && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); return; }
       const id = idOf(event);
@@ -98,16 +105,19 @@ export function RelationshipsPlugin() {
     svg.addEventListener('dblclick', onDoubleClick, true);
     window.addEventListener('pointermove', onMove, true);
     window.addEventListener('pointerup', onUp, true);
-    window.addEventListener('pointercancel', cancel, true);
+    window.addEventListener('pointercancel', onCancel, true);
+    svg.addEventListener('lostpointercapture', onLostCapture);
     window.addEventListener('blur', cancel);
     window.addEventListener('keydown', onKeyDown, true);
     return () => {
       cancel();
+      unsubscribe();
       svg.removeEventListener('pointerdown', onPointerDown, true);
       svg.removeEventListener('dblclick', onDoubleClick, true);
       window.removeEventListener('pointermove', onMove, true);
       window.removeEventListener('pointerup', onUp, true);
-      window.removeEventListener('pointercancel', cancel, true);
+      window.removeEventListener('pointercancel', onCancel, true);
+      svg.removeEventListener('lostpointercapture', onLostCapture);
       window.removeEventListener('blur', cancel);
       window.removeEventListener('keydown', onKeyDown, true);
     };

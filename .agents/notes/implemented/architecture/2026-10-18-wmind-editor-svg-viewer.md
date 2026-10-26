@@ -18,6 +18,8 @@ M2.3（SVG 渲染）与 M2.8（只读查看器抽象）必须同批交付——d
 
 ## Decision
 
+[触摸画布手势](../feature/2026-10-26-wmind-touch-canvas-gestures.md)扩展共享平移缩放插件。查看器保留即时视口引用，连续原生指针事件在 React 重渲染前也按最新值累计；切画布和预览模式显式取消手势，不依赖 SVG 卸载。编辑与只读的插件隔离继续生效。
+
 ### 只读不是「藏起来」，是「根本没挂载」
 
 `MindMapViewer` 只做一件事：`layout + sheet + theme → SVG`。所有交互（平移缩放、折叠、选中、双击编辑）都是**插件**，通过 `plugins: ViewerPlugin[]` 注入：

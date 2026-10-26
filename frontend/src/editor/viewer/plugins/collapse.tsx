@@ -12,6 +12,7 @@
 import { useEffect } from 'react';
 import { useViewer } from '../viewer-context';
 import { useLatest } from './use-latest';
+import { shouldSuppressCanvasClick } from './canvas-gestures';
 
 export function CollapsePlugin() {
   const { svgRef } = useViewer();
@@ -22,6 +23,7 @@ export function CollapsePlugin() {
     if (!svg) return undefined;
 
     const onClick = (event: MouseEvent) => {
+      if (shouldSuppressCanvasClick(event)) return;
       const target = event.target as Element | null;
       const toggle = target?.closest('[data-collapse-toggle]');
       if (!toggle) return;
