@@ -112,7 +112,10 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 		cfg.Remote = NewRemoteStorage()
 	}
 	if cfg.Gate == nil {
-		cfg.Gate = &Gate{}
+		cfg.Gate, err = NewSharedGate(cfg.UploadDir)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
@@ -304,7 +307,11 @@ func (m *Manager) backup(ctx context.Context, job *Job, configuration Configurat
 	m.stage(job, "capturing")
 	var manifest Manifest
 	func() {
-		resume := m.cfg.Gate.Pause()
+		resume, lockErr := m.cfg.Gate.PauseContext(ctx)
+		if lockErr != nil {
+			err = lockErr
+			return
+		}
 		defer resume()
 		manifest, err = m.capture(ctx, filepath.Join(dir, "snapshot"))
 	}()

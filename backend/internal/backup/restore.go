@@ -119,7 +119,10 @@ func (m *Manager) restore(ctx context.Context, job *Job, stage stagedRestore) er
 	if err = CaptureFiles(ctx, filepath.Join(stage.dir, "content", "uploads"), next); err != nil {
 		return err
 	}
-	resume := m.cfg.Gate.Pause()
+	resume, err := m.cfg.Gate.PauseContext(ctx)
+	if err != nil {
+		return err
+	}
 	defer resume()
 	m.stage(job, "safety_backup")
 	dir, err := os.MkdirTemp(m.cfg.WorkDir, "before-")
