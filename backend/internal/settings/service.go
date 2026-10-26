@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -23,21 +24,23 @@ const DefaultTTL = 60 * time.Second
 
 // Config 是 Service 的依赖。
 type Config struct {
-	Logger *slog.Logger
-	Tx     domain.TxManager
-	Now    func() time.Time
-	TTL    time.Duration
+	Logger       *slog.Logger
+	Tx           domain.TxManager
+	Now          func() time.Time
+	TTL          time.Duration
+	UploadExists func(context.Context, string) (bool, error)
 }
 
 // Service 持有设置快照，并负责写入后重载。
 //
 // 读路径无锁：current 是 atomic.Value，指向一份不可变 Snapshot。
 type Service struct {
-	repo   domain.SettingsRepo
-	tx     domain.TxManager
-	logger *slog.Logger
-	now    func() time.Time
-	ttl    time.Duration
+	repo         domain.SettingsRepo
+	tx           domain.TxManager
+	logger       *slog.Logger
+	now          func() time.Time
+	ttl          time.Duration
+	uploadExists func(context.Context, string) (bool, error)
 
 	// reloadMu 串行化重载，避免并发 PUT 时多个 goroutine 同时打库。
 	reloadMu sync.Mutex
@@ -59,7 +62,7 @@ func New(repo domain.SettingsRepo, cfg Config) (*Service, error) {
 		cfg.TTL = DefaultTTL
 	}
 	s := &Service{
-		repo: repo, tx: cfg.Tx, logger: cfg.Logger, now: cfg.Now, ttl: cfg.TTL,
+		repo: repo, tx: cfg.Tx, logger: cfg.Logger, now: cfg.Now, ttl: cfg.TTL, uploadExists: cfg.UploadExists,
 	}
 	// 先放一份默认值：Load 之前就被调用也不会 panic（例如启动早期有请求进来）。
 	defaults, err := defaultSnapshot(cfg.Now())
@@ -187,6 +190,20 @@ func (s *Service) Update(ctx context.Context, patch map[string]any, actorID *int
 		if err != nil {
 			fieldErrors[key] = err.Error()
 			continue
+		}
+		if key == "site.logo" && s.uploadExists != nil {
+			if source, ok := value.(string); ok && strings.HasPrefix(source, "/uploads/") {
+				parsed, err := url.Parse(source)
+				if err != nil {
+					fieldErrors[key] = "图片地址无效"
+					continue
+				}
+				exists, err := s.uploadExists(ctx, strings.TrimPrefix(parsed.Path, "/uploads/"))
+				if err != nil || !exists {
+					fieldErrors[key] = "图片已不存在，请重新上传"
+					continue
+				}
+			}
 		}
 		values[key] = value
 	}

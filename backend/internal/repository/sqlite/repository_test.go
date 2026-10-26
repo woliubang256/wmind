@@ -30,5 +30,8 @@ func TestRepositoryContract(t *testing.T) {
 		TwoFactor: NewTwoFactorRepository(db),
 	})
 	contracttest.RunLoginChallenges(t, NewLoginChallengeRepository(db), NewTxManager(db))
-	contracttest.RunUploadReferences(t, NewUploadReferencesRepository(db), NewUserRepository(db), NewMapRepository(db), NewTemplateRepository(db), NewSettingsRepository(db))
+	contracttest.RunUploadReferences(t, NewUploadReferencesRepository(db), NewUserRepository(db), NewMapRepository(db), NewTemplateRepository(db), NewSettingsRepository(db), func(mapID int64, document []byte) error {
+		_, err := db.ExecContext(t.Context(), "INSERT INTO map_revisions(map_id,version,document) VALUES(?,1,?)", mapID, string(document))
+		return err
+	})
 }

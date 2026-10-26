@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/woliubang256/wmind/backend/internal/domain"
@@ -37,6 +38,8 @@ type candidate struct {
 type Cleaner struct {
 	cfg        Config
 	candidates map[string]candidate
+	cursor     string
+	remove     func(*os.Root, string) error
 }
 
 var temporaryUpload = regexp.MustCompile(`^\.upload-[0-9]{1,10}$`)
@@ -183,11 +186,17 @@ func (c *Cleaner) Sweep(ctx context.Context) (int, error) {
 	}
 	deleted, attempts := 0, 0
 	var failures error
-	for _, entry := range entries {
+	keys := make([]string, 0, len(c.candidates))
+	for key := range c.candidates {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	start := sort.Search(len(keys), func(i int) bool { return keys[i] > c.cursor })
+	for i := 0; i < len(keys); i++ {
 		if err := ctx.Err(); err != nil {
 			return deleted, errors.Join(failures, err)
 		}
-		key := entry.Name()
+		key := keys[(start+i)%len(keys)]
 		p, ok := c.candidates[key]
 		if !ok || now.Sub(p.since) < GracePeriod || now.Sub(p.info.ModTime()) < GracePeriod {
 			continue
@@ -196,6 +205,7 @@ func (c *Cleaner) Sweep(ctx context.Context) (int, error) {
 			break
 		}
 		attempts++
+		c.cursor = key
 		current, err := root.Lstat(key)
 		if errors.Is(err, os.ErrNotExist) {
 			delete(c.candidates, key)
@@ -209,7 +219,11 @@ func (c *Cleaner) Sweep(ctx context.Context) (int, error) {
 			delete(c.candidates, key)
 			continue
 		}
-		if err := root.Remove(key); err != nil {
+		remove := c.remove
+		if remove == nil {
+			remove = func(root *os.Root, key string) error { return root.Remove(key) }
+		}
+		if err := remove(root, key); err != nil {
 			failures = errors.Join(failures, fmt.Errorf("remove unused upload: %w", err))
 			continue
 		}
@@ -224,8 +238,6 @@ func sameFile(a, b os.FileInfo) bool {
 }
 
 func (c *Cleaner) Run(ctx context.Context) {
-	ticker := time.NewTicker(c.cfg.Interval)
-	defer ticker.Stop()
 	for {
 		n, err := c.Sweep(ctx)
 		if err != nil && ctx.Err() == nil {
@@ -234,10 +246,16 @@ func (c *Cleaner) Run(ctx context.Context) {
 		if n > 0 {
 			c.cfg.Logger.Info("上传资源回收完成", "deleted", n)
 		}
+		delay := c.cfg.Interval
+		if n > 0 {
+			delay = time.Second
+		}
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-timer.C:
 		}
 	}
 }

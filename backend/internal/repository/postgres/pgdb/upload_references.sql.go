@@ -44,7 +44,7 @@ const listUploadMapReferences = `-- name: ListUploadMapReferences :many
 
 SELECT id, document, thumbnail_url FROM maps
 WHERE id > $1
-ORDER BY id LIMIT 100
+ORDER BY id LIMIT 8
 `
 
 type ListUploadMapReferencesRow struct {
@@ -75,10 +75,41 @@ func (q *Queries) ListUploadMapReferences(ctx context.Context, afterID int64) ([
 	return items, nil
 }
 
+const listUploadRevisionReferences = `-- name: ListUploadRevisionReferences :many
+SELECT id, document FROM map_revisions
+WHERE id > $1
+ORDER BY id LIMIT 8
+`
+
+type ListUploadRevisionReferencesRow struct {
+	ID       int64
+	Document []byte
+}
+
+func (q *Queries) ListUploadRevisionReferences(ctx context.Context, afterID int64) ([]ListUploadRevisionReferencesRow, error) {
+	rows, err := q.db.Query(ctx, listUploadRevisionReferences, afterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUploadRevisionReferencesRow{}
+	for rows.Next() {
+		var i ListUploadRevisionReferencesRow
+		if err := rows.Scan(&i.ID, &i.Document); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUploadTemplateReferences = `-- name: ListUploadTemplateReferences :many
 SELECT id, document, thumbnail_url FROM templates
 WHERE id > $1
-ORDER BY id LIMIT 100
+ORDER BY id LIMIT 8
 `
 
 type ListUploadTemplateReferencesRow struct {

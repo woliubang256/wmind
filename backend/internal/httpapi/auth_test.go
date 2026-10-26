@@ -70,8 +70,14 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 	userRepo := sqlite.NewUserRepository(db)
 	txManager := sqlite.NewTxManager(db)
 
+	uploads := filepath.Join(t.TempDir(), "uploads")
+	avatarStore, err := storage.NewLocalStore(uploads, "/uploads")
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+
 	settingsSvc, err := settings.New(sqlite.NewSettingsRepository(db), settings.Config{
-		Logger: logger, Tx: txManager,
+		Logger: logger, Tx: txManager, UploadExists: avatarStore.Exists,
 	})
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
@@ -99,11 +105,6 @@ func newAuthTestServer(t *testing.T) *authTestServer {
 		t.Fatalf("SeedAdmin: %v", err)
 	}
 
-	uploads := filepath.Join(t.TempDir(), "uploads")
-	avatarStore, err := storage.NewLocalStore(uploads, "/uploads")
-	if err != nil {
-		t.Fatalf("NewLocalStore: %v", err)
-	}
 	userSvc, err := service.NewUserService(userRepo, service.UserServiceConfig{
 		Avatars: avatarStore, Tx: txManager,
 	})

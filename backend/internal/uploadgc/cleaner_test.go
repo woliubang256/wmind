@@ -248,3 +248,25 @@ func TestRunCancelsAndInvalidConfigurationFails(t *testing.T) {
 		t.Fatal("cleaner did not stop")
 	}
 }
+
+func TestFailedDeletionsDoNotStarveLaterCandidates(t *testing.T) {
+	c, _, now, root := fixture(t)
+	for i := 1; i <= 101; i++ {
+		put(t, root, key(i), now.Add(-72*time.Hour))
+	}
+	sweep(t, c, 0)
+	*now = now.Add(48 * time.Hour)
+	c.remove = func(root *os.Root, name string) error {
+		if name != key(101) {
+			return errors.New("simulated permanent filesystem failure")
+		}
+		return root.Remove(name)
+	}
+	if n, err := c.Sweep(t.Context()); n != 0 || err == nil {
+		t.Fatalf("first failed batch=%d,%v", n, err)
+	}
+	if n, err := c.Sweep(t.Context()); n != 1 || err == nil {
+		t.Fatalf("later candidate starved=%d,%v", n, err)
+	}
+	present(t, root, key(101), false)
+}

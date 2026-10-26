@@ -93,6 +93,27 @@ func (s *LocalStore) URL(key string) string {
 	return s.urlPrefix + "/" + key
 }
 
+// Exists runs before committing a new reference, inside the same shared gate
+// as that write. Directories and symlinks are never usable uploaded images.
+func (s *LocalStore) Exists(_ context.Context, key string) (bool, error) {
+	if _, err := s.path(key); err != nil {
+		return false, err
+	}
+	root, err := os.OpenRoot(s.dir)
+	if err != nil {
+		return false, err
+	}
+	defer root.Close()
+	info, err := root.Lstat(key)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return info.Mode().IsRegular(), nil
+}
+
 // Dir 返回存储根目录，供 HTTP 层做静态文件映射。
 func (s *LocalStore) Dir() string { return s.dir }
 

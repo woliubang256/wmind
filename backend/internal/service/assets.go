@@ -173,7 +173,7 @@ func (s *FileService) ValidateURL(ctx context.Context, ownerID int64, src string
 		return nil
 	}
 	if PublicAvatarKey(strings.TrimPrefix(src, "/uploads/")) {
-		return nil
+		return s.validateExists(ctx, strings.TrimPrefix(src, "/uploads/"))
 	}
 	key, valid := localAssetKey(src)
 	if valid {
@@ -182,10 +182,28 @@ func (s *FileService) ValidateURL(ctx context.Context, ownerID int64, src string
 			return apperr.Wrap(apperr.CodeInternalError, err)
 		}
 		if allowed {
-			return nil
+			return s.validateExists(ctx, key)
 		}
 	}
 	return apperr.New(apperr.CodeValidationFailed, "图片不属于当前账号").WithFieldErrors(map[string]string{"image": "请重新上传图片"})
+}
+
+// Production LocalStore supplies Exists; lightweight stores used without the
+// collector keep their existing contract. The shared gate covers this check
+// and the following database commit as one operation.
+func (s *FileService) validateExists(ctx context.Context, key string) error {
+	if store, ok := s.store.(interface {
+		Exists(context.Context, string) (bool, error)
+	}); ok {
+		exists, err := store.Exists(ctx, key)
+		if err != nil {
+			return apperr.Wrap(apperr.CodeInternalError, err)
+		}
+		if !exists {
+			return apperr.New(apperr.CodeValidationFailed, "图片已不存在，请重新上传").WithFieldErrors(map[string]string{"image": "图片已不存在，请重新上传"})
+		}
+	}
+	return nil
 }
 
 func (s *FileService) ValidateDocument(ctx context.Context, ownerID int64, raw []byte) error {
@@ -207,7 +225,7 @@ func (s *FileService) ValidateDocument(ctx context.Context, ownerID int64, raw [
 				}
 				if legacy[key] {
 					checked[src] = true
-					return src, nil
+					return src, s.validateExists(ctx, key)
 				}
 				return src, apperr.New(apperr.CodeValidationFailed, "图片不属于当前账号")
 			}

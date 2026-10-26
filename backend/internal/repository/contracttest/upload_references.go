@@ -11,7 +11,7 @@ import (
 	"github.com/woliubang256/wmind/backend/internal/domain"
 )
 
-func RunUploadReferences(t *testing.T, refs domain.UploadReferencesRepo, users domain.UserRepo, maps domain.MapRepo, templates domain.TemplateRepo, settings domain.SettingsRepo) {
+func RunUploadReferences(t *testing.T, refs domain.UploadReferencesRepo, users domain.UserRepo, maps domain.MapRepo, templates domain.TemplateRepo, settings domain.SettingsRepo, seedRevision func(int64, []byte) error) {
 	t.Helper()
 	ctx, now := t.Context(), time.Now().UTC()
 	prefix := ulid.Make().String()
@@ -32,6 +32,9 @@ func RunUploadReferences(t *testing.T, refs domain.UploadReferencesRepo, users d
 			t.Fatal(err)
 		}
 		if err := maps.UpdateThumbnail(ctx, m.UID, u.ID, fmt.Sprintf("/uploads/thumb-%s-%d", prefix, i), now); err != nil {
+			t.Fatal(err)
+		}
+		if err := seedRevision(m.ID, []byte(fmt.Sprintf(`{"image":{"src":"/uploads/revision-%s-%d"}}`, prefix, i))); err != nil {
 			t.Fatal(err)
 		}
 		if i == 0 {
@@ -58,7 +61,7 @@ func RunUploadReferences(t *testing.T, refs domain.UploadReferencesRepo, users d
 		t.Fatal(err)
 	}
 	for i := 0; i < 105; i++ {
-		if !urls[fmt.Sprintf("/uploads/thumb-%s-%d", prefix, i)] || !strings.Contains(documents, fmt.Sprintf("/uploads/document-%s-%d", prefix, i)) {
+		if !urls[fmt.Sprintf("/uploads/thumb-%s-%d", prefix, i)] || !strings.Contains(documents, fmt.Sprintf("/uploads/document-%s-%d", prefix, i)) || !strings.Contains(documents, fmt.Sprintf("/uploads/revision-%s-%d", prefix, i)) {
 			t.Fatalf("lost map reference %d", i)
 		}
 	}

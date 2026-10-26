@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/woliubang256/wmind/backend/internal/domain"
 )
@@ -25,7 +26,23 @@ func (r *UploadReferencesRepository) VisitUploadReferences(ctx context.Context, 
 			}
 			cursor = row.ID
 		}
-		if len(rows) < 100 {
+		if len(rows) < 8 {
+			break
+		}
+	}
+	cursor = 0
+	for {
+		rows, err := q.ListUploadRevisionReferences(ctx, cursor)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if err := visit(domain.UploadReference{Document: []byte(row.Document)}); err != nil {
+				return err
+			}
+			cursor = row.ID
+		}
+		if len(rows) < 8 {
 			break
 		}
 	}
@@ -41,7 +58,7 @@ func (r *UploadReferencesRepository) VisitUploadReferences(ctx context.Context, 
 			}
 			cursor = row.ID
 		}
-		if len(rows) < 100 {
+		if len(rows) < 8 {
 			break
 		}
 	}

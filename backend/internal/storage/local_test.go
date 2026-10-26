@@ -70,3 +70,29 @@ func TestNewLocalStoreCreatesDirectory(t *testing.T) {
 		t.Fatal("空目录应报错")
 	}
 }
+
+func TestLocalStoreExistsRejectsMissingSymlinkAndTraversal(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewLocalStore(root, "/uploads")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Save(t.Context(), "image.png", []byte("image")); err != nil {
+		t.Fatal(err)
+	}
+	if exists, err := store.Exists(t.Context(), "image.png"); !exists || err != nil {
+		t.Fatalf("existing=%v,%v", exists, err)
+	}
+	if exists, err := store.Exists(t.Context(), "missing.png"); exists || err != nil {
+		t.Fatalf("missing=%v,%v", exists, err)
+	}
+	if err := os.Symlink(filepath.Join(root, "image.png"), filepath.Join(root, "link.png")); err != nil {
+		t.Fatal(err)
+	}
+	if exists, err := store.Exists(t.Context(), "link.png"); exists || err != nil {
+		t.Fatalf("symlink=%v,%v", exists, err)
+	}
+	if exists, err := store.Exists(t.Context(), "../image.png"); exists || !errors.Is(err, ErrInvalidKey) {
+		t.Fatalf("traversal=%v,%v", exists, err)
+	}
+}

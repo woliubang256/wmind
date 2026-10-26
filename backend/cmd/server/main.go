@@ -31,6 +31,7 @@ import (
 	"github.com/woliubang256/wmind/backend/internal/settings"
 	"github.com/woliubang256/wmind/backend/internal/storage"
 	"github.com/woliubang256/wmind/backend/internal/trash"
+	"github.com/woliubang256/wmind/backend/internal/uploadgc"
 )
 
 // shutdownTimeout is bounded by the container stop_grace_period with 5s spare.
@@ -92,6 +93,7 @@ func run() error {
 		auditRepo            domain.AuditRepo
 		mapRepo              domain.MapRepo
 		trashRepo            domain.TrashRepo
+		uploadReferences     domain.UploadReferencesRepo
 		themeRepo            domain.ThemeRepo
 		templateRepo         domain.TemplateRepo
 		shareRepo            domain.ShareRepo
@@ -124,6 +126,7 @@ func run() error {
 		auditRepo = sqliterepo.NewAuditRepository(db)
 		mapRepo = sqliterepo.NewMapRepository(db)
 		trashRepo = sqliterepo.NewTrashRepository(db)
+		uploadReferences = sqliterepo.NewUploadReferencesRepository(db)
 		themeRepo = sqliterepo.NewThemeRepository(db)
 		templateRepo = sqliterepo.NewTemplateRepository(db)
 		shareRepo = sqliterepo.NewShareRepository(db)
@@ -162,6 +165,7 @@ func run() error {
 		auditRepo = postgresrepo.NewAuditRepository(pool)
 		mapRepo = postgresrepo.NewMapRepository(pool)
 		trashRepo = postgresrepo.NewTrashRepository(pool)
+		uploadReferences = postgresrepo.NewUploadReferencesRepository(pool)
 		themeRepo = postgresrepo.NewThemeRepository(pool)
 		templateRepo = postgresrepo.NewTemplateRepository(pool)
 		shareRepo = postgresrepo.NewShareRepository(pool)
@@ -177,7 +181,12 @@ func run() error {
 		return err
 	}
 
-	settingsSvc, err := settings.New(settingsRepo, settings.Config{Logger: log, Tx: txManager})
+	avatarStore, err := storage.NewLocalStore(cfg.Storage.Dir, "/uploads")
+	if err != nil {
+		return err
+	}
+
+	settingsSvc, err := settings.New(settingsRepo, settings.Config{Logger: log, Tx: txManager, UploadExists: avatarStore.Exists})
 	if err != nil {
 		return err
 	}
@@ -213,10 +222,6 @@ func run() error {
 		log.Info("seed admin created", "email", cfg.Admin.Email)
 	}
 
-	avatarStore, err := storage.NewLocalStore(cfg.Storage.Dir, "/uploads")
-	if err != nil {
-		return err
-	}
 	userSvc, err := service.NewUserService(userRepo, service.UserServiceConfig{
 		Avatars: avatarStore, Tx: txManager,
 	})
@@ -310,6 +315,16 @@ func run() error {
 	trashDone := make(chan struct{})
 	defer func() { stopBackups(); <-trashDone }()
 	go func() { defer close(trashDone); trashCleaner.Run(backupsCtx) }()
+
+	uploadCleaner, err := uploadgc.New(uploadgc.Config{
+		Root: cfg.Storage.Dir, References: uploadReferences, Gate: backups.Gate(), Logger: log,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize upload cleaner: %w", err)
+	}
+	uploadDone := make(chan struct{})
+	defer func() { stopBackups(); <-uploadDone }()
+	go func() { defer close(uploadDone); uploadCleaner.Run(backupsCtx) }()
 
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	loginEncryption, err := service.NewLoginEncryption(loginChallengeRepo, factorKey)
