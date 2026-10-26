@@ -15,7 +15,7 @@
  * 兄弟节点之间的空隙，画在主题之前才不会被节点挡住起点。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { layoutMindmap } from '../layout/mindmap';
@@ -490,7 +490,7 @@ function EditingOverlay({ box, style, textHeight, contentRect, viewport, initial
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const settled = useRef(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.focus();
@@ -514,6 +514,11 @@ function EditingOverlay({ box, style, textHeight, contentRect, viewport, initial
       onChange={(event) => setValue(event.target.value)}
       onBlur={() => settle(true)}
       onKeyDown={(event) => {
+        // 候选确认/取消属于输入法，不能提前提交、创建子主题或退出编辑。
+        if (event.nativeEvent.isComposing || event.keyCode === 229) {
+          event.stopPropagation();
+          return;
+        }
         if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();

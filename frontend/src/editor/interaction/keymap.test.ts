@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { resolveKey } from './keymap';
+import { isTypeToEditKey, resolveKey } from './keymap';
 
 describe('resolveKey', () => {
+  it('输入法组合期间的确认、取消和导航不派发导图动作', () => {
+    for (const key of ['Enter', 'Tab', 'Escape', 'Backspace', 'ArrowDown']) {
+      expect(resolveKey({ key, isComposing: true })).toBeNull();
+      expect(resolveKey({ key, keyCode: 229 })).toBeNull();
+    }
+  });
   it('无修饰键的基础键位', () => {
     expect(resolveKey({ key: 'Tab' })).toBe('topic.add-child');
     expect(resolveKey({ key: 'Enter' })).toBe('topic.add-sibling');
@@ -81,5 +87,36 @@ describe('resolveKey', () => {
     expect(resolveKey({ key: 'Tab', shiftKey: true })).toBeNull();
     // 正向的裸 Tab 仍然要拦——那时用户就是想加子主题。
     expect(resolveKey({ key: 'Tab' })).toBe('topic.add-child');
+  });
+});
+
+describe('isTypeToEditKey', () => {
+  it('字母、数字、标点和 Unicode 字符可开始编辑', () => {
+    for (const key of ['a', 'A', '7', '。', '中', '😀']) {
+      expect(isTypeToEditKey({ key, shiftKey: key === 'A' })).toBe(true);
+    }
+  });
+
+  it('支持输入法首键、组合事件和死键', () => {
+    expect(isTypeToEditKey({ key: 'Process' })).toBe(true);
+    expect(isTypeToEditKey({ key: 'Unidentified', keyCode: 229 })).toBe(true);
+    expect(isTypeToEditKey({ key: 'n', isComposing: true })).toBe(true);
+    expect(isTypeToEditKey({ key: 'Dead', altKey: true })).toBe(true);
+  });
+
+  it('空格拖动、导航和现有命令不会开始文字编辑', () => {
+    for (const key of [' ', 'Tab', 'Enter', 'F2', 'Escape', 'Delete', 'Backspace', 'ArrowLeft', 'Shift', 'Alt', 'Unidentified', '', '\u0000']) {
+      expect(isTypeToEditKey({ key })).toBe(false);
+    }
+    expect(isTypeToEditKey({ key: 'Process', code: 'Space', keyCode: 229 })).toBe(false);
+    expect(isTypeToEditKey({ key: 'r', ctrlKey: true })).toBe(false);
+    expect(isTypeToEditKey({ key: 'b', metaKey: true })).toBe(false);
+    expect(isTypeToEditKey({ key: 'f', altKey: true })).toBe(false);
+    expect(isTypeToEditKey({ key: ' ', ctrlKey: true, isComposing: true })).toBe(false);
+  });
+
+  it('AltGraph 输入字符不会误判为 Ctrl/Alt 快捷键', () => {
+    expect(isTypeToEditKey({ key: '@', ctrlKey: true, altKey: true, getModifierState: (key) => key === 'AltGraph' })).toBe(true);
+    expect(isTypeToEditKey({ key: '@', ctrlKey: true, altKey: true })).toBe(false);
   });
 });

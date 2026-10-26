@@ -71,10 +71,24 @@ export type EditorAction =
 /** 只取用得到的字段，测试里构造对象更方便。 */
 export interface KeyLike {
   key: string;
+  code?: string;
+  keyCode?: number;
+  isComposing?: boolean;
   ctrlKey?: boolean;
   metaKey?: boolean;
   shiftKey?: boolean;
   altKey?: boolean;
+  getModifierState?(key: string): boolean;
+}
+
+/** 首键仍走浏览器默认输入；空格保留给拖动，组合键保留给系统。 */
+export function isTypeToEditKey(event: KeyLike): boolean {
+  if (event.key === ' ' || event.code === 'Space' || event.metaKey) return false;
+  const altGraph = event.getModifierState?.('AltGraph') === true;
+  if (event.ctrlKey && !altGraph) return false;
+  if (event.altKey && !altGraph && event.key !== 'Dead') return false;
+  if (event.isComposing || event.keyCode === 229 || event.key === 'Process' || event.key === 'Dead') return true;
+  return Array.from(event.key).length === 1 && !/[\u0000-\u001f\u007f]/u.test(event.key);
 }
 
 /**
@@ -86,6 +100,7 @@ function normalize(key: string): string {
 }
 
 export function resolveKey(event: KeyLike): EditorAction | null {
+  if (event.isComposing || event.keyCode === 229) return null;
   // Alt 让给系统与浏览器（Alt+← 是「后退」），一个都不拦。
   if (event.altKey) return null;
 

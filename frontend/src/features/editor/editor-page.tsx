@@ -62,6 +62,7 @@ import { PaletteTab } from './panel/palette-tab';
 import { MarkerTab } from './panel/marker-tab';
 import { toggleMarkerCommand, clearMarkersCommand } from '@/editor/commands/marker';
 import { useHotkeys } from '@/editor/interaction/hotkeys';
+import { useTypeToEdit } from '@/editor/interaction/use-type-to-edit';
 import { isTextEntryTarget } from '@/editor/interaction/keymap';
 import { useEditorActions } from '@/editor/interaction/use-editor-actions';
 import {
@@ -724,6 +725,13 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   // 编辑态整张键位表都关掉：输入框自己处理 Esc / Enter / Shift+Enter / Tab，
   // 导图再插手就会把用户的换行吞成「新建主题」。
   useHotkeys(rootRef, actions, { enabled: !preview && editingId === null && insertState === null });
+  useTypeToEdit(canvasRef, () => {
+    const state = store.getState();
+    if (state.selection.length !== 1) return;
+    const id = state.selection[0]!;
+    if (!findTopicInSheet(sheetById(state.doc, state.sheetId), id) || !layout.boxes.has(id)) return;
+    state.setEditing(id);
+  }, fonts.ready && view === 'canvas' && !preview && editingId === null && insertState === null);
 
   /**
    * 挂载后把焦点放到画布上。

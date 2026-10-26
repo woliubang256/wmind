@@ -43,6 +43,7 @@ const SUITE = [
   ['canvas-navigation', '单行底栏 / 画布菜单 / 滚动条 / 中心定位'],
   ['canvas-view-reload', '作者视角 / 冲突重载 / 草稿恢复 / 浏览零写入'],
   ['a11y', '画布无障碍'],
+  ['type-to-edit', '主题直接输入 / 首字符与中文输入法 / 焦点与只读边界'],
   ['annotations', '概要 / 边界 / 联系'],
   ['toolbar', '操作提示 / 独立主题按钮'],
   ['panel-controls', '面板唯一入口 / 悬浮展开 / 结构选择'],
