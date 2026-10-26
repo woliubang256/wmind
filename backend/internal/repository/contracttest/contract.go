@@ -140,11 +140,25 @@ func Run(t *testing.T, r Repos) {
 			t.Fatalf("CountActiveAdmins = %d, %v; want at least 1", admins, err)
 		}
 
+		nickname, avatar := "Updated", "/avatar.png"
 		updated, err := users.UpdateProfile(ctx, domain.UpdateProfileInput{
-			UID: uid, Nickname: "Updated", AvatarURL: "/avatar.png", Now: now.Add(time.Minute),
+			UID: uid, Nickname: &nickname, AvatarURL: &avatar, Now: now.Add(time.Minute),
 		})
 		if err != nil || updated.Nickname != "Updated" || updated.AvatarURL != "/avatar.png" {
 			t.Fatalf("UpdateProfile = %#v, %v", updated, err)
+		}
+		empty := ""
+		updated, err = users.UpdateProfile(ctx, domain.UpdateProfileInput{UID: uid, Nickname: &empty, Now: now.Add(time.Minute)})
+		if err != nil || updated.Nickname != "" || updated.AvatarURL != avatar {
+			t.Fatalf("nickname-only update must preserve avatar and allow clearing: %#v, %v", updated, err)
+		}
+		updated, err = users.UpdateProfile(ctx, domain.UpdateProfileInput{UID: uid, Nickname: &nickname, Now: now.Add(time.Minute)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		updated, err = users.UpdateProfile(ctx, domain.UpdateProfileInput{UID: uid, AvatarURL: &empty, Now: now.Add(time.Minute)})
+		if err != nil || updated.Nickname != nickname || updated.AvatarURL != "" {
+			t.Fatalf("avatar-only update must preserve nickname and allow clearing: %#v, %v", updated, err)
 		}
 		if err := users.UpdatePassword(ctx, user.ID, "hash-v2", now.Add(2*time.Minute)); err != nil {
 			t.Fatalf("UpdatePassword: %v", err)

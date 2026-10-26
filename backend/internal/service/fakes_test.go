@@ -263,8 +263,12 @@ func (r *fakeUserRepo) UpdateProfile(_ context.Context, in domain.UpdateProfileI
 	defer r.mu.Unlock()
 	for _, user := range r.byID {
 		if user.UID == in.UID && user.DeletedAt == nil {
-			user.Nickname = in.Nickname
-			user.AvatarURL = in.AvatarURL
+			if in.Nickname != nil {
+				user.Nickname = *in.Nickname
+			}
+			if in.AvatarURL != nil {
+				user.AvatarURL = *in.AvatarURL
+			}
 			user.UpdatedAt = in.Now
 			return r.clone(user), nil
 		}

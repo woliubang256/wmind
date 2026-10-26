@@ -113,7 +113,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, uid string, in ProfileU
 		now := s.now()
 		if nickname != user.Nickname {
 			updated, updateErr := s.users.UpdateProfile(ctx, domain.UpdateProfileInput{
-				UID: uid, Nickname: nickname, AvatarURL: user.AvatarURL, Now: now,
+				UID: uid, Nickname: &nickname, Now: now,
 			})
 			if updateErr != nil {
 				return mapUserError(updateErr)
@@ -183,7 +183,7 @@ func (s *UserService) UpdateAvatar(ctx context.Context, uid string, data []byte)
 	}
 
 	updated, err := s.users.UpdateProfile(ctx, domain.UpdateProfileInput{
-		UID: uid, Nickname: user.Nickname, AvatarURL: url, Now: s.now(),
+		UID: uid, AvatarURL: &url, Now: s.now(),
 	})
 	if err != nil {
 		// 写库失败就把刚存的文件删掉，避免磁盘里堆孤儿文件。

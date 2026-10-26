@@ -95,8 +95,8 @@ WHERE deleted_at IS NULL
 
 -- name: UpdateUserProfile :one
 UPDATE users
-SET nickname = sqlc.arg(nickname),
-    avatar_url = sqlc.arg(avatar_url),
+SET nickname = COALESCE(sqlc.narg(nickname), nickname),
+    avatar_url = COALESCE(sqlc.narg(avatar_url), avatar_url),
     updated_at = sqlc.arg(updated_at)
 WHERE uid = sqlc.arg(uid) AND deleted_at IS NULL
 RETURNING *;

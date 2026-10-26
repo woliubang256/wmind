@@ -139,11 +139,11 @@ type ListUsersInput struct {
 	Page    Page
 }
 
-// UpdateProfileInput 是修改个人资料的入参。
+// UpdateProfileInput 是局部修改个人资料的入参；nil 保留该列，非 nil 可清空。
 type UpdateProfileInput struct {
 	UID       string
-	Nickname  string
-	AvatarURL string
+	Nickname  *string
+	AvatarURL *string
 	Now       time.Time
 }
 

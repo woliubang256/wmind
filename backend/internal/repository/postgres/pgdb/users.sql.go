@@ -479,16 +479,16 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPassword
 
 const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users
-SET nickname = $1,
-    avatar_url = $2,
+SET nickname = COALESCE($1, nickname),
+    avatar_url = COALESCE($2, avatar_url),
     updated_at = $3
 WHERE uid = $4 AND deleted_at IS NULL
 RETURNING id, uid, username, email, password_hash, nickname, avatar_url, role, status, map_count, last_login_at, created_at, updated_at, deleted_at
 `
 
 type UpdateUserProfileParams struct {
-	Nickname  string
-	AvatarUrl string
+	Nickname  *string
+	AvatarUrl *string
 	UpdatedAt pgtype.Timestamptz
 	Uid       string
 }

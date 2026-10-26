@@ -282,20 +282,20 @@ func (s *AdminService) updateUser(ctx context.Context, user *domain.User, patch 
 
 	now := s.now()
 	updated := user
-	if nickname != user.Nickname || email != user.Email {
+	if nickname != user.Nickname {
 		if updated, err = s.users.UpdateProfile(ctx, domain.UpdateProfileInput{
-			UID: uid, Nickname: nickname, AvatarURL: user.AvatarURL, Now: now,
+			UID: uid, Nickname: &nickname, Now: now,
 		}); err != nil {
 			return nil, mapAdminUserError(err)
 		}
-		if email != user.Email {
-			updated, err = s.users.UpdateEmail(ctx, uid, email, now)
-			if err != nil {
-				if errors.Is(err, domain.ErrDuplicate) {
-					return nil, apperr.New(apperr.CodeAuthEmailTaken, "")
-				}
-				return nil, mapAdminUserError(err)
+	}
+	if email != user.Email {
+		updated, err = s.users.UpdateEmail(ctx, uid, email, now)
+		if err != nil {
+			if errors.Is(err, domain.ErrDuplicate) {
+				return nil, apperr.New(apperr.CodeAuthEmailTaken, "")
 			}
+			return nil, mapAdminUserError(err)
 		}
 	}
 	if patch.Role != nil && *patch.Role != user.Role {
