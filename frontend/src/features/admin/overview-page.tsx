@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -79,9 +80,12 @@ export function AdminOverviewPage() {
         <Panel
           title={t('admin.overview.auditTitle')}
           actions={
-            <Badge tone="neutral">
-              {t('admin.audit.total', { count: audit.data?.pagination.total ?? 0 })}
-            </Badge>
+            <>
+              <Badge tone="neutral">
+                {t('admin.audit.total', { count: audit.data?.pagination.total ?? 0 })}
+              </Badge>
+              <Link to="/admin/audit-logs" className="rounded-md text-sm text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary">{t('admin.audit.viewAll')}</Link>
+            </>
           }
           bodyClassName="p-0"
         >

@@ -12,7 +12,7 @@ import { PublicSharePage } from '@/features/share/public-share-page';
 import { SharesPage } from '@/features/share/shares-page';
 
 /**
- * 管理后台三个页面按需加载。
+ * 管理后台页面按需加载。
  *
  * 普通用户永远看不到它们，把这几千行（表格、设置表单、审计列表）塞进
  * 主 bundle 只会让所有人的首屏变慢。React.lazy 在路由层就够用，不必
@@ -30,6 +30,10 @@ const adminRoutes = [
   {
     path: '/admin/settings',
     lazy: async () => ({ Component: (await import('@/features/admin/settings-page')).AdminSettingsPage }),
+  },
+  {
+    path: '/admin/audit-logs',
+    lazy: async () => ({ Component: (await import('@/features/admin/audit-logs-page')).AdminAuditLogsPage }),
   },
 ];
 

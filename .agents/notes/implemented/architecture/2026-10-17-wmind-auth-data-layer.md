@@ -31,6 +31,8 @@ Upsert 用 `ON CONFLICT (key) DO UPDATE`（两种方言都支持）。不用 SQL
 
 审计表由 `domain.AuditRepo` 暴露，接口只有 `Create` / `List` / `Count`。应用改不动自己的审计轨迹，这不是靠代码评审守的，是类型系统守的。
 
+[可读操作日志](../feature/2026-10-26-wmind-readable-audit-log.md)在已有 JSON 中保存事件名称快照，旧记录只读补充当前实体名称，不增加历史回写能力。
+
 `Detail` 是 JSON 文本，敏感字段（密码、令牌明文）由 service 层剔除——列约束管不了这件事，只能靠写入点自律。
 
 ### 跨方言一致：IP 在 domain 里归一化

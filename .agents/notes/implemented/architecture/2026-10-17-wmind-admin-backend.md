@@ -70,6 +70,8 @@ g := v1.Group("/admin",
 
 读取返回派生的 `actor` 和 `targetName`，优先采用事件快照。旧记录只读补充仍存在的账号或对象，查不到就保留空值；按页缓存查询，分享/导图查找始终携带原操作者 owner_id。读路径不改历史行，改名或删除不能覆盖新记录的历史名称。DTO 不直接序列化 User 或 ShareLink，避免把认证字段带进响应。
 
+界面的摘要、展开详情与完整查询遵循[可读操作日志](../feature/2026-10-26-wmind-readable-audit-log.md)。
+
 审计查询接受 RFC3339 或 UTC 纯日期，纯结束日期包含当日全天；非法及逆序区间返回 422。前端本地日界线须先转成 RFC3339，结束上界保留纳秒精度，不能把本地日期直接当 UTC。
 
 ### SQL 里用 `COALESCE(narg, col)` 而不是 `narg IS NULL OR col = narg`

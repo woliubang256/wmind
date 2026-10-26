@@ -180,7 +180,8 @@ export function AppLayout() {
     ? [
         { to: '/admin', label: t('nav.adminOverview'), icon: 'layout-dashboard' as const },
         { to: '/admin/users', label: t('nav.adminUsers'), icon: 'shield' as const },
-        { to: '/admin/settings', label: t('nav.adminSettings'), icon: 'settings' as const }
+        { to: '/admin/settings', label: t('nav.adminSettings'), icon: 'settings' as const },
+        { to: '/admin/audit-logs', label: t('nav.adminAudit'), icon: 'clock' as const },
       ]
     : [];
 

@@ -24,6 +24,7 @@ const SUITE = [
   ['locale', '登录页语言切换'],
   ['avatars', '头像来源优先级 / 上传与回退'],
   ['settings-cleanup', '设置精简 / 导航字号 / 确认弹窗布局'],
+  ['audit-logs', '操作日志翻译 / 事件上下文 / 完整查询与日期边界'],
   ['select-overflow', '下拉菜单高度 / 受限空间与键盘滚动'],
   ['backup-timezone', '固定时区搜索 / 保存刷新 / 中英文与受限视口'],
   ['admin-settings-layout', '后台短字段桌面并排 / 手机单列 / 备份默认S3'],

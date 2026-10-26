@@ -19,7 +19,7 @@ run(async () => {
     check('用户入口有头像和向下箭头', await trigger.locator('[data-user-avatar]').count() === 1 && await trigger.locator('svg').count() === 1);
     await trigger.click();
     await menu.waitFor();
-    check('管理员的四项入口收入菜单且每项有图标', (await menuLabels(menu)).join(',') === '个人设置,管理概览,用户管理,网站设置' && await menu.getByRole('menuitem').locator('svg').count() === 4);
+    check('管理员的五项入口收入菜单且每项有图标', (await menuLabels(menu)).join(',') === '个人设置,管理概览,用户管理,网站设置,操作日志' && await menu.getByRole('menuitem').locator('svg').count() === 5);
     const rect = await menu.boundingBox();
     const anchor = await trigger.boundingBox();
     check('菜单位于用户入口下方且不超出屏幕', rect.y >= anchor.y + anchor.height && rect.x >= 0 && rect.x + rect.width <= 1440);
@@ -73,7 +73,7 @@ run(async () => {
     await englishTrigger.click();
     const english = page.getByRole('menu', { name: 'User menu', exact: true });
     await english.waitFor();
-    check('用户菜单完整支持英文', (await menuLabels(english)).join(',') === 'Account,Overview,Users,Site settings');
+    check('用户菜单完整支持英文', (await menuLabels(english)).join(',') === 'Account,Overview,Users,Site settings,Audit log');
     await page.keyboard.press('Escape');
     await page.evaluate(() => document.documentElement.classList.add('dark'));
     await englishTrigger.click();
