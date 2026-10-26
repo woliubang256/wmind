@@ -22,10 +22,16 @@ export function InsertMenu({ topics, selection, onInsert }: { topics: number; se
   const close = (focus = true) => { setOpen(false); setLinks(false); if (focus) trigger.current?.focus(); };
   useLayoutEffect(() => {
     if (!open) return;
-    const update = () => { if (trigger.current) setPlacement(placeMenu(trigger.current.getBoundingClientRect(), Math.min(600, window.innerHeight - 24), { width: window.innerWidth, height: window.innerHeight }, { minWidth: 264 })); };
+    const update = () => {
+      if (!trigger.current) return;
+      const rect = trigger.current.getBoundingClientRect();
+      const toolbar = trigger.current.closest('[data-editor-toolbar]')?.getBoundingClientRect();
+      if (toolbar && (rect.right <= toolbar.left || rect.left >= toolbar.right)) { close(false); return; }
+      setPlacement(placeMenu(rect, Math.min(600, window.innerHeight - 24), { width: window.innerWidth, height: window.innerHeight }, { minWidth: 264 }));
+    };
     const outside = (event: PointerEvent) => { if (!menu.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) close(false); };
-    update(); document.addEventListener('pointerdown', outside, true); window.addEventListener('resize', update);
-    return () => { document.removeEventListener('pointerdown', outside, true); window.removeEventListener('resize', update); };
+    update(); document.addEventListener('pointerdown', outside, true); window.addEventListener('resize', update); window.addEventListener('scroll', update, true);
+    return () => { document.removeEventListener('pointerdown', outside, true); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); };
   }, [open]);
   useLayoutEffect(() => { if (open && placement) menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus(); }, [open, links, !!placement]);
   const items = links ? LINKS : MAIN;

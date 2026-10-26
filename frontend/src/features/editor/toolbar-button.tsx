@@ -48,9 +48,10 @@ export const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(f
       }}
       aria-disabled={disabled || undefined}
       aria-describedby={open ? id : undefined}
-      className={cn(disabled && 'cursor-not-allowed opacity-50', className)}
-      onPointerEnter={() => setOpen(true)}
+      className={cn('shrink-0', disabled && 'cursor-not-allowed opacity-50', className)}
+      onPointerEnter={(event) => { if (event.pointerType !== 'touch') setOpen(true); }}
       onPointerLeave={() => setOpen(false)}
+      onPointerCancel={() => setOpen(false)}
       onFocus={() => setOpen(true)}
       onBlur={() => setOpen(false)}
       onKeyDown={(event) => {

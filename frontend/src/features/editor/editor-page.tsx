@@ -875,8 +875,8 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </span>
         ) : null}
 
-        <div data-editor-toolbar className="flex min-w-0 max-w-full basis-full flex-wrap items-center gap-x-2 gap-y-1 xl:basis-auto">
-          <div role="group" aria-label={t('editor.toolbar.edit')} className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5">
+        <div data-editor-toolbar className="flex min-w-0 max-w-full basis-full touch-pan-x items-center gap-x-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-0.5 py-1 xl:basis-auto">
+          <div role="group" aria-label={t('editor.toolbar.edit')} className="flex shrink-0 items-center gap-0.5">
             <div className="flex items-center gap-0.5">
               <ToolbarButton
                 variant="ghost"
@@ -971,7 +971,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
             </ToolbarButton> : null}
           </div>
 
-          <div role="group" aria-label={t('editor.toolbar.view')} className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5 border-l border-border/80 pl-2">
+          <div role="group" aria-label={t('editor.toolbar.view')} className="flex shrink-0 items-center gap-0.5 border-l border-border/80 pl-2">
             <div className="flex items-center gap-0.5">
               <ToolbarButton variant="ghost" size="icon" aria-label={t('editor.zoomOut')} onClick={() => zoomAtCenter(1 / 1.2)}>
                 <Icon name="zoom-out" className="size-4" />
@@ -1024,7 +1024,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
           </div>
 
           {(!preview && config.userTemplateEnabled) || config.shareEnabled || config.exportEnabled ? (
-            <div role="group" aria-label={t('editor.toolbar.actions')} className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5 border-l border-border/80 pl-2">
+            <div role="group" aria-label={t('editor.toolbar.actions')} className="flex shrink-0 items-center gap-0.5 border-l border-border/80 pl-2">
               {/*
                 「另存为模板」只在允许用户模板时出现。它是把当前导图复制一份存起来，
                 属于写操作；站点关掉用户模板后还留一个必然 403 的按钮没有意义。

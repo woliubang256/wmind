@@ -33,13 +33,28 @@ run(async () => {
     check('右上角唯一入口可以隐藏并恢复面板', true);
     for (const width of [375, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
-      assert.equal(await toolbar.locator('button').evaluateAll((buttons) => buttons.every((button) => {
-        const rect = button.getBoundingClientRect();
-        return rect.left >= 0 && rect.right <= window.innerWidth;
-      })), true);
+      const geometry = await toolbar.evaluate((element) => {
+        const buttons = [...element.querySelectorAll('button')].map((button) => button.getBoundingClientRect());
+        return {
+          singleRow: buttons.every((rect) => Math.abs(rect.top - buttons[0].top) < 1 && rect.width >= 40),
+          overflow: element.scrollWidth > element.clientWidth,
+          pageFits: document.documentElement.scrollWidth <= window.innerWidth,
+        };
+      });
+      assert.equal(geometry.singleRow, true);
+      assert.equal(geometry.pageFits, true);
+      if (width === 375) assert.equal(geometry.overflow, true);
+      for (const button of await toolbar.locator('button').all()) {
+        await button.scrollIntoViewIfNeeded();
+        assert.equal(await button.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          const clip = element.closest('[data-editor-toolbar]').getBoundingClientRect();
+          return rect.left >= clip.left - 1 && rect.right <= clip.right + 1;
+        }), true);
+      }
       if (process.env.SCREENSHOT_PATH && width === 1440) await page.locator('header').last().screenshot({ path: process.env.SCREENSHOT_PATH });
     }
-    check('桌面和窄屏工具栏入口均在视口内', true);
+    check('桌面和窄屏工具栏保持单行，横向滚动可到达全部入口且页面不溢出', true);
     // 后面的提示用例依赖空历史；重新载入演示文档。
     await page.reload();
     await waitForCanvas(page);
