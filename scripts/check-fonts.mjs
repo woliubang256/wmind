@@ -304,7 +304,7 @@ function main() {
   }
   if (registrySource !== '') {
     const registry = new Map();
-    const entryRe = /id:\s*'([a-z]+)'[\s\S]*?cssPath:\s*(null|'([^']+)')[\s\S]*?weights:\s*\[([^\]]*)\]/g;
+    const entryRe = /id:\s*'([a-z]+)'[\s\S]*?cssPath:\s*(null|publicAssetUrl\('([^']+)'\))[\s\S]*?weights:\s*\[([^\]]*)\]/g;
     for (const match of registrySource.matchAll(entryRe)) {
       registry.set(match[1], {
         cssPath: match[2] === 'null' ? null : match[3],

@@ -1,3 +1,4 @@
+import { publicAssetUrl } from 'virtual:wmind-public-assets';
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -94,7 +95,7 @@ export function LoginPage() {
 
       <div className="mb-8 mt-5 flex flex-col items-center gap-4 text-center sm:mt-7">
         <LoadingImage
-          src={config.logoUrl || '/wmind-logo.jpg'}
+          src={config.logoUrl || publicAssetUrl('/wmind-logo.jpg')}
           alt={t('auth.logoAlt')}
           containerClassName="size-24 overflow-hidden rounded-3xl shadow-lg shadow-orange-500/15"
           className="size-full object-cover"

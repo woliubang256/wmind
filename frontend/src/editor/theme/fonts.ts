@@ -11,6 +11,7 @@
  */
 
 import type { FontFamily } from '../model/types';
+import { publicAssetUrl } from 'virtual:wmind-public-assets';
 
 export interface FontDefinition {
   id: FontFamily;
@@ -49,7 +50,7 @@ export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
     labelKey: 'editor.font.sans',
     stack: "'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif",
     bundled: true,
-    cssPath: '/fonts/sans.css',
+    cssPath: publicAssetUrl('/fonts/sans.css'),
     // 与样式面板的字重下拉对齐：300 细 / 400 常规 / 600 中粗 / 700 粗 / 800 特粗。
     weights: [300, 400, 600, 700, 800],
   },
@@ -66,7 +67,7 @@ export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
     labelKey: 'editor.font.serif',
     stack: "'Noto Serif SC', 'Songti SC', SimSun, Georgia, serif",
     bundled: true,
-    cssPath: '/fonts/serif.css',
+    cssPath: publicAssetUrl('/fonts/serif.css'),
     weights: [400, 700],
   },
   mono: {
@@ -74,7 +75,7 @@ export const FONT_DEFINITIONS: Record<FontFamily, FontDefinition> = {
     labelKey: 'editor.font.mono',
     stack: "'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
     bundled: true,
-    cssPath: '/fonts/mono.css',
+    cssPath: publicAssetUrl('/fonts/mono.css'),
     weights: [400, 700],
   },
 };

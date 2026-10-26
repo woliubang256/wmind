@@ -1,3 +1,4 @@
+import { publicAssetUrl } from 'virtual:wmind-public-assets';
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -214,7 +215,7 @@ export function AppLayout() {
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/90 backdrop-blur">
         <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
           <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-            <LoadingImage src={config.logoUrl || '/wmind-logo.jpg'} alt="" containerClassName="size-8 overflow-hidden rounded-lg shadow-sm" className="size-full object-cover" />
+            <LoadingImage src={config.logoUrl || publicAssetUrl('/wmind-logo.jpg')} alt="" containerClassName="size-8 overflow-hidden rounded-lg shadow-sm" className="size-full object-cover" />
             <span className="hidden max-w-40 truncate sm:inline">{config.siteName}</span>
           </Link>
 
@@ -287,7 +288,7 @@ export function PublicLayout() {
   const { config } = useSiteConfig();
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <header className="border-b border-border/70 px-5 py-3"><Link to="/" className="inline-flex items-center gap-2 font-semibold"><LoadingImage src={config.logoUrl || '/wmind-logo.jpg'} alt="" containerClassName="size-9 overflow-hidden rounded-xl" className="size-full object-cover" /><span>{config.siteName}</span></Link></header>
+      <header className="border-b border-border/70 px-5 py-3"><Link to="/" className="inline-flex items-center gap-2 font-semibold"><LoadingImage src={config.logoUrl || publicAssetUrl('/wmind-logo.jpg')} alt="" containerClassName="size-9 overflow-hidden rounded-xl" className="size-full object-cover" /><span>{config.siteName}</span></Link></header>
       <main className="mx-auto max-w-6xl px-4 py-8"><Outlet /></main>
     </div>
   );
