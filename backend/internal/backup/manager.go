@@ -66,6 +66,7 @@ type Manager struct {
 	current       *Job
 	staged        map[string]stagedRestore
 	jobMu         sync.Mutex
+	jobFileUnlock func()
 	running       atomic.Bool
 	wg            sync.WaitGroup
 	tickMu        sync.Mutex
@@ -131,7 +132,10 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 	if err = m.Reload(ctx); err != nil {
 		return nil, err
 	}
-	m.reclaimStaging(time.Now())
+	if m.reserve() {
+		m.reclaimStaging(time.Now())
+		m.release()
+	}
 	return m, nil
 }
 func (m *Manager) Gate() *Gate { return m.cfg.Gate }
@@ -191,10 +195,24 @@ func (m *Manager) reserve() bool {
 	if !m.jobMu.TryLock() {
 		return false
 	}
+	unlock, ok, err := sharedFileLock(filepath.Join(m.cfg.WorkDir, ".jobs.lock"), true)
+	if err != nil || !ok {
+		m.jobMu.Unlock()
+		if err != nil {
+			m.cfg.Logger.Warn("backup task lock unavailable")
+		}
+		return false
+	}
+	m.jobFileUnlock = unlock
 	m.running.Store(true)
 	return true
 }
-func (m *Manager) release() { m.running.Store(false); m.jobMu.Unlock() }
+func (m *Manager) release() {
+	m.running.Store(false)
+	m.jobFileUnlock()
+	m.jobFileUnlock = nil
+	m.jobMu.Unlock()
+}
 func (m *Manager) Save(ctx context.Context, input Configuration, actor *int64) error {
 	if !m.reserve() {
 		return ErrBusy

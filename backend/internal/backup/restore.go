@@ -77,6 +77,9 @@ func (m *Manager) Inspect(ctx context.Context, owner string, reader io.Reader) (
 		return RestorePreview{}, err
 	}
 	preview := RestorePreview{ID: rand.Text(), CreatedAt: manifest.CreatedAt, Database: id, Files: len(manifest.Files), Bytes: n, ExpiresAt: time.Now().Add(time.Hour).UTC()}
+	if err = writePreviewExpiry(dir, preview.ExpiresAt); err != nil {
+		return RestorePreview{}, err
+	}
 	m.mu.Lock()
 	m.staged[preview.ID] = stagedRestore{preview: preview, dir: dir, owner: owner}
 	m.mu.Unlock()
@@ -110,8 +113,15 @@ func (m *Manager) restore(ctx context.Context, job *Job, stage stagedRestore) er
 		job.ErrorCode = "INCOMPATIBLE_ARCHIVE"
 		return errors.New("database schema changed after upload")
 	}
+	// The whole sibling staging lifetime is protected against other instances'
+	// cleanup, including the copy before the final filesystem swap.
+	resume, err := m.cfg.Gate.PauseContext(ctx)
+	if err != nil {
+		return err
+	}
+	defer resume()
 	// Stage files on the uploads filesystem so the eventual rename is local.
-	next, err := os.MkdirTemp(filepath.Dir(m.cfg.UploadDir), ".wmind-restore-next-")
+	next, err := os.MkdirTemp(filepath.Dir(m.cfg.UploadDir), m.restorePrefix("next"))
 	if err != nil {
 		return err
 	}
@@ -119,11 +129,6 @@ func (m *Manager) restore(ctx context.Context, job *Job, stage stagedRestore) er
 	if err = CaptureFiles(ctx, filepath.Join(stage.dir, "content", "uploads"), next); err != nil {
 		return err
 	}
-	resume, err := m.cfg.Gate.PauseContext(ctx)
-	if err != nil {
-		return err
-	}
-	defer resume()
 	m.stage(job, "safety_backup")
 	dir, err := os.MkdirTemp(m.cfg.WorkDir, "before-")
 	if err != nil {
@@ -142,7 +147,7 @@ func (m *Manager) restore(ctx context.Context, job *Job, stage stagedRestore) er
 	}
 	job.RecoveryFile = archiveName
 	m.stage(job, "restoring")
-	old := filepath.Join(filepath.Dir(m.cfg.UploadDir), ".wmind-restore-old-"+job.ID)
+	old := filepath.Join(filepath.Dir(m.cfg.UploadDir), m.restorePrefix("old")+job.ID)
 	install := func() (func() error, error) {
 		if err := os.Rename(m.cfg.UploadDir, old); err != nil {
 			return nil, err
@@ -162,7 +167,14 @@ func (m *Manager) restore(ctx context.Context, job *Job, stage stagedRestore) er
 		return err
 	}
 	// Once committed, never remove live data to retry an application cache reload.
-	os.RemoveAll(old)
+	// Only a completed DB/filesystem commit makes the old copy disposable.
+	// Renaming records this fact durably enough to retry a failed deletion.
+	garbage := filepath.Join(filepath.Dir(m.cfg.UploadDir), m.restorePrefix("garbage")+job.ID)
+	if err := os.Rename(old, garbage); err != nil {
+		m.cfg.Logger.Warn("committed restore old uploads retained; cleanup rename failed")
+	} else if err := os.RemoveAll(garbage); err != nil {
+		m.cfg.Logger.Warn("committed restore uploads cleanup will be retried")
+	}
 	m.stage(job, "reloading")
 	if m.cfg.AfterRestore != nil {
 		if err = m.cfg.AfterRestore(ctx); err != nil {
