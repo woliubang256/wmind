@@ -213,9 +213,24 @@ func (m *Manager) release() {
 	m.jobFileUnlock = nil
 	m.jobMu.Unlock()
 }
-func (m *Manager) Save(ctx context.Context, input Configuration, actor *int64) error {
+
+// The file lock serializes jobs, but another process may have changed settings
+// or registered an object since this process last read them. Never overwrite
+// that state with a stale in-memory catalog after acquiring the lock.
+func (m *Manager) reserveLatest(ctx context.Context) error {
 	if !m.reserve() {
 		return ErrBusy
+	}
+	if err := m.Reload(ctx); err != nil {
+		m.release()
+		return err
+	}
+	return nil
+}
+
+func (m *Manager) Save(ctx context.Context, input Configuration, actor *int64) error {
+	if err := m.reserveLatest(ctx); err != nil {
+		return err
 	}
 	defer m.release()
 	m.mu.RLock()
@@ -237,8 +252,8 @@ func (m *Manager) Save(ctx context.Context, input Configuration, actor *int64) e
 	return nil
 }
 func (m *Manager) Test(ctx context.Context, input Configuration) error {
-	if !m.reserve() {
-		return ErrBusy
+	if err := m.reserveLatest(ctx); err != nil {
+		return err
 	}
 	defer m.release()
 	m.mu.RLock()
@@ -249,9 +264,15 @@ func (m *Manager) Test(ctx context.Context, input Configuration) error {
 	return m.cfg.Remote.Test(testCtx, input)
 }
 func (m *Manager) StartBackup(trigger string) (Job, error) {
-	if !m.reserve() {
-		return Job{}, ErrBusy
+	if err := m.reserveLatest(m.ctx); err != nil {
+		return Job{}, err
 	}
+	return m.startBackupReserved(trigger)
+}
+
+// Consumes the reservation: validation failure releases it; a launched worker
+// owns it through catalog and history persistence.
+func (m *Manager) startBackupReserved(trigger string) (Job, error) {
 	m.mu.RLock()
 	configuration := m.configuration
 	m.mu.RUnlock()

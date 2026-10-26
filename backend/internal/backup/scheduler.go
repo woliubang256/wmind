@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -15,21 +16,26 @@ func (m *Manager) Tick(now time.Time) {
 	}
 	m.lastTick = minute
 	m.tickMu.Unlock()
-	if m.reserve() {
-		m.reclaimStaging(now)
-		m.release()
+	if err := m.reserveLatest(m.ctx); err != nil {
+		if !errors.Is(err, ErrBusy) {
+			m.cfg.Logger.Warn("backup schedule skipped; current settings unavailable")
+		}
+		return
 	}
+	m.reclaimStaging(now)
 	m.mu.RLock()
 	c := m.configuration
 	m.mu.RUnlock()
 	if !c.Enabled {
+		m.release()
 		return
 	}
 	next, err := Schedule(c.Cron, c.Timezone, minute.Add(-time.Minute))
 	if err != nil || !next[0].Equal(minute) {
+		m.release()
 		return
 	}
-	_, _ = m.StartBackup("schedule") // A busy instance skips instead of queuing.
+	_, _ = m.startBackupReserved("schedule")
 }
 func (m *Manager) Run(ctx context.Context) {
 	for {

@@ -27,8 +27,8 @@ type stagedRestore struct {
 }
 
 func (m *Manager) Inspect(ctx context.Context, owner string, reader io.Reader) (RestorePreview, error) {
-	if !m.reserve() {
-		return RestorePreview{}, ErrBusy
+	if err := m.reserveLatest(ctx); err != nil {
+		return RestorePreview{}, err
 	}
 	defer m.release()
 	m.reclaimStaging(time.Now())
@@ -87,8 +87,8 @@ func (m *Manager) Inspect(ctx context.Context, owner string, reader io.Reader) (
 	return preview, nil
 }
 func (m *Manager) StartRestore(owner, token string) (Job, error) {
-	if !m.reserve() {
-		return Job{}, ErrBusy
+	if err := m.reserveLatest(m.ctx); err != nil {
+		return Job{}, err
 	}
 	m.mu.Lock()
 	staged, ok := m.staged[token]
