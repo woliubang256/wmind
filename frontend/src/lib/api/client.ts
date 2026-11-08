@@ -2,8 +2,30 @@ import i18n from '@/lib/i18n';
 import { ApiError, type ApiErrorEnvelope } from './errors';
 import type { Paged, Pagination } from './types';
 
-const API_BASE = '/api/v1';
-let accessToken: string | null = null;
+/**
+ * 桌面壳注入的运行时配置（`window.__WMIND__`）。Web 形态下不存在，
+ * 因此下面的读取必须容忍 undefined。
+ *
+ * 桌面本地模式没有登录页：壳在首屏 HTML 里注入一个长期访问令牌，前端
+ * 直接拿它调接口；`apiBase` 也由壳给出，前端不再假设自己跑在站点根路径。
+ */
+interface DesktopRuntime {
+  mode?: 'local' | 'cloud';
+  version?: string;
+  apiBase?: string;
+  authToken?: string;
+}
+
+declare global {
+  interface Window {
+    __WMIND__?: DesktopRuntime;
+  }
+}
+
+const desktopRuntime = typeof window === 'undefined' ? undefined : window.__WMIND__;
+
+const API_BASE = desktopRuntime?.apiBase ?? '/api/v1';
+let accessToken: string | null = desktopRuntime?.authToken ?? null;
 let onUnauthorized: (() => void) | undefined;
 let refreshInFlight: Promise<AuthSession | null> | null = null;
 let sessionGeneration = 0;

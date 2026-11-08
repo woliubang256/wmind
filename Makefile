@@ -35,6 +35,10 @@ test-frontend: ## 运行前端类型检查、单元测试与生产构建
 
 # ── 构建与检查 ───────────────────────────────────────
 
+.PHONY: build-desktop
+build-desktop: ## 构建桌面客户端（前端产物内嵌，本机平台）
+	node scripts/build-desktop.mjs
+
 .PHONY: build
 build: ## 构建后端静态二进制到 backend/bin/
 	cd $(BACKEND) && CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/wmind-server ./cmd/server

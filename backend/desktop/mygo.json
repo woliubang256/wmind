@@ -1,0 +1,15 @@
+{
+  "name": "wmind",
+  "slug": "wmind",
+  "identifier": "app.wmind.desktop",
+  "version": "1.0.0",
+  "copyright": "© 2026 wmind",
+  "publisher": "wmind",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "out": "build",
+  "fileAssociations": [
+    { "ext": ["wmind"], "name": "wmind 思维导图", "mimeType": "application/x-wmind-map" },
+    { "ext": ["xmind"], "name": "XMind 思维导图", "mimeType": "application/x-xmind" }
+  ]
+}

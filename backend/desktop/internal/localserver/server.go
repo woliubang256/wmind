@@ -41,6 +41,9 @@ type Config struct {
 	Mode string
 	// Version 注入给前端的应用版本。
 	Version string
+	// AuthToken 注入给前端的访问令牌：本地模式没有登录页，前端拿它直接
+	// 调 API。
+	AuthToken string
 }
 
 // New 组装内层服务的 Handler。
@@ -105,17 +108,30 @@ func (s *server) setToken(w http.ResponseWriter) {
 }
 
 // isDocumentRequest 判断这是不是一次「页面导航」。
+//
+// 两个条件都要满足，缺一不可：
+//   - 请求头声明这是文档（老 webview 没有 Sec-Fetch-*，退回按路径判断）；
+//   - 路径看起来是页面，而不是 API 或上传资源。
+//
+// 只按请求头判断是不行的：本机任何进程都能伪造 Sec-Fetch-Dest，那样守卫
+// 就形同虚设；只按路径判断也不行，脚本路径也可能是无扩展名的。
 func isDocumentRequest(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/uploads/") {
+		return false
+	}
+	pageLike := path == "/" || strings.HasSuffix(path, "/") ||
+		strings.HasSuffix(path, ".html") || !hasExtension(path)
+	if !pageLike {
 		return false
 	}
 	if dest := r.Header.Get("Sec-Fetch-Dest"); dest != "" {
 		return dest == "document" || dest == "iframe"
 	}
-	// 老 webview 没有 Sec-Fetch-*：退回按路径判断，只放行目录式路径
-	// 与 .html，脚本与样式都有扩展名，不会被误放。
-	path := r.URL.Path
-	return path == "/" || strings.HasSuffix(path, "/") || strings.HasSuffix(path, ".html")
+	return true
 }
 
 // static 提供前端静态资源，并在 HTML 里注入运行时配置。
@@ -168,12 +184,19 @@ func (s *server) servePlaceholder(w http.ResponseWriter, r *http.Request) {
 }
 
 // runtimeScript 是注入到页面里的 <script>，前端读 window.__WMIND__。
+//
+// 注入在首屏 HTML 里而不是用 Eval：前端模块在解析时就会读它，晚一步的
+// 注入会让首次加载走成「未登录」。
 func (s *server) runtimeScript() string {
-	return fmt.Sprintf(`<script>window.__WMIND__=%s;</script>`,
-		jsonObject(map[string]string{
-			"mode":    s.cfg.Mode,
-			"version": s.cfg.Version,
-		}))
+	values := map[string]string{
+		"mode":    s.cfg.Mode,
+		"version": s.cfg.Version,
+		"apiBase": "/api/v1",
+	}
+	if s.cfg.AuthToken != "" {
+		values["authToken"] = s.cfg.AuthToken
+	}
+	return fmt.Sprintf(`<script>window.__WMIND__=%s;</script>`, jsonObject(values))
 }
 
 // inject 把脚本插到 </head> 之前（没有 head 就插到文档开头）。

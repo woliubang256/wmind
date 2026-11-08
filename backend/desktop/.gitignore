@@ -1,0 +1,5 @@
+# 前端产物：由 scripts/build-desktop.mjs 从 frontend/dist 复制而来，不进版本库。
+# 默认构建嵌的是 frontend-placeholder/，所以这里缺席也能 go build。
+/frontend-dist/
+# 本地打包输出
+/build/

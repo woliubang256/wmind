@@ -44,6 +44,20 @@ make verify-notes    # 校验架构决策笔记
 make verify-dialect  # 迁移 parity + 方言分层检查
 ```
 
+桌面客户端（与 Web 并行交付，见 [11-桌面客户端设计](./11-桌面客户端设计.md)）：
+
+```bash
+make build-desktop                              # 构建前端 + 嵌入 + 编译桌面二进制
+node scripts/build-desktop.mjs --skip-frontend   # 只重新编译 Go 侧
+node scripts/build-desktop.mjs --package         # 额外产出安装包（.app/.dmg、NSIS、.deb）
+npm run test:desktop                            # 桌面模块测试（本地库 + 令牌 + 内层服务）
+```
+
+桌面模块是嵌套 Go 模块 `backend/desktop`（要求 Go 1.27.3，mygo 的约束），
+后端服务仍是 Go 1.26.10，两者互不影响。`backend/desktop/frontend-dist/`
+不进版本库：默认构建嵌的是占位页，只有带 `-tags desktopfrontend` 的正式
+构建才嵌入真实前端产物。
+
 界面验收（需要后端与前端都起着，见 [`frontend/e2e/README.md`](../frontend/e2e/README.md)）：
 
 ```bash

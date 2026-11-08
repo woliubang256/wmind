@@ -1,8 +1,8 @@
 // Command desktop is wmind's desktop client entry point.
 //
 // 它把一个 mygo 窗口和一套本机后端进程装在一起：窗口里跑的是与 Web 完全
-// 相同的前端，后端也是同一套 router（见 internal/bootstrap），数据落在
-// 本机 SQLite。默认「本地模式」不需要任何账号，也完全不访问网络。
+// 相同的前端，后端也是同一套 router（internal/bootstrap），数据落在本机
+// SQLite。默认「本地模式」不需要任何账号，也完全不访问网络。
 package main
 
 import (
@@ -11,14 +11,19 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/egoist/mygo"
 
+	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localserver"
+	"github.com/woliubang256/wmind/backend/internal/bootstrap"
 )
 
 // version 由构建时通过 -ldflags 注入（见 scripts/build-desktop.mjs），
@@ -52,44 +57,37 @@ func start() error {
 	if err != nil {
 		return fmt.Errorf("resolve user data directory: %w", err)
 	}
-	if err := os.MkdirAll(userData, 0o700); err != nil {
-		return fmt.Errorf("create user data directory: %w", err)
-	}
-
-	token, err := newToken()
+	paths, err := localmode.ResolvePaths(userData)
 	if err != nil {
 		return err
 	}
-
-	handler, err := localserver.New(localserver.Config{
-		// 后端 router 在下一步接入；现在只验证壳、回环服务与令牌守卫。
-		API:     http.NotFoundHandler(),
-		Token:   token,
-		Mode:    "local",
-		Version: appVersion(),
-	})
+	logger, closeLog, err := newLogger(paths.Root)
 	if err != nil {
 		return err
 	}
+	defer closeLog()
+	slog.SetDefault(logger)
+
+	local, err := assembleLocal(context.Background(), paths, logger, appVersion())
+	if err != nil {
+		return err
+	}
+	// 后端持有数据库与后台任务：窗口关闭时必须先停 HTTP、再关它。
+	defer local.Close()
 
 	ln, err := localserver.Listen()
 	if err != nil {
 		return fmt.Errorf("listen on loopback: %w", err)
 	}
-	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: local.Handler, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("wmind desktop: local server stopped: %v", err)
+			logger.Error("local server stopped", "err", err)
 		}
 	}()
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx)
-	})
 
 	url := "http://" + ln.Addr().String() + "/"
-	log.Printf("wmind desktop: local server listening on %s", url)
+	logger.Info("wmind desktop started", "url", url, "data", paths.Root)
 
 	mygo.NewWindow(mygo.WindowOptions{
 		Title:  "wmind",
@@ -97,7 +95,79 @@ func start() error {
 		Width:  1280,
 		Height: 800,
 	})
+
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+		local.Close()
+	})
 	return nil
+}
+
+// localInstance 是本地模式跑起来之后的一套东西。
+type localInstance struct {
+	// Handler 是内层 HTTP 服务：前端静态资源 + 后端 API。
+	Handler http.Handler
+	// ShellToken 是桌面壳的访问令牌（页面 cookie）。
+	ShellToken string
+	// AccessToken 是注入页面的后端访问令牌。
+	AccessToken string
+	// Close 停止后台任务并关闭数据库，可重复调用。
+	Close func()
+}
+
+// assembleLocal 装配本地模式：本地库 → 后端 → 本地用户 → 令牌 → 内层服务。
+//
+// 抽成函数而不是留在 start 里，是为了让它能在测试里被完整跑一遍——这条链
+// 上的任何一环断掉，桌面版就是一个打不开的窗口。
+func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logger, appVersion string) (*localInstance, error) {
+	secrets, err := localmode.LoadSecrets(paths.Secrets)
+	if err != nil {
+		return nil, err
+	}
+
+	app, err := bootstrap.New(ctx, localmode.Config(paths, secrets), bootstrap.Options{Logger: logger, Quiet: true})
+	if err != nil {
+		return nil, fmt.Errorf("start local backend: %w", err)
+	}
+
+	user, err := localmode.EnsureUser(ctx, app.Users, time.Now())
+	if err != nil {
+		app.Close()
+		return nil, err
+	}
+	accessToken, err := localmode.Token(secrets.JWTSecret, user)
+	if err != nil {
+		app.Close()
+		return nil, fmt.Errorf("issue local access token: %w", err)
+	}
+
+	shellToken, err := newToken()
+	if err != nil {
+		app.Close()
+		return nil, err
+	}
+
+	handler, err := localserver.New(localserver.Config{
+		API:       app.Handler,
+		Static:    frontendDist(),
+		Token:     shellToken,
+		Mode:      "local",
+		Version:   appVersion,
+		AuthToken: accessToken,
+	})
+	if err != nil {
+		app.Close()
+		return nil, err
+	}
+
+	return &localInstance{
+		Handler:     handler,
+		ShellToken:  shellToken,
+		AccessToken: accessToken,
+		Close:       app.Close,
+	}, nil
 }
 
 // appVersion 返回注入的版本，未注入时退回 mygo 配置里的版本。
@@ -115,4 +185,22 @@ func newToken() (string, error) {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+// newLogger 把日志同时写到 stderr 与数据目录下的文件。
+//
+// 桌面端没有容器日志可看：用户报问题时能拿到文件才是关键。文件按启动
+// 追加，不做轮转（单个文件，量级很小）。
+func newLogger(root string) (*slog.Logger, func(), error) {
+	logDir := filepath.Join(root, "logs")
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
+		return nil, nil, fmt.Errorf("create log directory: %w", err)
+	}
+	file, err := os.OpenFile(filepath.Join(logDir, "wmind.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open log file: %w", err)
+	}
+	w := io.MultiWriter(os.Stderr, file)
+	logger := slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	return logger, func() { _ = file.Close() }, nil
 }

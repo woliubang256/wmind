@@ -115,11 +115,29 @@ func TestSPAFallbackServesInjectedIndex(t *testing.T) {
 		t.Fatalf("期望 200，实际 %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `window.__WMIND__={"mode":"local","version":"1.0.0"}`) {
+	if !strings.Contains(body, `window.__WMIND__={"apiBase":"/api/v1","mode":"local","version":"1.0.0"}`) {
 		t.Fatalf("注入内容不符合预期: %s", body)
 	}
 	if !strings.Contains(body, "</head>") || strings.Index(body, "window.__WMIND__") > strings.Index(body, "</head>") {
 		t.Fatalf("脚本必须在 </head> 之前: %s", body)
+	}
+}
+
+// 本地模式没有登录页：令牌必须随首屏一起注入，且只在配置里给了才注入。
+func TestRuntimeScriptInjectsAuthToken(t *testing.T) {
+	static := fstest.MapFS{
+		"index.html": {Data: []byte("<html><head></head><body></body></html>")},
+	}
+	h := newHandler(t, Config{Static: static, AuthToken: "jwt-token-value"})
+	body := get(h, "/", map[string]string{"Sec-Fetch-Dest": "document"}).Body.String()
+	if !strings.Contains(body, `"authToken":"jwt-token-value"`) {
+		t.Fatalf("没有注入访问令牌: %s", body)
+	}
+
+	withoutToken := newHandler(t, Config{Static: static})
+	body = get(withoutToken, "/", map[string]string{"Sec-Fetch-Dest": "document"}).Body.String()
+	if strings.Contains(body, "authToken") {
+		t.Fatalf("没有令牌时不应注入该字段: %s", body)
 	}
 }
 

@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/woliubang256/wmind/backend/internal/ai"
 	"github.com/woliubang256/wmind/backend/internal/auth"
 	"github.com/woliubang256/wmind/backend/internal/backup"
@@ -41,6 +43,11 @@ type Options struct {
 	Logger *slog.Logger
 	// StartupTimeout 限制数据库连接与迁移的时间，默认 30s。
 	StartupTimeout time.Duration
+	// Quiet 关掉 gin 的路由表打印。
+	//
+	// 桌面端把日志写进用户数据目录，启动时刷一屏路由表只会淹没真正有用的
+	// 那几行；服务端保持默认（开发环境需要它）。
+	Quiet bool
 }
 
 // App 是一套装配完成的依赖。
@@ -60,6 +67,8 @@ type App struct {
 	AI       *ai.Service
 	// Auth 是会话服务，桌面端用它生成/校验本地身份令牌。
 	Auth *service.AuthService
+	// Users 是用户仓储，桌面端用它创建并定位本地用户。
+	Users domain.UserRepo
 
 	closeOnce     sync.Once
 	closeDatabase func()
@@ -87,6 +96,10 @@ func New(ctx context.Context, cfg *config.Config, opts Options) (*App, error) {
 	timeout := opts.StartupTimeout
 	if timeout <= 0 {
 		timeout = 30 * time.Second
+	}
+
+	if opts.Quiet {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	app := &App{Config: cfg, Logger: log}
@@ -269,6 +282,7 @@ func (a *App) assemble(ctx context.Context) error {
 		return err
 	}
 	a.Auth = authSvc
+	a.Users = userRepo
 
 	seeded, err := authSvc.SeedAdmin(ctx, cfg.Admin.Email, cfg.Admin.Password)
 	if err != nil {
