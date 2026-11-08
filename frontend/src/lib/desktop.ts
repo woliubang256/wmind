@@ -62,6 +62,8 @@ export interface CloudStatus {
   connected: boolean;
   serverUrl?: string;
   email?: string;
+  /** 云端账号角色：只有 admin 才看得到「网站设置」。 */
+  role?: 'admin' | 'user' | string;
   lastSyncedAt?: string;
 }
 
@@ -108,6 +110,11 @@ async function desktopRequest<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body.error || `桌面接口失败（${response.status}）`);
   }
   return body.data as T;
+}
+
+/** 用系统浏览器打开远程服务器的管理后台（与 Web 端同一个页面）。 */
+export function openSiteSettings(): Promise<{ opened: boolean }> {
+  return desktopRequest('/desktop/cloud/open-site', { method: 'POST' });
 }
 
 export function fetchDesktopStatus(): Promise<DesktopStatus> {

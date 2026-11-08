@@ -1531,6 +1531,10 @@
       "signIn": "Sign in",
       "signOut": "Sign out",
       "signedInHint": "Signing out only disconnects the cloud. Your local maps stay untouched."
+    },
+    "menu": {
+      "siteSettings": "Site settings",
+      "siteSettingsFailed": "Could not open site settings"
     }
   }
 }

@@ -1531,6 +1531,10 @@
       "signIn": "登录",
       "signOut": "退出登录",
       "signedInHint": "退出登录只会断开云端连接，本地导图不受影响。"
+    },
+    "menu": {
+      "siteSettings": "网站设置",
+      "siteSettingsFailed": "打开网站设置失败"
     }
   }
 }

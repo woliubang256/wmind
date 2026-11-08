@@ -75,15 +75,21 @@ type Deps struct {
 	Login func(ctx context.Context, serverURL, identifier, password string) (*cloud.Client, error)
 	// Updater 是自我更新能力；为空时不挂载更新接口。
 	Updater Updater
+	// OpenExternal 用系统默认浏览器打开 URL；为空时用默认实现（测试替换）。
+	OpenExternal func(url string) error
 }
 
 // New 构造 /desktop/ 的 Handler。
 func New(deps Deps) http.Handler {
+	if deps.OpenExternal == nil {
+		deps.OpenExternal = func(string) error { return errors.New("deskapi: OpenExternal is not configured") }
+	}
 	a := &api{deps: deps}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /desktop/status", a.status)
 	mux.HandleFunc("POST /desktop/cloud/connect", a.connect)
 	mux.HandleFunc("POST /desktop/cloud/disconnect", a.disconnect)
+	mux.HandleFunc("POST /desktop/cloud/open-site", a.openSite)
 	mux.HandleFunc("POST /desktop/sync", a.sync)
 	mux.HandleFunc("GET /desktop/maps/sources", a.sources)
 	mux.HandleFunc("POST /desktop/maps/{uid}/upload", a.upload)
@@ -131,6 +137,7 @@ type cloudStatus struct {
 	Connected    bool   `json:"connected"`
 	ServerURL    string `json:"serverUrl,omitempty"`
 	Email        string `json:"email,omitempty"`
+	Role         string `json:"role,omitempty"`
 	LastSyncedAt string `json:"lastSyncedAt,omitempty"`
 }
 
@@ -156,6 +163,7 @@ func (a *api) status(w http.ResponseWriter, r *http.Request) {
 
 	if creds, err := a.deps.Creds.Load(); err == nil && creds != nil {
 		resp.Cloud.Email = creds.Email
+		resp.Cloud.Role = creds.Role
 		if resp.Cloud.ServerURL == "" {
 			resp.Cloud.ServerURL = creds.ServerURL
 		}
@@ -218,7 +226,7 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 	a.deps.Engine.Connect(session.ServerURL, client)
 	if err := a.deps.Creds.Save(cloudcreds.Credentials{
 		ServerURL: session.ServerURL, Identifier: req.Identifier,
-		Email: session.UserEmail, UserUID: session.UserUID,
+		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,
 		RefreshToken: session.RefreshToken,
 	}, req.Password); err != nil {
 		fail(w, http.StatusInternalServerError, "保存连接信息失败")
@@ -353,6 +361,27 @@ func (a *api) touch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"mapUid": uid}})
+}
+
+// openSite 在系统浏览器里打开远程服务器的管理后台。
+//
+// 桌面端只跟本机回环后端说话，远程站点的管理界面不搬进客户端——
+// 用默认浏览器打开最直接，权限体系也还是服务器自己的。
+func (a *api) openSite(w http.ResponseWriter, r *http.Request) {
+	creds, err := a.deps.Creds.Load()
+	if err != nil || creds == nil || creds.ServerURL == "" {
+		fail(w, http.StatusConflict, "尚未连接云端")
+		return
+	}
+	if creds.Role != "admin" {
+		fail(w, http.StatusForbidden, "只有管理员可以打开网站设置")
+		return
+	}
+	if err := a.deps.OpenExternal(creds.ServerURL + "/admin/settings"); err != nil {
+		fail(w, http.StatusInternalServerError, "打开浏览器失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"opened": true}})
 }
 
 // ── 更新 ────────────────────────────────────────────────────────────────────

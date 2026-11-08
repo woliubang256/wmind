@@ -14,7 +14,6 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -28,14 +27,8 @@ import {
   syncNow,
 } from '@/lib/desktop';
 
-export function AccountDialog({ open, onClose, showSettings = false }: {
-  open: boolean;
-  onClose: () => void;
-  /** 是否显示「系统设置」入口（管理员才有意义）。 */
-  showSettings?: boolean;
-}) {
+export function AccountDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [serverUrl, setServerUrl] = useState('');
   const [identifier, setIdentifier] = useState('');
@@ -121,30 +114,6 @@ export function AccountDialog({ open, onClose, showSettings = false }: {
         )
       }
     >
-      <div className="mb-4 flex flex-wrap gap-3 border-b border-border/70 pb-3 text-sm">
-        <button
-          type="button"
-          className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          onClick={() => {
-            onClose();
-            navigate('/account');
-          }}
-        >
-          {t('nav.account')}
-        </button>
-        {showSettings ? (
-          <button
-            type="button"
-            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            onClick={() => {
-              onClose();
-              navigate('/admin/settings');
-            }}
-          >
-            {t('desktop.systemSettings')}
-          </button>
-        ) : null}
-      </div>
       {connected ? (
         <dl className="grid gap-2 text-sm">
           <div className="flex gap-2">

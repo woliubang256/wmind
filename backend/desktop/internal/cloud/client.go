@@ -68,6 +68,9 @@ type Session struct {
 	RefreshToken string
 	UserUID      string
 	UserEmail    string
+	// Role 是云端账号的角色（admin/user）。桌面端菜单用「网站设置」入口的
+	// 显隐就靠它：只有远程管理员才看得到。
+	Role string
 }
 
 // Client 访问一个云端服务器。
@@ -175,6 +178,7 @@ func Login(ctx context.Context, serverURL, identifier, password string) (*Client
 		client.mu.Lock()
 		client.session.UserUID = result.User.UID
 		client.session.UserEmail = result.User.Email
+		client.session.Role = result.User.Role
 		client.mu.Unlock()
 	}
 	return client, nil
@@ -192,6 +196,7 @@ type loginResult struct {
 	User         struct {
 		UID   string `json:"uid"`
 		Email string `json:"email"`
+		Role  string `json:"role"`
 	} `json:"user"`
 }
 

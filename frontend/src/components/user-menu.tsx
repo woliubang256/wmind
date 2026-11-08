@@ -8,17 +8,24 @@ import { UserAvatar } from './user-avatar';
 import type { AvatarUser } from '@/lib/avatar';
 import { useSiteConfig } from '@/features/site/use-site-config';
 
-export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, displayName }: {
+export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, displayName, siteSettings }: {
   user: AvatarUser;
   links: readonly { to: string; label: string; icon: IconName }[];
   isActive: (to: string) => boolean;
   /**
-   * 给了就直接打开账户弹窗，不展开菜单。
+   * 桌面端菜单里的第一项「账户」：点击打开账户弹窗（登录 / 退出登录）。
    *
-   * 桌面端没有登录页：点账户头像就该弹出「登录云端 / 退出登录」，而不是
-   * 一个指向 /account 的链接。个人设置与系统设置放在弹窗里。
+   * 桌面端没有登录页，账户就是「本地用户 ↔ 云端账号」的开关，做成菜单项
+   * 而不是独立链接，是为了和下面几项保持一致的操作方式。
    */
   onOpenAccount?: () => void;
+  /**
+   * 「网站设置」：登录且远程账号是管理员时才给。
+   *
+   * 它打开的是**远程服务器**的管理后台（和 Web 端一样），桌面端不做代理，
+   * 用系统浏览器打开。
+   */
+  siteSettings?: { label: string; onClick: () => void };
   /** 强制头像（本地用户用品牌 logo）。 */
   avatarSrc?: string;
   /** 强制显示名（本地用户的名字要跟随界面语言）。 */
@@ -71,12 +78,8 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
 
   return <>
     <button ref={trigger} type="button" aria-label={t('nav.userMenu')} title={t('nav.userMenu')}
-      aria-haspopup={onOpenAccount ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? id : undefined}
+      aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
       onClick={() => {
-        if (onOpenAccount) {
-          onOpenAccount();
-          return;
-        }
         if (open) close();
         else setOpenAt(0);
       }}
@@ -103,8 +106,19 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
         } else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
         else if (event.key === 'Tab') close(false);
       }}>
+      {onOpenAccount ? (
+        <div role="none">
+          <button type="button" role="menuitem" tabIndex={-1}
+            onClick={() => { close(false); onOpenAccount(); }}
+            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
+            <Icon name="user" className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">{t('desktop.account.title')}</span>
+          </button>
+          <div role="separator" className="my-1 border-t border-border" />
+        </div>
+      ) : null}
       {links.map(({ to, label, icon }, index) => <div key={to} role="none">
-        {index === 1 ? <div role="separator" className="my-1 border-t border-border" /> : null}
+        {!onOpenAccount && index === 1 ? <div role="separator" className="my-1 border-t border-border" /> : null}
         <Link to={to} role="menuitem" tabIndex={-1} aria-current={isActive(to) ? 'page' : undefined}
           onClick={() => close(false)}
           className={`flex items-center gap-2.5 rounded-md px-3 py-2 outline-none hover:bg-accent focus-visible:bg-accent ${isActive(to) ? 'bg-accent/60 font-medium text-accent-foreground' : ''}`}>
@@ -113,6 +127,17 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
           {to === '/account' ? <span data-app-version className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{displayVersion}</span> : null}
         </Link>
       </div>)}
+      {siteSettings ? (
+        <div role="none">
+          <div role="separator" className="my-1 border-t border-border" />
+          <button type="button" role="menuitem" tabIndex={-1}
+            onClick={() => { close(false); siteSettings.onClick(); }}
+            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
+            <Icon name="globe" className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">{siteSettings.label}</span>
+          </button>
+        </div>
+      ) : null}
     </div>, document.body) : null}
   </>;
 }

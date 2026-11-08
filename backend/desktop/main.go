@@ -231,6 +231,7 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		PreferredLanguages: locale.Preferred,
 		Desktop: deskapi.New(deskapi.Deps{
 			Engine: engine, Store: syncStore, Creds: creds, Version: appVersion, Updater: updates,
+			OpenExternal: mygo.Shell.OpenExternal,
 		}),
 	})
 	if err != nil {
@@ -271,8 +272,17 @@ func restoreCloud(ctx context.Context, engine *syncengine.Engine, creds *deskapi
 		logger.Info("cloud: reconnect skipped", "server", stored.ServerURL, "err", err)
 		return
 	}
-	engine.Connect(client.Session().ServerURL, client)
-	logger.Info("cloud: reconnected", "server", client.Session().ServerURL)
+	session := client.Session()
+	engine.Connect(session.ServerURL, client)
+	// 角色可能在服务器侧被改过（管理员降级）：重连时刷新，菜单里的
+	// 「网站设置」入口才不会被过期的角色骗到。
+	if session.Role != "" && session.Role != stored.Role {
+		stored.Role = session.Role
+		if err := creds.Save(*stored, password); err != nil {
+			logger.Warn("cloud: refresh stored role failed", "err", err)
+		}
+	}
+	logger.Info("cloud: reconnected", "server", session.ServerURL)
 }
 
 // appVersion 返回注入的版本，未注入时退回 mygo 配置里的版本。

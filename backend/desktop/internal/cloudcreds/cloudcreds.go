@@ -29,6 +29,8 @@ type Credentials struct {
 	Email string `json:"email,omitempty"`
 	// UserUID 是云端用户标识。
 	UserUID string `json:"userUid,omitempty"`
+	// Role 是云端账号角色（admin / user）。
+	Role string `json:"role,omitempty"`
 	// Password 是 AES-GCM 加密后的密码（base64）。
 	Password string `json:"password"`
 	// RefreshToken 是上次登录得到的刷新令牌，便于启动时先试刷新。

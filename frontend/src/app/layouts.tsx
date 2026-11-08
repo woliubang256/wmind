@@ -17,6 +17,8 @@ import { authKeys, useCurrentUser } from './auth';
 import { desktopCapabilities, isDesktop } from '@/lib/desktop';
 import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dialog';
 import { AccountDialog } from '@/features/account/account-dialog';
+import { fetchDesktopStatus, openSiteSettings } from '@/lib/desktop';
+import { useQuery } from '@tanstack/react-query';
 
 function LoadingPage() {
   return (
@@ -237,8 +239,25 @@ export function AppLayout() {
    */
   // 桌面端启动后自动检查一次更新；有新版就弹窗（发布说明 + 下载进度）。
   const autoUpdate = useAutoUpdateCheck();
-  // 桌面端点账户头像直接弹账户弹窗（登录云端 / 退出登录），不跳 /account。
+  // 桌面端菜单第一项「账户」打开弹窗（登录云端 / 退出登录）。
   const [accountOpen, setAccountOpen] = useState(false);
+  // 「网站设置」只在登录且远程账号是管理员时出现。
+  const cloudStatus = useQuery({
+    queryKey: ['desktop', 'status'],
+    queryFn: fetchDesktopStatus,
+    enabled: localDesktop,
+    staleTime: 10_000,
+  });
+  const siteSettings = localDesktop && cloudStatus.data?.cloud.connected && cloudStatus.data?.cloud.role === 'admin'
+    ? {
+        label: t('desktop.menu.siteSettings'),
+        onClick: () => {
+          void openSiteSettings().catch((error) => {
+            toast.error(error instanceof Error ? error.message : t('desktop.menu.siteSettingsFailed'));
+          });
+        },
+      }
+    : undefined;
 
   const titlebarStyle = isDesktop() ? ({ '--app-region': 'drag' } as React.CSSProperties) : undefined;
   const titlebarInset = (side: 'left' | 'right') =>
@@ -295,6 +314,7 @@ export function AppLayout() {
                 links={userLinks}
                 isActive={isActive}
                 onOpenAccount={localDesktop ? () => setAccountOpen(true) : undefined}
+                siteSettings={siteSettings}
                 avatarSrc={localDesktop ? publicAssetUrl('/wmind-logo.jpg') : undefined}
                 displayName={localDesktop ? t('desktop.localUser') : undefined}
               />
@@ -330,11 +350,7 @@ export function AppLayout() {
       <MobileNav open={navOpen} links={links} isActive={isActive} onClose={() => setNavOpen(false)} />
 
       <UpdateDialog update={autoUpdate.update} open={autoUpdate.open} onClose={autoUpdate.close} />
-      <AccountDialog
-        open={accountOpen}
-        onClose={() => setAccountOpen(false)}
-        showSettings={user?.role === 'admin'}
-      />
+      <AccountDialog open={accountOpen} onClose={() => setAccountOpen(false)} />
 
       {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>
