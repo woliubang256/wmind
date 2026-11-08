@@ -26,8 +26,9 @@ ROOT = Path(__file__).resolve().parent.parent
 RESOURCES = ROOT / "backend" / "desktop" / "resources"
 
 W, H = 660, 400
-APP_CENTER = (200, 300)
-FOLDER_CENTER = (460, 300)
+# 内容整体偏上：底部留白比顶部多，视觉重心在窗口中上部。
+APP_CENTER = (200, 272)
+FOLDER_CENTER = (460, 272)
 
 TITLE_FONTS = [
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
@@ -54,36 +55,36 @@ def vertical_gradient(size, top, bottom):
     return img.resize((w, h))
 
 
-def curved_arrow(draw, start, end, bend, color, width):
-    """浅弧 + 箭头：起止同一水平线，中点向上拱起 bend。
+def curved_arrow(draw, start, end, rise, color, width):
+    """三次贝塞尔：先向上抬，再压平，末端切线接近水平——箭头「指向右边」。
 
-    起止等高、弧度放缓，箭头末端切线接近水平，看起来是「指向右边」而不是
-    「扎进文件夹」。两端补圆头，避免直角断口。
+    用对称二次曲线的问题是其末端切线必然向下斜，箭头看起来像扎进文件夹；
+    三次曲线把两个控制点都放在高位，曲线升上去以后走平，箭头才自然。
     """
     (x0, y0), (x1, y1) = start, end
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2 - bend
+    c1 = (x0 + (x1 - x0) * 0.38, min(y0, y1) - rise)
+    c2 = (x0 + (x1 - x0) * 0.72, min(y0, y1) - rise)
     points = []
     for i in range(80):
         t = i / 79
-        x = (1 - t) ** 2 * x0 + 2 * (1 - t) * t * cx + t ** 2 * x1
-        y = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t ** 2 * y1
+        x = (1 - t) ** 3 * x0 + 3 * (1 - t) ** 2 * t * c1[0] + 3 * (1 - t) * t ** 2 * c2[0] + t ** 3 * x1
+        y = (1 - t) ** 3 * y0 + 3 * (1 - t) ** 2 * t * c1[1] + 3 * (1 - t) * t ** 2 * c2[1] + t ** 3 * y1
         points.append((x, y))
     draw.line(points, fill=color, width=width, joint="curve")
-    for px, py in (points[0], points[-1]):
+    for px, py in (points[0],):
         draw.ellipse((px - width / 2, py - width / 2, px + width / 2, py + width / 2), fill=color)
-    # 箭头：三角形沿曲线末端的切线方向探出，尖端再往前一点点，
-    # 让箭头与弧线连成一个整体而不是两块拼接。
+    # 箭头沿末端切线方向探出。
     (px, py), (qx, qy) = points[-2], points[-1]
     angle = math.atan2(qy - py, qx - px)
-    head = width * 3.2
+    head = width * 3.4
+    tip = (x1 + math.cos(angle) * head * 0.8, y1 + math.sin(angle) * head * 0.8)
+    spread = 0.44
     base = (x1, y1)
-    tip = (x1 + math.cos(angle) * head * 0.85, y1 + math.sin(angle) * head * 0.85)
-    spread = 0.42
     draw.polygon(
         [
             tip,
-            (base[0] - math.cos(angle - spread) * head * 0.55, base[1] - math.sin(angle - spread) * head * 0.55),
-            (base[0] - math.cos(angle + spread) * head * 0.55, base[1] - math.sin(angle + spread) * head * 0.55),
+            (base[0] - math.cos(angle - spread) * head * 0.6, base[1] - math.sin(angle - spread) * head * 0.6),
+            (base[0] - math.cos(angle + spread) * head * 0.6, base[1] - math.sin(angle + spread) * head * 0.6),
         ],
         fill=color,
     )
@@ -127,11 +128,11 @@ def render_raw(scale):
     # 图标之间的弧形箭头。
     curved_arrow(
         draw,
-        (APP_CENTER[0] * scale + 82 * scale, APP_CENTER[1] * scale - 4 * scale),
-        (FOLDER_CENTER[0] * scale - 82 * scale, FOLDER_CENTER[1] * scale - 4 * scale),
-        22 * scale,
+        (APP_CENTER[0] * scale + 80 * scale, APP_CENTER[1] * scale - 6 * scale),
+        (FOLDER_CENTER[0] * scale - 80 * scale, FOLDER_CENTER[1] * scale - 14 * scale),
+        34 * scale,
         (139, 149, 167),
-        max(1, round(9 * scale)),
+        max(1, round(10 * scale)),
     )
     return img.convert("RGB")
 
