@@ -14,6 +14,7 @@ import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useThemeStore } from './theme-store';
 import { authKeys, useCurrentUser } from './auth';
+import { desktopCapabilities } from '@/lib/desktop';
 
 function LoadingPage() {
   return (
@@ -171,18 +172,31 @@ export function AppLayout() {
     }
   };
 
+  /**
+   * 桌面端不显示只有服务器才有的入口。
+   *
+   * 「我的分享」需要一台服务器托管公开链接；「用户管理」是给多用户站点的
+   * 管理员用的；两者在单机桌面版里点进去只会看到空页面或报错。入口按能力
+   * 过滤，而不是在页面里各写一遍判断。
+   */
   const links = [
     { to: '/', label: t('nav.recent'), icon: 'files' as const },
     { to: '/templates', label: t('nav.templates'), icon: 'waypoints' as const },
-    { to: '/shares', label: t('nav.shares'), icon: 'link' as const },
+    ...(desktopCapabilities.shareLinks
+      ? [{ to: '/shares', label: t('nav.shares'), icon: 'link' as const }]
+      : []),
     { to: '/trash', label: t('nav.trash'), icon: 'trash' as const },
   ];
   const adminLinks = user?.role === 'admin'
     ? [
         { to: '/admin', label: t('nav.adminOverview'), icon: 'layout-dashboard' as const },
-        { to: '/admin/users', label: t('nav.adminUsers'), icon: 'shield' as const },
+        ...(desktopCapabilities.userManagement
+          ? [{ to: '/admin/users', label: t('nav.adminUsers'), icon: 'shield' as const }]
+          : []),
         { to: '/admin/settings', label: t('nav.adminSettings'), icon: 'settings' as const },
-        { to: '/admin/audit-logs', label: t('nav.adminAudit'), icon: 'clock' as const },
+        ...(desktopCapabilities.userManagement
+          ? [{ to: '/admin/audit-logs', label: t('nav.adminAudit'), icon: 'clock' as const }]
+          : []),
       ]
     : [];
 
@@ -258,7 +272,15 @@ export function AppLayout() {
             </Button>
             <LocaleSwitcher className="max-sm:[&_[role=combobox]>span]:hidden" />
             <ThemeToggle />
-            <Button variant="ghost" size="icon" className="size-8 sm:size-10" aria-label={t('common.logout')} onClick={() => void signOut()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 sm:size-10"
+              aria-label={t('common.logout')}
+              // 本地模式没有会话可结束：这个按钮按下去只会把用户踢到一个不存在的登录页。
+              hidden={!desktopCapabilities.signOut}
+              onClick={() => void signOut()}
+            >
               <Icon name="logout" className="size-4" />
             </Button>
           </div>

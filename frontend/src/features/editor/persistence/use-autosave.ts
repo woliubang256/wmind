@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useBlocker, useNavigate } from 'react-router';
 import i18n from '@/lib/i18n';
 import { mapApi } from '@/lib/api/maps';
+import { isDesktop, touchMapSyncState } from '@/lib/desktop';
 import type { WmindDocument } from '@/editor/model/types';
 import type { EditorStore, EditorState } from '@/editor/store/editor-store';
 import { createAutosave, type AutosaveConflict, type FlushOutcome } from './autosave';
@@ -93,6 +94,9 @@ export function useAutosave({ uid, store, enabled = true }: UseAutosaveOptions):
         // 已经落盘，草稿没用了。留着它只会在下次打开时弹出「发现本地修改」，
         // 而那份「本地修改」和服务端完全一样。
         clearDraft(uid);
+        // 桌面端：把同步状态标成「有本地改动」，列表上的徽标才会立刻变。
+        // 失败不影响保存——它只是状态提示，下一次全量同步会按内容摘要纠正。
+        if (isDesktop()) void touchMapSyncState(uid).catch(() => undefined);
       },
       onConflict: (found) => {
         store.getState().markConflict(found.version, found.updatedAt);

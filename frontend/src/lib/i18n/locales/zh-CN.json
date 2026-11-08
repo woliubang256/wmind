@@ -1447,5 +1447,60 @@
     "operationFailed": "操作失败，请检查服务器日志。",
     "recoveryFile": "服务器保留的恢复前副本：{{filename}}",
     "selectedValues": "已选：{{values}}"
+  },
+  "desktop": {
+    "source": {
+      "label": "来源",
+      "local": "本地",
+      "synced": "已同步",
+      "dirty": "有本地修改",
+      "conflict": "有冲突",
+      "offline": "离线"
+    },
+    "filter": {
+      "all": "全部",
+      "local": "仅本地",
+      "cloud": "仅云端"
+    },
+    "actions": {
+      "upload": "上传到云端",
+      "resolve": "处理冲突"
+    },
+    "upload": {
+      "success": "已上传到云端",
+      "error": "上传失败"
+    },
+    "sync": {
+      "now": "立即同步",
+      "done": "同步完成：下载 {{pulled}} · 上传 {{pushed}} · 删除 {{deleted}}",
+      "error": "同步失败"
+    },
+    "cloud": {
+      "title": "云端连接",
+      "hint": "连接自托管服务器后，可以把本地导图上传到云端，并在多台设备之间同步。",
+      "server": "服务器地址",
+      "serverPlaceholder": "https://wmind.example.com",
+      "identifier": "账号",
+      "identifierPlaceholder": "邮箱或用户名",
+      "password": "密码",
+      "connect": "连接",
+      "connecting": "连接中…",
+      "disconnect": "断开连接",
+      "connected": "已连接",
+      "notConnected": "未连接",
+      "email": "登录账号",
+      "lastSync": "上次同步：{{time}}",
+      "never": "尚未同步",
+      "connectSuccess": "已连接云端",
+      "disconnectSuccess": "已断开云端连接",
+      "connectError": "连接失败"
+    },
+    "conflict": {
+      "title": "这张导图在两端都被修改过",
+      "body": "请选择保留哪一侧的内容。放弃的那一侧改动不会保留。",
+      "keepLocal": "用本地版本覆盖云端",
+      "keepRemote": "放弃本地修改，采用云端版本",
+      "resolved": "冲突已处理"
+    }
   }
 }

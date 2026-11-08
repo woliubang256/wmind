@@ -29,8 +29,18 @@ import { formatBytes, formatNumber } from '@/lib/format';
 import { IMPORT_LIMITS } from '@/editor/import/limits';
 import { createStarterDocument } from '@/features/editor/demo-document';
 import { useSiteConfig } from '@/features/site/use-site-config';
+import { useQuery } from '@tanstack/react-query';
+import {
+  desktopCapabilities,
+  fetchMapSources,
+  isDesktop,
+  sourceLabelKey,
+  uploadMapToCloud,
+  type MapSource,
+} from '@/lib/desktop';
 import { mapKeys } from './queries';
 import { MapCard } from './map-card';
+import { SourceBadge } from './source-badge';
 import { LoadingState } from '@/components/ui/loading-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ShareDialog } from '@/features/share/share-dialog';
@@ -70,6 +80,15 @@ export function RecentPage() {
   const [sharing, setSharing] = useState<MapSummary | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [deleting, setDeleting] = useState<MapSummary | null>(null);
+  // 桌面端才有「来源」概念：Web 形态下 sources 恒为空，筛选器也不渲染。
+  const desktop = isDesktop();
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'cloud'>('all');
+  const sources = useQuery({
+    queryKey: ['desktop', 'map-sources'],
+    queryFn: fetchMapSources,
+    enabled: desktop,
+    staleTime: 5_000,
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(keyword.trim()), SEARCH_DEBOUNCE_MS);
@@ -89,6 +108,31 @@ export function RecentPage() {
 
   const items = useMemo(() => maps.data?.pages.flatMap((page) => page.items) ?? [], [maps.data]);
   const total = maps.data?.pages[0]?.pagination.total ?? 0;
+
+  /**
+   * 来源筛选在客户端做。
+   *
+   * 服务端不知道「本地/云端」——那是客户端自己的同步状态。数据量是「当前
+   * 已加载的一页列表」，在这里过滤既不会漏也不会多请求。
+   */
+  const sourceOf = useCallback((uid: string): MapSource | undefined => sources.data?.get(uid), [sources.data]);
+  const visibleItems = useMemo(() => {
+    if (!desktop || sourceFilter === 'all') return items;
+    return items.filter((map) => {
+      const source = sources.data?.get(map.uid);
+      const isCloud = source !== undefined && source.state !== 'local-only';
+      return sourceFilter === 'cloud' ? isCloud : !isCloud;
+    });
+  }, [desktop, items, sourceFilter, sources.data]);
+
+  const upload = useMutation({
+    mutationFn: (uid: string) => uploadMapToCloud(uid),
+    onSuccess: () => {
+      toast.success(t('desktop.upload.success'));
+      void queryClient.invalidateQueries({ queryKey: ['desktop', 'map-sources'] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('desktop.upload.error')),
+  });
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: mapKeys.lists() });
@@ -253,6 +297,19 @@ export function RecentPage() {
             { value: 'created', label: t('maps.sort.created') },
           ]}
         />
+        {desktop ? (
+          <Select
+            value={sourceFilter}
+            onChange={(next) => setSourceFilter(next as 'all' | 'local' | 'cloud')}
+            aria-label={t('desktop.source.label')}
+            className="h-10 w-auto"
+            options={[
+              { value: 'all', label: t('desktop.filter.all') },
+              { value: 'local', label: t('desktop.filter.local') },
+              { value: 'cloud', label: t('desktop.filter.cloud') },
+            ]}
+          />
+        ) : null}
         <span className="ml-auto text-sm text-muted-foreground">
           {maps.isPending ? null : t('maps.count', { count: formatNumber(total) })}
         </span>
@@ -286,11 +343,15 @@ export function RecentPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {items.map((map) => (
+            {visibleItems.map((map) => {
+              const source = sourceOf(map.uid);
+              const labelKey = desktop ? sourceLabelKey(source, map.updatedAt) : null;
+              return (
               <MapCard
                 key={map.uid}
                 map={map}
                 busy={busy}
+                badge={labelKey ? <SourceBadge kind={labelKey} /> : undefined}
                 actions={[
                   {
                     label: t('maps.actions.rename'),
@@ -305,11 +366,20 @@ export function RecentPage() {
                     icon: 'copy',
                     onClick: () => duplicate.mutate(map.uid),
                   },
-                  {
-                    label: t('maps.actions.share'),
-                    icon: 'link',
-                    onClick: () => setSharing(map),
-                  },
+                  ...(desktopCapabilities.shareLinks
+                    ? [{
+                        label: t('maps.actions.share'),
+                        icon: 'link' as const,
+                        onClick: () => setSharing(map),
+                      }]
+                    : []),
+                  ...(desktop && (!source || source.state === 'local-only')
+                    ? [{
+                        label: t('desktop.actions.upload'),
+                        icon: 'globe' as const,
+                        onClick: () => upload.mutate(map.uid),
+                      }]
+                    : []),
                   {
                     label: t('maps.actions.delete'),
                     icon: 'trash',
@@ -318,7 +388,8 @@ export function RecentPage() {
                   },
                 ]}
               />
-            ))}
+              );
+            })}
           </div>
 
           <div ref={sentinelRef} className="flex justify-center pt-2">

@@ -1447,5 +1447,60 @@
     "operationFailed": "Operation failed. Check the server logs.",
     "recoveryFile": "Recovery copy retained on the server: {{filename}}",
     "selectedValues": "Selected: {{values}}"
+  },
+  "desktop": {
+    "source": {
+      "label": "Source",
+      "local": "Local",
+      "synced": "Synced",
+      "dirty": "Local changes",
+      "conflict": "Conflict",
+      "offline": "Offline"
+    },
+    "filter": {
+      "all": "All",
+      "local": "Local only",
+      "cloud": "Cloud only"
+    },
+    "actions": {
+      "upload": "Upload to cloud",
+      "resolve": "Resolve conflict"
+    },
+    "upload": {
+      "success": "Uploaded to cloud",
+      "error": "Upload failed"
+    },
+    "sync": {
+      "now": "Sync now",
+      "done": "Sync finished: pulled {{pulled}} · pushed {{pushed}} · deleted {{deleted}}",
+      "error": "Sync failed"
+    },
+    "cloud": {
+      "title": "Cloud connection",
+      "hint": "Connect to your self-hosted server to upload local maps and sync them across devices.",
+      "server": "Server address",
+      "serverPlaceholder": "https://wmind.example.com",
+      "identifier": "Account",
+      "identifierPlaceholder": "Email or username",
+      "password": "Password",
+      "connect": "Connect",
+      "connecting": "Connecting…",
+      "disconnect": "Disconnect",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "email": "Signed in as",
+      "lastSync": "Last sync: {{time}}",
+      "never": "Never synced",
+      "connectSuccess": "Cloud connected",
+      "disconnectSuccess": "Cloud disconnected",
+      "connectError": "Connection failed"
+    },
+    "conflict": {
+      "title": "This map changed on both sides",
+      "body": "Choose which side to keep. Changes on the other side are discarded.",
+      "keepLocal": "Overwrite cloud with local version",
+      "keepRemote": "Discard local changes and use the cloud version",
+      "resolved": "Conflict resolved"
+    }
   }
 }

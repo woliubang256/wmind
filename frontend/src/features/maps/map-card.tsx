@@ -74,15 +74,23 @@ export interface MapCardProps {
    * 「导图不存在」。渲染成不可点的容器比渲染成死链接诚实。
    */
   href?: string | null;
+  /**
+   * 来源徽标（本地 / 云端 / 有本地修改 / 有冲突）。
+   *
+   * 只在桌面端传入：Web 形态没有「本地导图」这回事，凭空显示一个「云端」
+   * 徽标只会制造疑问。
+   */
+  badge?: ReactNode;
 }
 
-export function MapCard({ map, actions, busy = false, meta, href }: MapCardProps) {
+export function MapCard({ map, actions, busy = false, meta, href, badge }: MapCardProps) {
   const { t } = useTranslation();
   const target = href === undefined ? `/maps/${map.uid}` : href;
 
   const body = (
     <>
       <div className="relative grid aspect-[16/10] place-items-center overflow-hidden border-b border-border/60 bg-secondary/30">
+        {badge ? <div className="absolute left-2 top-2 z-10">{badge}</div> : null}
         {map.thumbnailUrl === '' ? (
           // 还没有缩略图：给一个淡图标而不是空白。空白会让人以为加载失败。
           <Icon name="waypoints" className="size-10 text-muted-foreground/40" strokeWidth={1.2} />
