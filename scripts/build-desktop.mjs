@@ -239,11 +239,12 @@ function packageAppImage(platform, version) {
   mkdirSync(join(appDir, 'usr', 'share', 'applications'), { recursive: true });
   mkdirSync(join(appDir, 'usr', 'share', 'icons', 'hicolor', '256x256', 'apps'), { recursive: true });
 
-  // 应用文件（可执行 + resources），跳过打包产物本身。
+  // 只拷应用本身（可执行 + resources），打包产物与安装脚本不进 AppDir。
+  const skipped = new Set(['PKGBUILD', 'install.sh', 'install.ps1', 'SHA256SUMS', 'wmind.AppDir']);
   for (const name of readdirSync(dir)) {
     if (name.endsWith('.tar.gz') || name.endsWith('.deb') || name.endsWith('.zip') || name.endsWith('.AppImage')) continue;
     if (name.startsWith('update-') && name.endsWith('.json')) continue;
-    if (name === 'wmind.AppDir') continue;
+    if (skipped.has(name)) continue;
     const from = join(dir, name);
     if (name === slug) {
       cpSync(from, join(appDir, 'usr', 'bin', slug));
@@ -275,6 +276,14 @@ Categories=Office;Graphics;
 Terminal=false
 StartupWMClass=wmind
 `);
+
+  // WMIND_APPIMAGE_DRYRUN=1：只生成 AppDir 不调 appimagetool，用来在非 Linux
+  // 机器上检查目录结构与 AppRun 是否正确（CI 之外的快速自检）。
+  if (process.env.WMIND_APPIMAGE_DRYRUN === '1') {
+    console.log(`  （dry-run）AppDir: ${appDir}`);
+    for (const entry of readdirSync(appDir)) console.log(`    ${entry}`);
+    return;
+  }
 
   const tool = appImageTool();
   if (!tool) {
@@ -424,7 +433,7 @@ function packageApps(platforms, version) {
   // appimagetool 只有 Linux 版，所以这一步在 macOS 上跳过、由 CI 的 ubuntu 作业完成。
   for (const platform of platforms) {
     if (!platform.startsWith('linux/')) continue;
-    if (process.platform !== 'linux') {
+    if (process.platform !== 'linux' && process.env.WMIND_APPIMAGE_DRYRUN !== '1') {
       console.log(`  （跳过 AppImage：appimagetool 只能在 Linux 上运行，${platform} 的 AppImage 由 CI 产出）`);
       continue;
     }
