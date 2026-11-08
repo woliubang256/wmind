@@ -130,15 +130,90 @@ function buildUniversal(goos, dir, output, version) {
  */
 function createDmg(appPath, version, dir, label) {
   const stage = mkdtempSync(join(tmpdir(), 'wmind-dmg-'));
+  const rwImage = join(stage, '..', `wmind-${version}-${label}-rw.dmg`);
   try {
     cpSync(appPath, join(stage, 'wmind.app'), { recursive: true, dereference: false });
     symlinkSync('/Applications', join(stage, 'Applications'));
+
     const dmg = join(dir, `wmind-${version}-${label}.dmg`);
-    run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDZO', '-fs', 'HFS+', dmg]);
+    const plain = ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDZO', '-fs', 'HFS+', dmg];
+
+    // 磁盘映像的图标只能在挂载后写进卷根（macOS 13 的 hdiutil 没有 -volicon）。
+    // 拿不到 SetFile 或任何一步失败都退回「没有卷图标」的普通 dmg：图标是
+    // 装饰，不该让出包失败。
+    const icns = join(stage, '..', `wmind-${version}-${label}.icns`);
+    let withIcon = false;
+    if (existsSync(join(DESKTOP, 'resources', 'icon.png')) && hasCommand('SetFile')) {
+      try {
+        makeIcns(join(DESKTOP, 'resources', 'icon.png'), icns);
+        withIcon = true;
+      } catch {
+        withIcon = false;
+      }
+    }
+    if (!withIcon) {
+      run('hdiutil', plain);
+      return dmg;
+    }
+
+    try {
+      run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDRW', '-fs', 'HFS+', rwImage]);
+      const mount = attachImage(rwImage);
+      try {
+        cpSync(icns, join(mount, '.VolumeIcon.icns'));
+        run('SetFile', ['-a', 'C', mount]);
+      } finally {
+        run('hdiutil', ['detach', mount, '-quiet']);
+      }
+      run('hdiutil', ['convert', rwImage, '-format', 'UDZO', '-o', dmg]);
+    } catch {
+      run('hdiutil', plain);
+    }
     return dmg;
   } finally {
     rmSync(stage, { recursive: true, force: true });
+    rmSync(rwImage, { force: true });
+    rmSync(join(stage, '..', `wmind-${version}-${label}.icns`), { force: true });
   }
+}
+
+/** 挂载磁盘映像并返回挂载点（卷名带空格，不能按列切分）。 */
+function attachImage(image) {
+  const out = execFileSync('hdiutil', ['attach', '-nobrowse', '-readwrite', image], { encoding: 'utf8' });
+  const match = out.split('\n').map((line) => line.trim()).find((line) => line.includes('/Volumes/'));
+  if (!match) throw new Error('hdiutil attach did not report a mount point');
+  return match.slice(match.indexOf('/Volumes/'));
+}
+
+function hasCommand(name) {
+  try {
+    execFileSync('which', [name], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 把 1024 的 PNG 转成 .icns。
+ *
+ * 用系统自带的 sips + iconutil 而不是引一个图像库：这两条命令在所有受支持的
+ * macOS 上都在，而且不改变仓库依赖。
+ */
+function makeIcns(pngPath, outPath) {
+  const iconset = `${outPath}.iconset`;
+  mkdirSync(iconset, { recursive: true });
+  const sizes = [16, 32, 128, 256, 512];
+  for (const size of sizes) {
+    for (const scale of [1, 2]) {
+      const pixels = size * scale;
+      const name = `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`;
+      run('sips', ['-z', String(pixels), String(pixels), pngPath, '--out', join(iconset, name)]);
+    }
+  }
+  run('iconutil', ['-c', 'icns', iconset, '-o', outPath]);
+  rmSync(iconset, { recursive: true, force: true });
+  return outPath;
 }
 
 // packageApps 用 mygo 的 CLI 生成平台安装包（.app/.dmg、NSIS、.deb）。
