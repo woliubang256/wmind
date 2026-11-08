@@ -1521,6 +1521,15 @@
       "current": "Current version",
       "error": "Could not check for updates",
       "available": "Version {{version}} is available"
+    },
+    "localUser": "Local user",
+    "systemSettings": "System settings",
+    "account": {
+      "title": "Account",
+      "hint": "Sign in to your self-hosted server to upload local maps and sync them across devices.",
+      "signIn": "Sign in",
+      "signOut": "Sign out",
+      "signedInHint": "Signing out only disconnects the cloud. Your local maps stay untouched."
     }
   }
 }

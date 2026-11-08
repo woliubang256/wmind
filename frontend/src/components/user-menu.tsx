@@ -8,10 +8,21 @@ import { UserAvatar } from './user-avatar';
 import type { AvatarUser } from '@/lib/avatar';
 import { useSiteConfig } from '@/features/site/use-site-config';
 
-export function UserMenu({ user, links, isActive }: {
+export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, displayName }: {
   user: AvatarUser;
   links: readonly { to: string; label: string; icon: IconName }[];
   isActive: (to: string) => boolean;
+  /**
+   * 给了就直接打开账户弹窗，不展开菜单。
+   *
+   * 桌面端没有登录页：点账户头像就该弹出「登录云端 / 退出登录」，而不是
+   * 一个指向 /account 的链接。个人设置与系统设置放在弹窗里。
+   */
+  onOpenAccount?: () => void;
+  /** 强制头像（本地用户用品牌 logo）。 */
+  avatarSrc?: string;
+  /** 强制显示名（本地用户的名字要跟随界面语言）。 */
+  displayName?: string;
 }) {
   const { t } = useTranslation();
   const { config } = useSiteConfig();
@@ -60,8 +71,15 @@ export function UserMenu({ user, links, isActive }: {
 
   return <>
     <button ref={trigger} type="button" aria-label={t('nav.userMenu')} title={t('nav.userMenu')}
-      aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
-      onClick={() => open ? close() : setOpenAt(0)}
+      aria-haspopup={onOpenAccount ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? id : undefined}
+      onClick={() => {
+        if (onOpenAccount) {
+          onOpenAccount();
+          return;
+        }
+        if (open) close();
+        else setOpenAt(0);
+      }}
       onKeyDown={(event) => {
         if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
           event.preventDefault();
@@ -69,8 +87,8 @@ export function UserMenu({ user, links, isActive }: {
         }
       }}
       className="flex h-10 shrink-0 items-center gap-1 rounded-lg px-1 text-sm text-muted-foreground outline-none hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring sm:gap-2 sm:px-2">
-      <UserAvatar user={user} className="size-7 sm:size-8" />
-      <span className="hidden max-w-32 truncate lg:inline">{user.nickname?.trim() || user.username}</span>
+      <UserAvatar user={user} src={avatarSrc} className="size-7 sm:size-8" />
+      <span className="hidden max-w-32 truncate lg:inline">{displayName?.trim() || user.nickname?.trim() || user.username}</span>
       <Icon name="chevron-down" className={`size-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
     {open && placement ? createPortal(<div id={id} ref={attachMenu} role="menu" aria-label={t('nav.userMenu')}

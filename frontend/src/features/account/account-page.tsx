@@ -28,13 +28,24 @@ export function AccountPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{t('account.title')}</h1>
       </header>
-      <AvatarCard user={user} />
-      <ProfileCard user={user} />
-      <PasswordCard />
-      {/* 桌面端才有云端连接与应用更新：Web 形态本身就是「云端」。 */}
-      {isDesktop() ? <CloudCard /> : null}
-      {isDesktop() ? <UpdateCard /> : null}
-      <TwoFactorCard userUID={user.uid} />
+      {/*
+        桌面端（本地模式）只有本机用户：没有密码、没有两步验证，改邮箱还会
+        破坏「按邮箱定位本地用户」的逻辑（下次启动会当成新用户再建一个）。
+        所以这些卡片在桌面端整体隐藏，只留云端连接与应用更新。
+      */}
+      {isDesktop() ? (
+        <>
+          <CloudCard />
+          <UpdateCard />
+        </>
+      ) : (
+        <>
+          <AvatarCard user={user} />
+          <ProfileCard user={user} />
+          <PasswordCard />
+          <TwoFactorCard userUID={user.uid} />
+        </>
+      )}
     </div>
   );
 }

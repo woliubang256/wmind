@@ -16,6 +16,7 @@ import { useThemeStore } from './theme-store';
 import { authKeys, useCurrentUser } from './auth';
 import { desktopCapabilities, isDesktop } from '@/lib/desktop';
 import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dialog';
+import { AccountDialog } from '@/features/account/account-dialog';
 
 function LoadingPage() {
   return (
@@ -180,6 +181,7 @@ export function AppLayout() {
    * 管理员用的；两者在单机桌面版里点进去只会看到空页面或报错。入口按能力
    * 过滤，而不是在页面里各写一遍判断。
    */
+  const localDesktop = isDesktop();
   const links = [
     { to: '/', label: t('nav.recent'), icon: 'files' as const },
     { to: '/templates', label: t('nav.templates'), icon: 'waypoints' as const },
@@ -194,7 +196,8 @@ export function AppLayout() {
         ...(desktopCapabilities.userManagement
           ? [{ to: '/admin/users', label: t('nav.adminUsers'), icon: 'shield' as const }]
           : []),
-        { to: '/admin/settings', label: t('nav.adminSettings'), icon: 'settings' as const },
+        // 桌面端这是本机配置（AI、备份、更新），叫「网站设置」名不副实。
+        { to: '/admin/settings', label: localDesktop ? t('desktop.systemSettings') : t('nav.adminSettings'), icon: 'settings' as const },
         ...(desktopCapabilities.userManagement
           ? [{ to: '/admin/audit-logs', label: t('nav.adminAudit'), icon: 'clock' as const }]
           : []),
@@ -234,6 +237,8 @@ export function AppLayout() {
    */
   // 桌面端启动后自动检查一次更新；有新版就弹窗（发布说明 + 下载进度）。
   const autoUpdate = useAutoUpdateCheck();
+  // 桌面端点账户头像直接弹账户弹窗（登录云端 / 退出登录），不跳 /account。
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const titlebarStyle = isDesktop() ? ({ '--app-region': 'drag' } as React.CSSProperties) : undefined;
   const titlebarInset = (side: 'left' | 'right') =>
@@ -284,7 +289,16 @@ export function AppLayout() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1">
-            {user ? <UserMenu user={user} links={userLinks} isActive={isActive} /> : null}
+            {user ? (
+              <UserMenu
+                user={user}
+                links={userLinks}
+                isActive={isActive}
+                onOpenAccount={localDesktop ? () => setAccountOpen(true) : undefined}
+                avatarSrc={localDesktop ? publicAssetUrl('/wmind-logo.jpg') : undefined}
+                displayName={localDesktop ? t('desktop.localUser') : undefined}
+              />
+            ) : null}
             <Button
               variant="ghost"
               size="icon"
@@ -316,6 +330,11 @@ export function AppLayout() {
       <MobileNav open={navOpen} links={links} isActive={isActive} onClose={() => setNavOpen(false)} />
 
       <UpdateDialog update={autoUpdate.update} open={autoUpdate.open} onClose={autoUpdate.close} />
+      <AccountDialog
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        showSettings={user?.role === 'admin'}
+      />
 
       {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>

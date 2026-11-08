@@ -1521,6 +1521,15 @@
       "current": "当前版本",
       "error": "检查更新失败",
       "available": "有新版本 {{version}} 可用"
+    },
+    "localUser": "本地用户",
+    "systemSettings": "系统设置",
+    "account": {
+      "title": "账户",
+      "hint": "登录你的自托管服务器，本地导图就能上传到云端并在多台设备间同步。",
+      "signIn": "登录",
+      "signOut": "退出登录",
+      "signedInHint": "退出登录只会断开云端连接，本地导图不受影响。"
     }
   }
 }
