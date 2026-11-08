@@ -1504,6 +1504,23 @@
       "keepLocal": "Overwrite cloud with local version",
       "keepRemote": "Discard local changes and use the cloud version",
       "resolved": "Conflict resolved"
+    },
+    "update": {
+      "title": "Version {{version}} is available",
+      "fromTo": "Current version {{current}} → {{next}}",
+      "install": "Download and install",
+      "later": "Later",
+      "restart": "Restart now",
+      "downloading": "Downloading {{percent}}% ({{done}} / {{total}})",
+      "ready": "Downloaded. It takes effect after a restart.",
+      "failed": "Download or install failed. The current version is unaffected.",
+      "check": "Check for updates",
+      "checking": "Checking…",
+      "upToDate": "You are up to date",
+      "unsupported": "This build cannot update itself",
+      "current": "Current version",
+      "error": "Could not check for updates",
+      "available": "Version {{version}} is available"
     }
   }
 }

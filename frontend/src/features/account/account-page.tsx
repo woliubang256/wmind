@@ -1,5 +1,6 @@
 import { TwoFactorCard } from './two-factor-card';
 import { CloudCard } from './cloud-card';
+import { UpdateCard } from './update-card';
 import { isDesktop } from '@/lib/desktop';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,8 +31,9 @@ export function AccountPage() {
       <AvatarCard user={user} />
       <ProfileCard user={user} />
       <PasswordCard />
-      {/* 桌面端才有云端连接：Web 形态本身就是「云端」。 */}
+      {/* 桌面端才有云端连接与应用更新：Web 形态本身就是「云端」。 */}
       {isDesktop() ? <CloudCard /> : null}
+      {isDesktop() ? <UpdateCard /> : null}
       <TwoFactorCard userUID={user.uid} />
     </div>
   );

@@ -15,6 +15,7 @@ import { useSiteConfig } from '@/features/site/use-site-config';
 import { useThemeStore } from './theme-store';
 import { authKeys, useCurrentUser } from './auth';
 import { desktopCapabilities, isDesktop } from '@/lib/desktop';
+import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dialog';
 
 function LoadingPage() {
   return (
@@ -231,6 +232,9 @@ export function AppLayout() {
    * input, …')` 命中的目标自动放行。首尾两条占位给红绿灯和（Windows 的）
    * 窗口控制按钮让位，宽度由 mygo 运行时注入的 CSS 变量给出。
    */
+  // 桌面端启动后自动检查一次更新；有新版就弹窗（发布说明 + 下载进度）。
+  const autoUpdate = useAutoUpdateCheck();
+
   const titlebarStyle = isDesktop() ? ({ '--app-region': 'drag' } as React.CSSProperties) : undefined;
   const titlebarInset = (side: 'left' | 'right') =>
     isDesktop() ? (
@@ -310,6 +314,8 @@ export function AppLayout() {
       </header>
 
       <MobileNav open={navOpen} links={links} isActive={isActive} onClose={() => setNavOpen(false)} />
+
+      <UpdateDialog update={autoUpdate.update} open={autoUpdate.open} onClose={autoUpdate.close} />
 
       {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>

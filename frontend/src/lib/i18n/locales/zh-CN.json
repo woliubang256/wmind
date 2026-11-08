@@ -1504,6 +1504,23 @@
       "keepLocal": "用本地版本覆盖云端",
       "keepRemote": "放弃本地修改，采用云端版本",
       "resolved": "冲突已处理"
+    },
+    "update": {
+      "title": "发现新版本 {{version}}",
+      "fromTo": "当前版本 {{current}} → {{next}}",
+      "install": "下载并安装",
+      "later": "稍后",
+      "restart": "立即重启",
+      "downloading": "正在下载 {{percent}}%（{{done}} / {{total}}）",
+      "ready": "下载完成，重启后生效。",
+      "failed": "下载或安装失败，当前版本不受影响。",
+      "check": "检查更新",
+      "checking": "检查中…",
+      "upToDate": "已是最新版本",
+      "unsupported": "当前构建不支持自我更新",
+      "current": "当前版本",
+      "error": "检查更新失败",
+      "available": "有新版本 {{version}} 可用"
     }
   }
 }

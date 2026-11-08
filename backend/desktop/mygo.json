@@ -9,7 +9,25 @@
   "icon": "resources/icon.png",
   "out": "build",
   "fileAssociations": [
-    { "ext": ["wmind"], "name": "wmind 思维导图", "mimeType": "application/x-wmind-map" },
-    { "ext": ["xmind"], "name": "XMind 思维导图", "mimeType": "application/x-xmind" }
-  ]
+    {
+      "ext": [
+        "wmind"
+      ],
+      "name": "wmind 思维导图",
+      "mimeType": "application/x-wmind-map"
+    },
+    {
+      "ext": [
+        "xmind"
+      ],
+      "name": "XMind 思维导图",
+      "mimeType": "application/x-xmind"
+    }
+  ],
+  "updates": {
+    "publicKey": "P81ddrdkTBT4KgVbp0eqOwuld8ePe0zINhCgM+FQhm4=",
+    "github": "woliubang256/wmind",
+    "tagPrefix": "desktop-v",
+    "changelog": "CHANGELOG.md"
+  }
 }

@@ -199,6 +199,10 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	// 上次连接过就试着接上：失败只记日志，不阻塞启动——离线优先。
 	restoreCloud(ctx, engine, creds, logger)
 
+	// 更新检查走 mygo 的签名更新源（GitHub releases，标签前缀 desktop-v）。
+	// 开发构建里 Enabled() 为 false，接口会明确返回「不支持」，界面据此隐藏入口。
+	updates := newUpdaterAdapter()
+
 	handler, err := localserver.New(localserver.Config{
 		API:       app.Handler,
 		Static:    frontendDist(),
@@ -206,7 +210,9 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		Mode:      "local",
 		Version:   appVersion,
 		AuthToken: accessToken,
-		Desktop:   deskapi.New(deskapi.Deps{Engine: engine, Store: syncStore, Creds: creds, Version: appVersion}),
+		Desktop: deskapi.New(deskapi.Deps{
+			Engine: engine, Store: syncStore, Creds: creds, Version: appVersion, Updater: updates,
+		}),
 	})
 	if err != nil {
 		app.Close()

@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"math/big"
@@ -39,6 +40,7 @@ type fixture struct {
 	ownerID int64
 	creds   *CredentialStore
 	cloud   *fakeCloudServer
+	store   *syncstate.Store
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -75,7 +77,7 @@ func newFixture(t *testing.T) *fixture {
 	cloud := newFakeCloudServer(t)
 
 	api := New(Deps{Engine: engine, Store: store, Creds: creds, Version: "1.0.0"})
-	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud}
+	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud, store: store}
 }
 
 func (f *fixture) createMap(t *testing.T, uid, title string) *domain.Map {
@@ -423,3 +425,134 @@ func (f *fixture) connect(t *testing.T) {
 }
 
 var _ = context.Background
+
+// ── 更新 ────────────────────────────────────────────────────────────────────
+
+type fakeUpdater struct {
+	enabled    bool
+	found      *UpdateInfo
+	checkErr   error
+	installErr error
+	progress   UpdateProgress
+	installs   int
+	relaunched bool
+}
+
+func (f *fakeUpdater) Enabled() bool { return f.enabled }
+func (f *fakeUpdater) Check(context.Context) (*UpdateInfo, error) {
+	return f.found, f.checkErr
+}
+func (f *fakeUpdater) StartInstall(context.Context) error {
+	if f.installErr != nil {
+		return f.installErr
+	}
+	f.installs++
+	f.progress = UpdateProgress{Phase: "downloading", Downloaded: 512, Total: 2048}
+	return nil
+}
+func (f *fakeUpdater) Progress() UpdateProgress { return f.progress }
+func (f *fakeUpdater) Relaunch()                { f.relaunched = true }
+
+func newUpdateFixture(t *testing.T, updater *fakeUpdater) http.Handler {
+	t.Helper()
+	base := newFixture(t)
+	return New(Deps{
+		Engine: base.engine, Store: base.store, Creds: base.creds, Version: "1.0.0", Updater: updater,
+	})
+}
+
+func TestCheckUpdatesWhenDisabled(t *testing.T) {
+	updater := &fakeUpdater{enabled: false}
+	api := newUpdateFixture(t, updater)
+
+	req := httptest.NewRequest(http.MethodGet, "/desktop/updates/check", nil)
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("状态 = %d %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Data["enabled"] != false || body.Data["available"] != false {
+		t.Fatalf("不支持的构建应当明确返回 enabled=false: %#v", body.Data)
+	}
+}
+
+func TestCheckUpdatesFindsVersion(t *testing.T) {
+	updater := &fakeUpdater{enabled: true, found: &UpdateInfo{Version: "1.1.0", Notes: "- 新功能", Date: "2026-11-09T00:00:00Z"}}
+	api := newUpdateFixture(t, updater)
+
+	req := httptest.NewRequest(http.MethodGet, "/desktop/updates/check", nil)
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
+
+	var body struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Data["available"] != true || body.Data["newVersion"] != "1.1.0" || body.Data["notes"] != "- 新功能" {
+		t.Fatalf("检查结果不对: %#v", body.Data)
+	}
+}
+
+func TestInstallUpdateAndProgress(t *testing.T) {
+	updater := &fakeUpdater{enabled: true, found: &UpdateInfo{Version: "1.1.0"}}
+	api := newUpdateFixture(t, updater)
+
+	req := httptest.NewRequest(http.MethodPost, "/desktop/updates/install", nil)
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("安装 = %d %s", rec.Code, rec.Body.String())
+	}
+	if updater.installs != 1 {
+		t.Fatalf("应当启动一次安装，实际 %d", updater.installs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/desktop/updates/progress", nil)
+	rec = httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
+	var body struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Data["phase"] != "downloading" || body.Data["total"].(float64) != 2048 {
+		t.Fatalf("进度不对: %#v", body.Data)
+	}
+}
+
+func TestInstallUpdateWithoutPendingIsConflict(t *testing.T) {
+	updater := &fakeUpdater{enabled: true, installErr: errors.New("没有待安装的更新")}
+	api := newUpdateFixture(t, updater)
+
+	req := httptest.NewRequest(http.MethodPost, "/desktop/updates/install", nil)
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("没有待安装更新期望 409，实际 %d", rec.Code)
+	}
+}
+
+func TestRelaunchReportsBeforeRestarting(t *testing.T) {
+	updater := &fakeUpdater{enabled: true}
+	api := newUpdateFixture(t, updater)
+
+	req := httptest.NewRequest(http.MethodPost, "/desktop/updates/relaunch", nil)
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("重启 = %d", rec.Code)
+	}
+	if !updater.relaunched {
+		t.Fatal("没有触发重启")
+	}
+}

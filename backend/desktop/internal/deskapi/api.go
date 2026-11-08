@@ -38,6 +38,33 @@ func (c *CredentialStore) Save(creds cloudcreds.Credentials, password string) er
 // Clear 删除凭据。
 func (c *CredentialStore) Clear() error { return cloudcreds.Clear(c.Path) }
 
+// UpdateInfo 是检查更新的结果。
+type UpdateInfo struct {
+	Version string
+	Notes   string
+	Date    string
+}
+
+// UpdateProgress 是下载/安装进度。
+type UpdateProgress struct {
+	Phase      string
+	Downloaded int64
+	Total      int64
+	Error      string
+}
+
+// Updater 是自我更新能力（由桌面入口用 mygo 的更新器实现）。
+//
+// 定义成接口是为了能测：真实的实现要发网络请求、要替换应用本体，测试里
+// 用假实现覆盖「检查 → 安装 → 进度 → 重启」这条链。
+type Updater interface {
+	Enabled() bool
+	Check(ctx context.Context) (*UpdateInfo, error)
+	StartInstall(ctx context.Context) error
+	Progress() UpdateProgress
+	Relaunch()
+}
+
 // Deps 是接口需要的依赖。
 type Deps struct {
 	Engine  *syncengine.Engine
@@ -46,6 +73,8 @@ type Deps struct {
 	Version string
 	// Login 覆盖登录实现，测试用；为空时用 cloud.Login。
 	Login func(ctx context.Context, serverURL, identifier, password string) (*cloud.Client, error)
+	// Updater 是自我更新能力；为空时不挂载更新接口。
+	Updater Updater
 }
 
 // New 构造 /desktop/ 的 Handler。
@@ -60,6 +89,12 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("POST /desktop/maps/{uid}/upload", a.upload)
 	mux.HandleFunc("POST /desktop/maps/{uid}/resolve", a.resolve)
 	mux.HandleFunc("POST /desktop/maps/{uid}/touch", a.touch)
+	if deps.Updater != nil {
+		mux.HandleFunc("GET /desktop/updates/check", a.checkUpdates)
+		mux.HandleFunc("POST /desktop/updates/install", a.installUpdate)
+		mux.HandleFunc("GET /desktop/updates/progress", a.updateProgress)
+		mux.HandleFunc("POST /desktop/updates/relaunch", a.relaunch)
+	}
 	return mux
 }
 
@@ -318,6 +353,54 @@ func (a *api) touch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"mapUid": uid}})
+}
+
+// ── 更新 ────────────────────────────────────────────────────────────────────
+
+func (a *api) checkUpdates(w http.ResponseWriter, r *http.Request) {
+	enabled := a.deps.Updater.Enabled()
+	if !enabled {
+		// 开发构建、或没有配置更新源的构建：告诉前端「不支持」，界面据此
+		// 隐藏入口，而不是显示一个永远失败的重试按钮。
+		writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
+			"enabled": false, "available": false, "version": a.deps.Version,
+		}})
+		return
+	}
+	found, err := a.deps.Updater.Check(r.Context())
+	if err != nil {
+		fail(w, http.StatusBadGateway, "检查更新失败："+errorText(err))
+		return
+	}
+	data := map[string]any{"enabled": true, "available": found != nil, "version": a.deps.Version}
+	if found != nil {
+		data["newVersion"] = found.Version
+		data["notes"] = found.Notes
+		data["date"] = found.Date
+	}
+	writeJSON(w, http.StatusOK, envelope{Data: data})
+}
+
+func (a *api) installUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := a.deps.Updater.StartInstall(r.Context()); err != nil {
+		fail(w, http.StatusConflict, errorText(err))
+		return
+	}
+	writeJSON(w, http.StatusAccepted, envelope{Data: map[string]any{"started": true}})
+}
+
+func (a *api) updateProgress(w http.ResponseWriter, r *http.Request) {
+	p := a.deps.Updater.Progress()
+	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
+		"phase": p.Phase, "downloaded": p.Downloaded, "total": p.Total, "error": p.Error,
+	}})
+}
+
+func (a *api) relaunch(w http.ResponseWriter, r *http.Request) {
+	// 先把响应写出去再重启：Relaunch 会结束进程，晚一步前端就只能看到
+	// 连接被断开，误以为失败。
+	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"relaunching": true}})
+	a.deps.Updater.Relaunch()
 }
 
 func errorText(err error) string {

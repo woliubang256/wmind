@@ -158,3 +158,44 @@ export function sourceLabelKey(source: MapSource | undefined, mapUpdatedAt?: str
   }
   return 'synced';
 }
+
+// ── 应用更新 ────────────────────────────────────────────────────────────────
+
+export interface UpdateCheck {
+  /** 这个构建能不能自我更新（开发构建、未配置更新源时为 false）。 */
+  enabled: boolean;
+  /** 是否有比当前更新的版本。 */
+  available: boolean;
+  /** 当前版本。 */
+  version: string;
+  /** 新版本号（available 为 true 时才有）。 */
+  newVersion?: string;
+  /** 新版本的发布说明（Markdown）。 */
+  notes?: string;
+  /** 新版本的构建时间。 */
+  date?: string;
+}
+
+export interface UpdateProgress {
+  phase: 'idle' | 'downloading' | 'ready' | 'error';
+  downloaded: number;
+  total: number;
+  error?: string;
+}
+
+export function checkForUpdates(): Promise<UpdateCheck> {
+  return desktopRequest<UpdateCheck>('/desktop/updates/check');
+}
+
+export function installUpdate(): Promise<{ started: boolean }> {
+  return desktopRequest('/desktop/updates/install', { method: 'POST' });
+}
+
+export function fetchUpdateProgress(): Promise<UpdateProgress> {
+  return desktopRequest<UpdateProgress>('/desktop/updates/progress');
+}
+
+/** 重启应用以完成更新（调用后进程会结束，所以不等待后续请求）。 */
+export function relaunchApp(): Promise<{ relaunching: boolean }> {
+  return desktopRequest('/desktop/updates/relaunch', { method: 'POST' });
+}

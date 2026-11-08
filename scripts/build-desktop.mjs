@@ -12,7 +12,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -216,6 +216,25 @@ function makeIcns(pngPath, outPath) {
   return outPath;
 }
 
+/**
+ * 更新包的签名私钥。
+ *
+ * 私钥绝不入库：优先取环境变量（CI 用），否则读本机 mygo 的默认密钥目录。
+ * 拿不到就照常出包，只是不写更新清单——安装好的旧版本无法据此升级，这一点
+ * 必须让发布的人看见，所以打一行提示。
+ */
+function updaterPrivateKey() {
+  if (process.env.MYGO_UPDATER_PRIVATE_KEY) return process.env.MYGO_UPDATER_PRIVATE_KEY;
+  const candidates = [
+    join(homedir(), 'Library', 'Application Support', 'mygo', 'update-keys', 'mygo-update.key'),
+    join(homedir(), '.config', 'mygo', 'update-keys', 'mygo-update.key'),
+  ];
+  for (const path of candidates) {
+    if (existsSync(path)) return readFileSync(path, 'utf8').trim();
+  }
+  return undefined;
+}
+
 // packageApps 用 mygo 的 CLI 生成平台安装包（.app/.dmg、NSIS、.deb）。
 //
 // 前端嵌入靠 GOFLAGS 的构建标签，版本靠 MYGO_LDFLAGS——CLI 自己不接受
@@ -238,6 +257,13 @@ function packageApps(platforms, version) {
   // macOS 13 上不可用。
   args.push('-skip-dmg');
 
+  const privateKey = updaterPrivateKey();
+  if (!privateKey) {
+    console.warn('警告：没有找到更新签名私钥，本次不生成更新清单（旧版本将无法自动升级）。');
+    console.warn('      把 mygo keygen 生成的 mygo-update.key 放到 ~/Library/Application Support/mygo/update-keys/，');
+    console.warn('      或在 CI 里设置 MYGO_UPDATER_PRIVATE_KEY。');
+  }
+
   console.log('生成安装包…');
   run('go', args, {
     cwd: DESKTOP,
@@ -245,6 +271,7 @@ function packageApps(platforms, version) {
       ...process.env,
       GOFLAGS: [process.env.GOFLAGS, '-tags=desktopfrontend'].filter(Boolean).join(' '),
       MYGO_LDFLAGS: [process.env.MYGO_LDFLAGS, ldflags].filter(Boolean).join(' '),
+      ...(privateKey ? { MYGO_UPDATER_PRIVATE_KEY: privateKey } : {}),
     },
   });
 
@@ -282,7 +309,12 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const version = readVersion(ROOT);
   checkPackageVersion(version);
-  const platforms = args.platforms.length > 0 ? args.platforms : [hostPlatform()];
+  let platforms = args.platforms.length > 0 ? args.platforms : [hostPlatform()];
+  // 打安装包时 macOS 出 arm64 与 amd64 两个包：Apple Silicon 用户下载 arm64，
+  // Intel 用户下载 amd64，各自原生运行。universal 一个包会让所有人多下载一倍。
+  if (args.package && process.platform === 'darwin' && args.platforms.length === 0) {
+    platforms = ['darwin/arm64', 'darwin/amd64'];
+  }
 
   if (!args.skipFrontend) buildFrontend();
   if (!existsSync(join(EMBED_DIR, 'index.html'))) {
