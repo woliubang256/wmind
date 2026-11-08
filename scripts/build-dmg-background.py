@@ -65,22 +65,38 @@ def curved_arrow(draw, start, end, bend, color, width):
         y = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t ** 2 * y1
         points.append((x, y))
     draw.line(points, fill=color, width=width, joint="curve")
+    # 箭头：三角形沿曲线末端的切线方向探出，尖端再往前一点点，
+    # 让箭头与弧线连成一个整体而不是两块拼接。
     (px, py), (qx, qy) = points[-2], points[-1]
     angle = math.atan2(qy - py, qx - px)
-    head, spread = 36, 0.5
-    tip = (x1 + width * 0.6, y1 + (y1 - py) * 0.2)
+    head = width * 3.2
+    base = (x1, y1)
+    tip = (x1 + math.cos(angle) * head * 0.85, y1 + math.sin(angle) * head * 0.85)
+    spread = 0.42
     draw.polygon(
         [
             tip,
-            (tip[0] - head * math.cos(angle - spread), tip[1] - head * math.sin(angle - spread)),
-            (tip[0] - head * math.cos(angle + spread), tip[1] - head * math.sin(angle + spread)),
+            (base[0] - math.cos(angle - spread) * head * 0.55, base[1] - math.sin(angle - spread) * head * 0.55),
+            (base[0] - math.cos(angle + spread) * head * 0.55, base[1] - math.sin(angle + spread) * head * 0.55),
         ],
         fill=color,
     )
 
 
+# 超采样倍数：Pillow 的直线与多边形没有抗锯齿，直接按目标尺寸画出来箭头边缘
+# 是硬的（Retina 上尤其明显）。先按 4 倍画，再用 LANCZOS 缩回目标尺寸，等于
+# 手工做了一次 4×4 的抗锯齿。
+SUPERSAMPLE = 4
+
+
 def render(scale):
-    """按缩放倍数画一张：2x 时所有尺寸翻倍，得到真正的高清图。"""
+    """按目标倍数出一张：内部按 4 倍超采样再缩回，边缘才平滑。"""
+    big = render_raw(scale * SUPERSAMPLE)
+    return big.resize((W * scale, H * scale), Image.LANCZOS)
+
+
+def render_raw(scale):
+    """实际绘制。scale 是超采样后的倍数。"""
     w, h = W * scale, H * scale
     img = vertical_gradient((w, h), (27, 36, 55), (13, 19, 32)).convert("RGBA")
 
@@ -109,7 +125,7 @@ def render(scale):
         (FOLDER_CENTER[0] * scale - 80 * scale, FOLDER_CENTER[1] * scale - 26 * scale),
         42 * scale,
         (139, 149, 167),
-        max(1, round(13 * scale)),
+        max(1, round(11 * scale)),
     )
     return img.convert("RGB")
 
