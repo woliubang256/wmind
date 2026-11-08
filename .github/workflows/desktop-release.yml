@@ -2,13 +2,18 @@ name: Desktop release
 
 # 桌面版发布：推 desktop-v<版本> 标签触发。
 #
-# 为什么不并进 ci.yml：那条工作流是 **Web 版**发布（构建镜像、推 latest、
-# 发 Release），桌面版只出安装包与更新清单，两边的产物与副作用完全不同，
-# 合并会让一次桌面发布顺手重推一遍 Web 镜像。
+# 成本考量（macOS / Windows runner 按分钟计费，比 ubuntu 贵一个数量级）：
 #
-# 为什么是 macOS runner：**.dmg 只能在这上面打**。`hdiutil` 是 macOS 独有的，
-# Linux runner 连 dmg 都生成不了（更谈不上美化窗口）；Windows 安装包靠 NSIS，
-# macOS 上 `brew install nsis` 也能装。所以一台 macOS runner 出全部产物。
+#   packages  ubuntu-24.04  前端构建 + go test + 四平台打包（含 NSIS 安装包）
+#   dmg       macos-14      只把已有的 .app 打成 .dmg（hdiutil 是 macOS 独有的）
+#   publish   ubuntu-24.04  汇总产物、建 Release
+#
+# 交叉编译不需要目标平台工具链（CGO_ENABLED=0），Windows 安装包用 ubuntu 的
+# apt nsis 就能出，所以只有「.dmg 打包」这一段必须上 macOS——它现在只做
+# 「下载 .app → hdiutil 出盘 → 上传」，通常 3–5 分钟，而不是原来的十几分钟。
+#
+# 为什么 macOS 的美化可能不生效：DMG 窗口的图标位置靠 Finder 自动化摆，runner
+# 上可能没有自动化授权；驱动不了会打警告并回退朴素窗口（不影响安装与更新）。
 #
 # 前置条件（仓库 Settings → Secrets）：
 #   MYGO_UPDATER_PRIVATE_KEY  mygo keygen 生成的 mygo-update.key 内容；
@@ -26,10 +31,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build and publish desktop packages
-    runs-on: macos-14
-    timeout-minutes: 60
+  packages:
+    name: Build packages (ubuntu)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -70,32 +75,105 @@ jobs:
       - name: Test desktop module
         run: cd backend/desktop && go vet ./... && go test ./...
 
-      - name: Install NSIS for the Windows installer
-        run: brew install nsis
+      # Windows 安装包（NSIS）在 ubuntu 上一条 apt 就有，比 macOS 上 brew 快得多。
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis
 
-      # 四个平台一起出：macOS / Windows 各 arm64 + amd64。
-      # .dmg 的窗口美化要靠 Finder 自动化，runner 上不一定能驱动；驱动不了会打
-      # 警告并回退成朴素窗口，出包不会失败（见 docs/11 §8）。
+      # 四平台一起出；macOS 的 .dmg 由下一个作业在 macOS 上补。
       - name: Build packages
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64,windows/amd64,windows/arm64
 
-      # 只发布升级所需的文件 + 安装包：归档、更新清单、DMG/安装器。
-      # 注意 --latest=false：桌面版发布不能抢 Web 版 v* 的「最新」位置。
-      - name: Publish release
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmind-packages
+          path: |
+            backend/desktop/build/**/*.zip
+            backend/desktop/build/**/*.tar.gz
+            backend/desktop/build/**/*setup*.exe
+            backend/desktop/build/**/update-*.json
+            backend/desktop/build/**/install.sh
+            backend/desktop/build/**/install.ps1
+            backend/desktop/build/**/SHA256SUMS
+          if-no-files-found: error
+
+      # .app 单独传：下一个作业要拿它打 dmg。
+      - name: Upload macOS app bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmind-apps
+          path: |
+            backend/desktop/build/darwin-arm64/wmind.app/**
+            backend/desktop/build/darwin-amd64/wmind.app/**
+          if-no-files-found: error
+
+  dmg:
+    name: Package DMGs (macOS)
+    needs: packages
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+
+      - name: Download app bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: wmind-apps
+          path: backend/desktop/build
+
+      # Linux 上打出来的 .app 是**未签名**的（codesign 只有 macOS 有），而 Apple
+      # Silicon 上未签名的可执行文件会被直接 kill。这里补一次 ad-hoc 签名，
+      # 与 mygo 在 macOS 上默认的 `-` 身份一致，然后再出盘。
+      - name: Sign app bundles (ad-hoc)
+        run: |
+          for arch in arm64 amd64; do
+            codesign --force --deep --sign - "backend/desktop/build/darwin-${arch}/wmind.app"
+            codesign --verify --verbose=2 "backend/desktop/build/darwin-${arch}/wmind.app"
+          done
+
+      - name: Build DMGs
+        run: |
+          for arch in arm64 amd64; do
+            node scripts/build-desktop.mjs --dmg-only "darwin/${arch}"
+          done
+
+      - name: Upload DMGs
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmind-dmg
+          path: backend/desktop/build/darwin-*/*.dmg
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [packages, dmg]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+          pattern: wmind-*
+
+      # --latest=false：桌面版发布不能抢 Web 版 v* 的「最新」位置。
+      - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
           version="${tag#desktop-v}"
-          assets=()
-          for dir in backend/desktop/build/*/; do
-            for f in "$dir"update-*.json "$dir"*.tar.gz "$dir"*.zip "$dir"*.dmg "$dir"*setup*.exe; do
-              [ -f "$f" ] && assets+=("$f")
-            done
-          done
+          mapfile -t assets < <(find artifacts -type f | sort)
           if [ ${#assets[@]} -eq 0 ]; then
             echo "没有可发布的产物" >&2
             exit 1

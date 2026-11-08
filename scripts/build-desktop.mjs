@@ -6,6 +6,7 @@
 //   node scripts/build-desktop.mjs --platform darwin/arm64,windows/amd64,linux/amd64
 //   node scripts/build-desktop.mjs --skip-frontend       # 只重新编译 Go 侧
 //   node scripts/build-desktop.mjs --package             # 额外产出安装包（.app/.dmg、NSIS、.deb）
+//   node scripts/build-desktop.mjs --dmg-only darwin/arm64  # 只把已有的 .app 打成 .dmg（CI 里省 macOS 机时）
 //
 // 版本号取自 VERSION（发布元数据的唯一来源），同时注入桌面入口与后端的
 // config.Version，保证窗口里显示与 /site/config 返回的版本一致。
@@ -28,11 +29,17 @@ const DESKTOP_VERSION_SYMBOL = 'main.version';
 const BACKEND_VERSION_SYMBOL = 'github.com/woliubang256/wmind/backend/internal/config.Version';
 
 function parseArgs(argv) {
-  const args = { platforms: [], skipFrontend: false, package: false };
+  const args = { platforms: [], skipFrontend: false, package: false, dmgOnly: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--skip-frontend') args.skipFrontend = true;
     else if (arg === '--package') args.package = true;
+    else if (arg === '--dmg-only') {
+      // 只把已有的 .app 打成 .dmg：CI 里 macOS runner 只干这一步（见发布工作流）。
+      const value = argv[++i];
+      if (!value) throw new Error('--dmg-only 需要一个平台，例如 darwin/arm64');
+      args.dmgOnly.push(value);
+    }
     else if (arg === '--platform') {
       const value = argv[++i];
       if (!value) throw new Error('--platform 需要一个值，例如 darwin/arm64');
@@ -168,6 +175,8 @@ function createDmg(appPath, version, dir, label) {
       } finally {
         run('hdiutil', ['detach', mount, '-quiet']);
       }
+      // hdiutil convert 不会覆盖已存在的文件，重跑时必须先删。
+      rmSync(dmg, { force: true });
       run('hdiutil', ['convert', rwImage, '-format', 'UDZO', '-o', dmg]);
     } catch (error) {
       console.warn(`警告：定制 dmg 外观失败（${error.message}），回退朴素窗口。`);
@@ -208,7 +217,9 @@ function arrangeDmgWindow(mount, volume, backgroundFile) {
     delay 2
   end tell
 end tell`;
-  run('osascript', ['-e', script]);
+  // 加超时：Finder 自动化在无界面/未授权的环境里可能一直不返回，
+  // 不能让 macOS runner 就这么耗着（那是按分钟计费的）。
+  run('osascript', ['-e', script], { timeout: 30_000 });
 }
 
 /**
@@ -359,6 +370,23 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const version = readVersion(ROOT);
   checkPackageVersion(version);
+
+  // --dmg-only：只把已经打好的 .app 变成 .dmg。放在最前面，跳过前端构建与
+  // 全部编译——CI 的 macOS 作业就是靠这一步把机时压到几分钟。
+  if (args.dmgOnly.length > 0) {
+    for (const platform of args.dmgOnly) {
+      const [goos, goarch] = platform.split('/');
+      if (goos !== 'darwin') throw new Error(`--dmg-only 只支持 darwin，收到 ${platform}`);
+      const dir = join(OUT_DIR, `darwin-${goarch}`);
+      const appPath = join(dir, 'wmind.app');
+      if (!existsSync(appPath)) {
+        throw new Error(`找不到 ${appPath}：先用 --platform ${platform} 跑一次打包（不需要 .dmg）`);
+      }
+      console.log(`  ${createDmg(appPath, version, dir, goarch)}`);
+    }
+    return;
+  }
+
   let platforms = args.platforms.length > 0 ? args.platforms : [hostPlatform()];
   // 打安装包时的默认目标：macOS 与 Windows 都出 arm64 + amd64 两个包
   // （Apple Silicon / Intel 各自原生运行，universal 单包会让所有人多下载一倍）。
