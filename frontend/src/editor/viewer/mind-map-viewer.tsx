@@ -442,7 +442,10 @@ export function MindMapViewer({
             key={editingBox.id}
             box={editingBox}
             style={editingStyle}
-            contentRect={editingSize && (editingSize.markers || editingSize.details) ? topicContentGeometry(editingBox, editingStyle, editingSize.lines, editingSize.image, editingSize.markers, editingSize.details).textRect : undefined}
+            // 一律用「文字矩形」定位：只有带标记/备注时才给 contentRect 的话，
+            // 普通主题会退回「盒子左上角 + 8/12 内边距」，编辑时文字看起来像
+            // 没居中（垂直方向尤其明显）。
+            contentRect={editingSize ? topicContentGeometry(editingBox, editingStyle, editingSize.lines, editingSize.image, editingSize.markers, editingSize.details).textRect : undefined}
             textHeight={editingSize ? editingSize.lines.length * Math.round(editingStyle.fontSize * 1.4) : editingBox.height}
             viewport={viewport}
             initialValue={findTitle(sheet, editingBox.id)}

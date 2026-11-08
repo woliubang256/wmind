@@ -23,7 +23,7 @@ func newLocal(t *testing.T) *localInstance {
 	if err != nil {
 		t.Fatalf("解析数据目录失败: %v", err)
 	}
-	local, err := assembleLocal(context.Background(), paths, testLogger(), "1.0.0")
+	local, err := assembleLocal(context.Background(), paths, testLogger(), "1.0.0", localeInfo{Locale: "zh-Hans", Preferred: []string{"zh-Hans-CN", "en"}})
 	if err != nil {
 		t.Fatalf("装配本地模式失败: %v", err)
 	}
@@ -100,13 +100,13 @@ func TestLocalModeReusesUserAndSecrets(t *testing.T) {
 		t.Fatalf("解析数据目录失败: %v", err)
 	}
 
-	first, err := assembleLocal(context.Background(), paths, testLogger(), "1.0.0")
+	first, err := assembleLocal(context.Background(), paths, testLogger(), "1.0.0", localeInfo{Locale: "zh-Hans", Preferred: []string{"zh-Hans-CN", "en"}})
 	if err != nil {
 		t.Fatalf("首次装配失败: %v", err)
 	}
 	first.Close()
 
-	second, err := assembleLocal(context.Background(), paths, testLogger(), "1.0.0")
+	second, err := assembleLocal(context.Background(), paths, testLogger(), "1.0.0", localeInfo{Locale: "zh-Hans", Preferred: []string{"zh-Hans-CN", "en"}})
 	if err != nil {
 		t.Fatalf("再次装配失败: %v", err)
 	}

@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next';
 import enUS from './locales/en-US.json';
 import zhCN from './locales/zh-CN.json';
 import { applyLocale, browserLanguages, readLocalePreference, resolveLocale } from './preference';
+import { desktopPreferredLanguages } from '@/lib/desktop';
 
 /**
  * 初始语言：读设备上的偏好，`system` 档再问浏览器。
@@ -11,7 +12,12 @@ import { applyLocale, browserLanguages, readLocalePreference, resolveLocale } fr
  * 按默认语言渲染一遍，然后当着用户的面整页换字。语言没有主题那种「必须内联
  * 脚本防闪烁」的紧迫性，但同样不该闪。
  */
-const initialLocale = resolveLocale(readLocalePreference(), browserLanguages());
+// 桌面端 WebView 的 navigator.language 跟随的是应用声明的语言，不一定是
+// 用户的系统语言；mygo 在 Go 侧解析好的系统偏好更可靠，优先用它。
+const initialLocale = resolveLocale(
+  readLocalePreference(),
+  desktopPreferredLanguages() ?? browserLanguages(),
+);
 
 void i18n.use(initReactI18next).init({
   resources: {

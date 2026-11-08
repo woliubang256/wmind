@@ -18,6 +18,18 @@ export interface DesktopRuntime {
   version?: string;
   apiBase?: string;
   authToken?: string;
+  /** mygo 解析出的界面语言（跟随系统），如 "zh-Hans"。 */
+  locale?: string;
+  /** 系统偏好语言列表，最优先在前，逗号分隔，如 "zh-Hans-CN,en"。 */
+  preferredLanguages?: string;
+}
+
+/** 桌面端的系统偏好语言列表；非桌面环境返回 undefined。 */
+export function desktopPreferredLanguages(): string[] | undefined {
+  const runtime = desktopRuntime();
+  if (!runtime?.preferredLanguages) return undefined;
+  const list = runtime.preferredLanguages.split(',').map((tag) => tag.trim()).filter(Boolean);
+  return list.length > 0 ? list : undefined;
 }
 
 export function desktopRuntime(): DesktopRuntime | undefined {

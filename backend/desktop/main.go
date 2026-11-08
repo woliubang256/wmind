@@ -46,6 +46,11 @@ func run() error {
 	// `go run` 的临时二进制和打包出来的 .app 会拿到不同的名字，本地数据
 	// 也就分裂在两个目录里。
 	mygo.App.SetName("wmind")
+	// 声明应用的语言：mygo 会据此从系统偏好里挑出界面语言（中文系统给
+	// zh-Hans），并通过 mygo:locale 事件告诉页面。不声明的话默认只有英文，
+	// 中文系统的用户在桌面端会看到一整屏英文——这就是「画布没有国际化」
+	// 的根因：不是画布没翻译，是 WebView 的 navigator.language 被钉成了 en。
+	mygo.App.SetLanguages("zh-Hans", "en")
 	if version != "" {
 		mygo.App.SetVersion(version)
 	}
@@ -80,7 +85,10 @@ func start() error {
 	}
 	slog.SetDefault(logger)
 
-	local, err := assembleLocal(context.Background(), paths, logger, appVersion())
+	local, err := assembleLocal(context.Background(), paths, logger, appVersion(), localeInfo{
+		Locale:    mygo.App.Locale(),
+		Preferred: mygo.App.PreferredLanguages(),
+	})
 	if err != nil {
 		closeLog()
 		return err
@@ -153,7 +161,16 @@ type localInstance struct {
 //
 // 抽成函数而不是留在 start 里，是为了让它能在测试里被完整跑一遍——这条链
 // 上的任何一环断掉，桌面版就是一个打不开的窗口。
-func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logger, appVersion string) (*localInstance, error) {
+// localeInfo 是注入页面的语言信息。
+//
+// 从 start() 传进来而不是在 assembleLocal 里直接问 mygo：mygo.App.Locale()
+// 会等待应用就绪，而测试里根本没有 mygo 应用，调它会把测试挂死。
+type localeInfo struct {
+	Locale    string
+	Preferred []string
+}
+
+func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logger, appVersion string, locale localeInfo) (*localInstance, error) {
 	secrets, err := localmode.LoadSecrets(paths.Secrets)
 	if err != nil {
 		return nil, err
@@ -204,12 +221,14 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	updates := newUpdaterAdapter()
 
 	handler, err := localserver.New(localserver.Config{
-		API:       app.Handler,
-		Static:    frontendDist(),
-		Token:     shellToken,
-		Mode:      "local",
-		Version:   appVersion,
-		AuthToken: accessToken,
+		API:                app.Handler,
+		Static:             frontendDist(),
+		Token:              shellToken,
+		Mode:               "local",
+		Version:            appVersion,
+		AuthToken:          accessToken,
+		Locale:             locale.Locale,
+		PreferredLanguages: locale.Preferred,
 		Desktop: deskapi.New(deskapi.Deps{
 			Engine: engine, Store: syncStore, Creds: creds, Version: appVersion, Updater: updates,
 		}),

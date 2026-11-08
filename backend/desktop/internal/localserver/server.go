@@ -44,6 +44,10 @@ type Config struct {
 	// AuthToken 注入给前端的访问令牌：本地模式没有登录页，前端拿它直接
 	// 调 API。
 	AuthToken string
+	// Locale 是 mygo 解析出的界面语言（跟随系统），前端据此解析「跟随系统」。
+	Locale string
+	// PreferredLanguages 是系统偏好语言列表（最优先在前）。
+	PreferredLanguages []string
 	// Desktop 是桌面专有接口（/desktop/*：连接云端、触发同步、来源查询）。
 	// 为空时不挂载——Web 形态与没有云端能力的构建都不需要它。
 	Desktop http.Handler
@@ -201,6 +205,12 @@ func (s *server) runtimeScript() string {
 	}
 	if s.cfg.AuthToken != "" {
 		values["authToken"] = s.cfg.AuthToken
+	}
+	if s.cfg.Locale != "" {
+		values["locale"] = s.cfg.Locale
+	}
+	if len(s.cfg.PreferredLanguages) > 0 {
+		values["preferredLanguages"] = strings.Join(s.cfg.PreferredLanguages, ",")
 	}
 	return fmt.Sprintf(`<script>window.__WMIND__=%s;</script>`, jsonObject(values))
 }

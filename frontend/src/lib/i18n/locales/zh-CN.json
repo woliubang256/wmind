@@ -609,7 +609,8 @@
     "content.hint.illustration": "添加或编辑插画",
     "content.hint.image": "添加或编辑本地图片",
     "content.hint.equation": "添加或编辑公式",
-    "annotation.summaryTitle": "概要文字"
+    "annotation.summaryTitle": "概要文字",
+    "branchTopic": "分支主题"
   },
   "import": {
     "title": "导入",

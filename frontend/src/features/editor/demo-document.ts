@@ -24,13 +24,20 @@ const GROUPS: { title: string; items: string[] }[] = [
  * 「Tab 建子节点」这个动作有一个可见的起点——空画布上只有一个中心主题时，
  * 新手不知道该往哪按。
  */
-export function createStarterDocument(title = '未命名导图'): WmindDocument {
+/**
+ * @param title 中心主题与文档标题（调用方传当前语言的「未命名导图」）
+ * @param branchTitle 三个空分支的占位文字（同样来自 i18n）
+ *
+ * 这两个文字是**文档内容**，一旦创建就固定下来、不随界面语言变化；但创建时
+ * 必须用当前语言，否则英文界面下新建导图会冒出中文占位。
+ */
+export function createStarterDocument(title: string, branchTitle: string): WmindDocument {
   const doc = createDocument({ title });
   const sheet = doc.sheets[0];
   if (!sheet) return doc;
   sheet.rootTopic.title = title;
   for (let i = 0; i < 3; i += 1) {
-    sheet.rootTopic.children.attached.push(createTopic({ title: '分支主题' }));
+    sheet.rootTopic.children.attached.push(createTopic({ title: branchTitle }));
   }
   return doc;
 }

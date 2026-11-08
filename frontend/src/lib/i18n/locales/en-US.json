@@ -609,7 +609,8 @@
     "content.hint.illustration": "Add or edit illustration",
     "content.hint.image": "Add or edit local image",
     "content.hint.equation": "Add or edit equation",
-    "annotation.summaryTitle": "Summary text"
+    "annotation.summaryTitle": "Summary text",
+    "branchTopic": "Branch topic"
   },
   "import": {
     "title": "Import",
