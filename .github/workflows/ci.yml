@@ -64,7 +64,7 @@ jobs:
       - name: Build desktop packages
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64,windows/amd64,windows/arm64
+        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64,windows/amd64,windows/arm64,linux/amd64,linux/arm64
 
       - name: Upload desktop packages
         uses: actions/upload-artifact@v4
