@@ -50,11 +50,6 @@ jobs:
       - name: Test desktop module
         run: cd backend/desktop && go vet ./... && go test ./...
 
-      # Windows 安装包（NSIS）只有在装了 makensis 的机器上才会生成：
-      # macOS 本机不带，CI 里装一份，这样发布产物是真正的 setup.exe 而不是压缩包。
-      - name: Install NSIS for the Windows installer
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis
-
       # 交叉编译四个平台（macOS / Windows 各 arm64 + amd64）：无 cgo，不需要
       # 目标平台工具链。macOS 的 .dmg 外观定制依赖 Finder 自动化，Linux 上没有，
       # 所以 CI 出的是 .app/.exe 与更新清单；.dmg 在 macOS 发布机上出（docs/11 §8）。
