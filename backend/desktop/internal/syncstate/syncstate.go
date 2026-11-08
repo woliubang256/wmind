@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/woliubang256/wmind/backend/internal/pkg/timeutil"
@@ -57,8 +58,18 @@ type Record struct {
 	BaseVersion int
 	// BaseHash 是上次成功同步时云端内容的 SHA-256 摘要。
 	BaseHash string
+	// BaseLocalHash 是上次成功同步时**本地**内容的 SHA-256 摘要。
+	//
+	// 判断「本机有没有改动」靠它，而不是靠本地版本号：本地版本号在每次
+	// 保存时自增，但同步一次可能写入两次（先拉后推），用版本号比对会误判。
+	BaseLocalHash string
 	// LastSyncedAt 为空表示从未成功同步。
 	LastSyncedAt *time.Time
+	// Deleted 表示这份导图在两端都已删除。
+	//
+	// 本地回收站里的导图仍保留记录：恢复之后要能重新同步，所以不能把记录
+	// 删掉。用这个标记区分「已经两边都删了」与「本地刚删、还没推上去」。
+	Deleted bool
 	// State 是当前状态。
 	State State
 	// UpdatedAt 是这条记录本身的最后修改时间。
@@ -75,17 +86,37 @@ CREATE TABLE IF NOT EXISTS map_sync (
   remote_url     TEXT    NOT NULL DEFAULT '',
   base_version   INTEGER NOT NULL DEFAULT 0,
   base_hash      TEXT    NOT NULL DEFAULT '',
+  base_local_hash TEXT   NOT NULL DEFAULT '',
   last_synced_at TEXT,
   state          TEXT    NOT NULL DEFAULT 'local-only',
+  deleted        INTEGER NOT NULL DEFAULT 0,
   updated_at     TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_map_sync_remote ON map_sync(remote_url, remote_uid);
+CREATE TABLE IF NOT EXISTS sync_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `
 
-// Prepare 建表。作为 bootstrap.Options.Prepare 传给装配层。
+// MetaLastPullAt 是增量拉取游标的键。
+const MetaLastPullAt = "last_pull_at"
+
+// Prepare 建表并补齐后续版本新增的列。作为 bootstrap.Options.Prepare 传给装配层。
+//
+// 桌面端的表不进服务端迁移集，所以升级靠这里的「加列」步骤：ALTER TABLE
+// ADD COLUMN 在 SQLite 上重复执行会报 duplicate column name，忽略即可。
 func Prepare(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, Schema); err != nil {
 		return fmt.Errorf("create map_sync: %w", err)
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE map_sync ADD COLUMN base_local_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE map_sync ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := db.ExecContext(ctx, stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("upgrade map_sync: %w", err)
+		}
 	}
 	return nil
 }
@@ -104,7 +135,7 @@ var ErrNotFound = errors.New("sync record not found")
 // Get 读取一条记录。
 func (s *Store) Get(ctx context.Context, mapUID string) (*Record, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT map_uid, remote_uid, remote_url, base_version, base_hash, last_synced_at, state, updated_at
+SELECT map_uid, remote_uid, remote_url, base_version, base_hash, base_local_hash, last_synced_at, state, deleted, updated_at
 FROM map_sync WHERE map_uid = ?`, mapUID)
 	return scanRecord(row)
 }
@@ -112,7 +143,7 @@ FROM map_sync WHERE map_uid = ?`, mapUID)
 // ByRemote 按云端地址 + 云端 uid 反查本机记录。
 func (s *Store) ByRemote(ctx context.Context, remoteURL, remoteUID string) (*Record, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT map_uid, remote_uid, remote_url, base_version, base_hash, last_synced_at, state, updated_at
+SELECT map_uid, remote_uid, remote_url, base_version, base_hash, base_local_hash, last_synced_at, state, deleted, updated_at
 FROM map_sync WHERE remote_url = ? AND remote_uid = ?`, remoteURL, remoteUID)
 	return scanRecord(row)
 }
@@ -120,7 +151,7 @@ FROM map_sync WHERE remote_url = ? AND remote_uid = ?`, remoteURL, remoteUID)
 // List 返回全部记录，按更新时间升序。
 func (s *Store) List(ctx context.Context) ([]*Record, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT map_uid, remote_uid, remote_url, base_version, base_hash, last_synced_at, state, updated_at
+SELECT map_uid, remote_uid, remote_url, base_version, base_hash, base_local_hash, last_synced_at, state, deleted, updated_at
 FROM map_sync ORDER BY updated_at ASC`)
 	if err != nil {
 		return nil, err
@@ -160,18 +191,20 @@ func (s *Store) Put(ctx context.Context, rec *Record) error {
 		lastSynced = timeutil.Format(rec.LastSyncedAt.UTC())
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO map_sync (map_uid, remote_uid, remote_url, base_version, base_hash, last_synced_at, state, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO map_sync (map_uid, remote_uid, remote_url, base_version, base_hash, base_local_hash, last_synced_at, state, deleted, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(map_uid) DO UPDATE SET
   remote_uid = excluded.remote_uid,
   remote_url = excluded.remote_url,
   base_version = excluded.base_version,
   base_hash = excluded.base_hash,
+  base_local_hash = excluded.base_local_hash,
   last_synced_at = excluded.last_synced_at,
   state = excluded.state,
+  deleted = excluded.deleted,
   updated_at = excluded.updated_at`,
-		rec.MapUID, rec.RemoteUID, rec.RemoteURL, rec.BaseVersion, rec.BaseHash,
-		lastSynced, string(rec.State), timeutil.Format(rec.UpdatedAt.UTC()))
+		rec.MapUID, rec.RemoteUID, rec.RemoteURL, rec.BaseVersion, rec.BaseHash, rec.BaseLocalHash,
+		lastSynced, string(rec.State), rec.Deleted, timeutil.Format(rec.UpdatedAt.UTC()))
 	if err != nil {
 		return fmt.Errorf("upsert map_sync: %w", err)
 	}
@@ -198,8 +231,9 @@ func scanRecord(src scanner) (*Record, error) {
 		state      string
 		updatedAt  string
 	)
+	var deleted bool
 	err := src.Scan(&rec.MapUID, &rec.RemoteUID, &rec.RemoteURL, &rec.BaseVersion,
-		&rec.BaseHash, &lastSynced, &state, &updatedAt)
+		&rec.BaseHash, &rec.BaseLocalHash, &lastSynced, &state, &deleted, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -207,6 +241,7 @@ func scanRecord(src scanner) (*Record, error) {
 		return nil, err
 	}
 	rec.State = State(state)
+	rec.Deleted = deleted
 	if lastSynced.Valid && lastSynced.String != "" {
 		at, err := timeutil.Parse(lastSynced.String)
 		if err != nil {
@@ -220,4 +255,28 @@ func scanRecord(src scanner) (*Record, error) {
 	}
 	rec.UpdatedAt = at
 	return &rec, nil
+}
+
+// GetMeta 读取一个元数据值，缺失时返回空串。
+func (s *Store) GetMeta(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM sync_meta WHERE key = ?`, key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+// SetMeta 写入一个元数据值。
+func (s *Store) SetMeta(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO sync_meta (key, value) VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	if err != nil {
+		return fmt.Errorf("upsert sync_meta: %w", err)
+	}
+	return nil
 }

@@ -44,6 +44,9 @@ type Config struct {
 	// AuthToken 注入给前端的访问令牌：本地模式没有登录页，前端拿它直接
 	// 调 API。
 	AuthToken string
+	// Desktop 是桌面专有接口（/desktop/*：连接云端、触发同步、来源查询）。
+	// 为空时不挂载——Web 形态与没有云端能力的构建都不需要它。
+	Desktop http.Handler
 }
 
 // New 组装内层服务的 Handler。
@@ -59,6 +62,9 @@ func New(cfg Config) (http.Handler, error) {
 	// 后端 API 与上传资源整体转给 router：路径前缀与 Web 形态完全一致。
 	mux.Handle("/api/", cfg.API)
 	mux.Handle("/uploads/", cfg.API)
+	if cfg.Desktop != nil {
+		mux.Handle("/desktop/", cfg.Desktop)
+	}
 	mux.Handle("/", s.static())
 	return s.guard(mux), nil
 }

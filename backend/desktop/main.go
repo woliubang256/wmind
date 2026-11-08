@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -21,8 +22,12 @@ import (
 
 	"github.com/egoist/mygo"
 
+	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
+	"github.com/woliubang256/wmind/backend/desktop/internal/deskapi"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localserver"
+	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
+	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 	"github.com/woliubang256/wmind/backend/internal/bootstrap"
 )
 
@@ -126,12 +131,14 @@ func start() error {
 
 // localInstance 是本地模式跑起来之后的一套东西。
 type localInstance struct {
-	// Handler 是内层 HTTP 服务：前端静态资源 + 后端 API。
+	// Handler 是内层 HTTP 服务：前端静态资源 + 后端 API + 桌面接口。
 	Handler http.Handler
 	// ShellToken 是桌面壳的访问令牌（页面 cookie）。
 	ShellToken string
 	// AccessToken 是注入页面的后端访问令牌。
 	AccessToken string
+	// Engine 是同步引擎（未连接云端时也能查状态）。
+	Engine *syncengine.Engine
 	// Close 停止后台任务并关闭数据库，可重复调用。
 	Close func()
 }
@@ -146,7 +153,19 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		return nil, err
 	}
 
-	app, err := bootstrap.New(ctx, localmode.Config(paths, secrets), bootstrap.Options{Logger: logger, Quiet: true})
+	// 桌面端自己的表（map_sync / sync_meta）在迁移之后建：它们不属于服务端
+	// schema，走 bootstrap 的 Prepare 钩子而不是迁移集。
+	var syncStore *syncstate.Store
+	app, err := bootstrap.New(ctx, localmode.Config(paths, secrets), bootstrap.Options{
+		Logger: logger, Quiet: true,
+		Prepare: func(ctx context.Context, db *sql.DB) error {
+			if err := syncstate.Prepare(ctx, db); err != nil {
+				return err
+			}
+			syncStore = syncstate.NewStore(db)
+			return nil
+		},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("start local backend: %w", err)
 	}
@@ -168,6 +187,12 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		return nil, err
 	}
 
+	engine := syncengine.New(app.Maps, syncStore, user.ID, logger)
+	creds := &deskapi.CredentialStore{Path: filepath.Join(paths.Root, "cloud.json"), Secret: secrets.JWTSecret}
+
+	// 上次连接过就试着接上：失败只记日志，不阻塞启动——离线优先。
+	restoreCloud(ctx, engine, creds, logger)
+
 	handler, err := localserver.New(localserver.Config{
 		API:       app.Handler,
 		Static:    frontendDist(),
@@ -175,6 +200,7 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		Mode:      "local",
 		Version:   appVersion,
 		AuthToken: accessToken,
+		Desktop:   deskapi.New(deskapi.Deps{Engine: engine, Store: syncStore, Creds: creds, Version: appVersion}),
 	})
 	if err != nil {
 		app.Close()
@@ -185,8 +211,37 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		Handler:     handler,
 		ShellToken:  shellToken,
 		AccessToken: accessToken,
+		Engine:      engine,
 		Close:       app.Close,
 	}, nil
+}
+
+// restoreCloud 用上次保存的凭据恢复云端连接。
+//
+// 密码用本地主密钥解开再登录：刷新令牌虽然也存了，但桌面端长期离线，令牌
+// 过期是常态，直接重登比处理「刷新失败再重登」简单且不会漏掉安全版本变化。
+func restoreCloud(ctx context.Context, engine *syncengine.Engine, creds *deskapi.CredentialStore, logger *slog.Logger) {
+	stored, err := creds.Load()
+	if err != nil {
+		logger.Warn("cloud: read saved connection failed", "err", err)
+		return
+	}
+	if stored == nil {
+		return
+	}
+	password, err := stored.Decrypt(creds.Secret)
+	if err != nil {
+		// 主密钥变了（用户删过 secrets.json）：凭据作废，让用户重新连接。
+		logger.Warn("cloud: saved credentials cannot be decrypted", "err", err)
+		return
+	}
+	client, err := cloud.Login(ctx, stored.ServerURL, stored.Identifier, password)
+	if err != nil {
+		logger.Info("cloud: reconnect skipped", "server", stored.ServerURL, "err", err)
+		return
+	}
+	engine.Connect(client.Session().ServerURL, client)
+	logger.Info("cloud: reconnected", "server", client.Session().ServerURL)
 }
 
 // appVersion 返回注入的版本，未注入时退回 mygo 配置里的版本。

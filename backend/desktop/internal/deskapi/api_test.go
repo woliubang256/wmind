@@ -1,0 +1,425 @@
+package deskapi
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"math/big"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	_ "modernc.org/sqlite"
+
+	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
+	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
+	"github.com/woliubang256/wmind/backend/internal/config"
+	"github.com/woliubang256/wmind/backend/internal/domain"
+	"github.com/woliubang256/wmind/backend/internal/migrate"
+	sqliterepo "github.com/woliubang256/wmind/backend/internal/repository/sqlite"
+)
+
+// ── 测试夹具 ────────────────────────────────────────────────────────────────
+
+type fixture struct {
+	api     http.Handler
+	engine  *syncengine.Engine
+	maps    domain.MapRepo
+	ownerID int64
+	creds   *CredentialStore
+	cloud   *fakeCloudServer
+}
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "wmind.db"))
+	if err != nil {
+		t.Fatalf("打开数据库: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := migrate.Up(config.DriverSQLite, db, logger); err != nil {
+		t.Fatalf("迁移失败: %v", err)
+	}
+	if err := syncstate.Prepare(t.Context(), db); err != nil {
+		t.Fatalf("建同步表失败: %v", err)
+	}
+
+	users := sqliterepo.NewUserRepository(db)
+	owner, err := users.Create(t.Context(), domain.CreateUserInput{
+		UID: "owner-1", Username: "owner", Email: "owner@example.test",
+		PasswordHash: "hash", Role: domain.RoleAdmin, Status: domain.UserStatusActive,
+		Now: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("创建本地用户失败: %v", err)
+	}
+
+	mapRepo := sqliterepo.NewMapRepository(db)
+	store := syncstate.NewStore(db)
+	engine := syncengine.New(mapRepo, store, owner.ID, logger)
+	creds := &CredentialStore{Path: filepath.Join(dir, "cloud.json"), Secret: strings.Repeat("ab", 32)}
+	cloud := newFakeCloudServer(t)
+
+	api := New(Deps{Engine: engine, Store: store, Creds: creds, Version: "1.0.0"})
+	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud}
+}
+
+func (f *fixture) createMap(t *testing.T, uid, title string) *domain.Map {
+	t.Helper()
+	created, err := f.maps.Create(t.Context(), domain.CreateMapInput{
+		UID: uid, OwnerID: f.ownerID, Title: title,
+		Document:  []byte(`{"format":"wmind","title":"` + title + `"}`),
+		NodeCount: 1, SizeBytes: 32, Now: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("创建导图失败: %v", err)
+	}
+	return created
+}
+
+// response 是测试用的响应视图：data 保持原始 JSON，既能解成对象也能解成数组。
+type response struct {
+	status int
+	Data   json.RawMessage `json:"data"`
+	Error  string          `json:"error"`
+}
+
+func (f *fixture) do(t *testing.T, method, path string, body any) response {
+	t.Helper()
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader = bytes.NewReader(raw)
+	}
+	req := httptest.NewRequest(method, path, reader)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	rec := httptest.NewRecorder()
+	f.api.ServeHTTP(rec, req)
+
+	out := response{status: rec.Code}
+	if rec.Body.Len() > 0 {
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("响应不是 JSON: %v (%s)", err, rec.Body.String())
+		}
+	}
+	return out
+}
+
+func dataOf(t *testing.T, resp response) map[string]any {
+	t.Helper()
+	var data map[string]any
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		t.Fatalf("data 不是对象: %v (%s)", err, string(resp.Data))
+	}
+	return data
+}
+
+// ── 假的云端服务器 ──────────────────────────────────────────────────────────
+
+type fakeCloudServer struct {
+	t      *testing.T
+	key    *rsa.PrivateKey
+	server *httptest.Server
+
+	mu    sync.Mutex
+	maps  map[string]map[string]any
+	docs  map[string][]byte
+	login int
+}
+
+func newFakeCloudServer(t *testing.T) *fakeCloudServer {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("生成密钥: %v", err)
+	}
+	f := &fakeCloudServer{t: t, key: key, maps: map[string]map[string]any{}, docs: map[string][]byte{}}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/auth/login/challenge", func(w http.ResponseWriter, r *http.Request) {
+		jwk := map[string]string{
+			"kty": "RSA", "alg": "RSA-OAEP-256",
+			"n": base64.RawURLEncoding.EncodeToString(f.key.N.Bytes()),
+			"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(f.key.E)).Bytes()),
+		}
+		writeCloudJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"challengeId": "challenge-abc", "publicKey": jwk, "expiresIn": 120,
+		}})
+	})
+	mux.HandleFunc("/api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			EncryptedPassword string `json:"encryptedPassword"`
+			ChallengeID       string `json:"challengeId"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		cipher, err := base64.StdEncoding.DecodeString(req.EncryptedPassword)
+		if err != nil {
+			writeCloudJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "BAD_REQUEST"}})
+			return
+		}
+		plain, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, f.key, cipher, []byte("wmind/login/v1:"+req.ChallengeID))
+		if err != nil || string(plain) != "pw" {
+			writeCloudJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": "AUTH_INVALID_CREDENTIALS"}})
+			return
+		}
+		f.mu.Lock()
+		f.login++
+		f.mu.Unlock()
+		writeCloudJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"accessToken": "access-1", "refreshToken": "refresh-1",
+			"user": map[string]any{"uid": "remote-user", "email": "a@example.test"},
+		}})
+	})
+	mux.HandleFunc("/api/v1/maps", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeCloudJSON(w, http.StatusOK, map[string]any{"data": []any{}})
+		case http.MethodPost:
+			var req struct {
+				UID      string          `json:"uid"`
+				Title    string          `json:"title"`
+				Document json.RawMessage `json:"document"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			f.mu.Lock()
+			if _, exists := f.maps[req.UID]; exists {
+				f.mu.Unlock()
+				writeCloudJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "MAP_UID_CONFLICT"}})
+				return
+			}
+			hash := sha256.Sum256(req.Document)
+			entry := map[string]any{
+				"uid": req.UID, "title": req.Title, "version": 1,
+				"documentHash": base64.StdEncoding.EncodeToString(hash[:]),
+				"updatedAt":    time.Now().UTC().Format(time.RFC3339Nano),
+			}
+			f.maps[req.UID] = entry
+			f.docs[req.UID] = req.Document
+			f.mu.Unlock()
+			writeCloudJSON(w, http.StatusCreated, map[string]any{"data": entry})
+		}
+	})
+	mux.HandleFunc("/api/v1/maps/", func(w http.ResponseWriter, r *http.Request) {
+		uid := strings.TrimPrefix(r.URL.Path, "/api/v1/maps/")
+		f.mu.Lock()
+		entry, ok := f.maps[uid]
+		doc := f.docs[uid]
+		f.mu.Unlock()
+		if !ok {
+			writeCloudJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "MAP_NOT_FOUND"}})
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			cp := map[string]any{}
+			for k, v := range entry {
+				cp[k] = v
+			}
+			cp["document"] = json.RawMessage(doc)
+			writeCloudJSON(w, http.StatusOK, map[string]any{"data": cp})
+		case http.MethodPut:
+			var req struct {
+				Version  int             `json:"version"`
+				Title    string          `json:"title"`
+				Document json.RawMessage `json:"document"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			current, _ := entry["version"].(int)
+			if req.Version != current {
+				writeCloudJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{
+					"code":    "MAP_VERSION_CONFLICT",
+					"details": map[string]any{"currentVersion": current, "currentHash": entry["documentHash"]},
+				}})
+				return
+			}
+			hash := sha256.Sum256(req.Document)
+			f.mu.Lock()
+			entry["version"] = current + 1
+			entry["title"] = req.Title
+			entry["documentHash"] = base64.StdEncoding.EncodeToString(hash[:])
+			f.maps[uid] = entry
+			f.docs[uid] = req.Document
+			f.mu.Unlock()
+			writeCloudJSON(w, http.StatusOK, map[string]any{"data": entry})
+		}
+	})
+	f.server = httptest.NewServer(mux)
+	t.Cleanup(f.server.Close)
+	return f
+}
+
+func writeCloudJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+// ── 用例 ────────────────────────────────────────────────────────────────────
+
+func TestStatusBeforeConnect(t *testing.T) {
+	f := newFixture(t)
+	resp := f.do(t, http.MethodGet, "/desktop/status", nil)
+	if resp.status != http.StatusOK {
+		t.Fatalf("状态 = %d %s", resp.status, string(resp.Data))
+	}
+	data := dataOf(t, resp)
+	if connected, _ := data["cloud"].(map[string]any)["connected"].(bool); connected {
+		t.Fatalf("未连接时不应显示已连接: %#v", data)
+	}
+	if mode, _ := data["mode"].(string); mode != "local" {
+		t.Fatalf("模式 = %q", mode)
+	}
+}
+
+func TestConnectStoresCredentialsAndSyncs(t *testing.T) {
+	f := newFixture(t)
+	f.createMap(t, "map-1", "本地图")
+
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/connect", map[string]any{
+		"serverUrl": f.cloud.server.URL, "identifier": "a@example.test", "password": "pw",
+	})
+	if resp.status != http.StatusOK {
+		t.Fatalf("连接 = %d %s", resp.status, string(resp.Data))
+	}
+	if !f.engine.Connected() {
+		t.Fatal("引擎没有连上云端")
+	}
+	stored, err := f.creds.Load()
+	if err != nil || stored == nil {
+		t.Fatalf("凭据没有保存: %+v %v", stored, err)
+	}
+	if stored.ServerURL != f.cloud.server.URL {
+		t.Fatalf("保存的地址不对: %+v", stored)
+	}
+	if _, err := stored.Decrypt(f.creds.Secret); err != nil {
+		t.Fatalf("保存的密码解不开: %v", err)
+	}
+
+	// 连接不会把本机所有导图悄悄传上去：本地图仍是本地图，要用户显式上传。
+	if len(f.cloud.maps) != 0 {
+		t.Fatalf("连接不应自动上传本地导图，云端实际 %d 张", len(f.cloud.maps))
+	}
+}
+
+func TestConnectRejectsBadCredentials(t *testing.T) {
+	f := newFixture(t)
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/connect", map[string]any{
+		"serverUrl": f.cloud.server.URL, "identifier": "a@example.test", "password": "wrong",
+	})
+	if resp.status != http.StatusUnauthorized {
+		t.Fatalf("密码错误期望 401，实际 %d %s", resp.status, string(resp.Data))
+	}
+	if f.engine.Connected() {
+		t.Fatal("登录失败不应留下连接")
+	}
+}
+
+func TestUploadAndSources(t *testing.T) {
+	f := newFixture(t)
+	f.connect(t)
+	f.createMap(t, "map-2", "待上传")
+
+	resp := f.do(t, http.MethodPost, "/desktop/maps/map-2/upload", nil)
+	if resp.status != http.StatusOK {
+		t.Fatalf("上传 = %d %s", resp.status, string(resp.Data))
+	}
+	data := dataOf(t, resp)
+	if data["remoteUid"] != "map-2" || data["state"] != "synced" {
+		t.Fatalf("上传结果不对: %#v", data)
+	}
+
+	resp = f.do(t, http.MethodGet, "/desktop/maps/sources", nil)
+	if resp.status != http.StatusOK {
+		t.Fatalf("来源列表 = %d %s", resp.status, string(resp.Data))
+	}
+	if !strings.Contains(string(resp.Data), `"mapUid":"map-2"`) {
+		t.Fatalf("来源列表里没有这张图: %s", resp.Data)
+	}
+}
+
+func TestSyncPushesLocalChanges(t *testing.T) {
+	f := newFixture(t)
+	f.connect(t)
+	created := f.createMap(t, "map-3", "第一版")
+	if resp := f.do(t, http.MethodPost, "/desktop/maps/map-3/upload", nil); resp.Error != "" {
+		t.Fatalf("上传失败: %s", resp.Error)
+	}
+
+	// 模拟编辑器保存 + 前端 touch。
+	if _, err := f.maps.UpdateWithVersion(t.Context(), domain.UpdateMapInput{
+		UID: "map-3", OwnerID: f.ownerID, Title: "第二版",
+		Document:  []byte(`{"format":"wmind","title":"第二版"}`),
+		NodeCount: 1, SizeBytes: 40, ExpectedVersion: created.Version, Now: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("本地保存失败: %v", err)
+	}
+	if resp := f.do(t, http.MethodPost, "/desktop/maps/map-3/touch", nil); resp.status != http.StatusOK {
+		t.Fatalf("touch = %d %s", resp.status, string(resp.Data))
+	}
+
+	resp := f.do(t, http.MethodPost, "/desktop/sync", nil)
+	if resp.status != http.StatusOK {
+		t.Fatalf("同步 = %d %s", resp.status, string(resp.Data))
+	}
+	data := dataOf(t, resp)
+	if pushed, _ := data["Pushed"].(float64); pushed != 1 {
+		t.Fatalf("应当推送 1 条: %#v", data)
+	}
+	if got, _ := f.cloud.maps["map-3"]["version"].(int); got != 2 {
+		t.Fatalf("云端版本 = %d; 期望 2", got)
+	}
+}
+
+func TestDisconnectClearsCredentials(t *testing.T) {
+	f := newFixture(t)
+	f.connect(t)
+
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/disconnect", nil)
+	if resp.status != http.StatusOK {
+		t.Fatalf("断开 = %d %s", resp.status, string(resp.Data))
+	}
+	if f.engine.Connected() {
+		t.Fatal("断开后引擎仍处于连接状态")
+	}
+	if stored, err := f.creds.Load(); err != nil || stored != nil {
+		t.Fatalf("凭据没有清除: %+v %v", stored, err)
+	}
+}
+
+func TestSyncWithoutConnectionIsConflict(t *testing.T) {
+	f := newFixture(t)
+	resp := f.do(t, http.MethodPost, "/desktop/sync", nil)
+	if resp.status != http.StatusConflict {
+		t.Fatalf("未连接同步期望 409，实际 %d %s", resp.status, string(resp.Data))
+	}
+}
+
+func (f *fixture) connect(t *testing.T) {
+	t.Helper()
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/connect", map[string]any{
+		"serverUrl": f.cloud.server.URL, "identifier": "a@example.test", "password": "pw",
+	})
+	if resp.status != http.StatusOK {
+		t.Fatalf("连接失败: %d %s", resp.status, string(resp.Data))
+	}
+}
+
+var _ = context.Background

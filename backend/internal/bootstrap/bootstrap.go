@@ -76,6 +76,8 @@ type App struct {
 	Auth *service.AuthService
 	// Users 是用户仓储，桌面端用它创建并定位本地用户。
 	Users domain.UserRepo
+	// Maps 是导图仓储，桌面端的同步引擎用它读写本地副本。
+	Maps domain.MapRepo
 
 	closeOnce     sync.Once
 	prepare       func(ctx context.Context, db *sql.DB) error
@@ -296,6 +298,7 @@ func (a *App) assemble(ctx context.Context) error {
 	}
 	a.Auth = authSvc
 	a.Users = userRepo
+	a.Maps = mapRepo
 
 	seeded, err := authSvc.SeedAdmin(ctx, cfg.Admin.Email, cfg.Admin.Password)
 	if err != nil {
