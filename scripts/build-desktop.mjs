@@ -11,7 +11,7 @@
 // config.Version，保证窗口里显示与 /site/config 返回的版本一致。
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -123,9 +123,28 @@ function packageApps(platforms, version) {
   });
 }
 
+/**
+ * 校验 mygo.json 的版本与 VERSION 一致。
+ *
+ * 两处版本号各有用途：VERSION 是发布元数据的唯一来源（标签、镜像、changelog
+ * 都认它），mygo.json 决定安装包与 .app 里写的版本。两者漂移的后果是「用户装
+ * 的 1.0.1 报告自己是 1.0.0」，自动更新会一直认为该更新。这里让它构建时就红。
+ */
+function checkPackageVersion(version) {
+  const path = join(DESKTOP, 'mygo.json');
+  if (!existsSync(path)) return;
+  const config = JSON.parse(readFileSync(path, 'utf8'));
+  if (config.version !== version) {
+    throw new Error(
+      `backend/desktop/mygo.json 的 version（${config.version}）与 VERSION（${version}）不一致：请把 mygo.json 的 version 改成 ${version}`,
+    );
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const version = readVersion(ROOT);
+  checkPackageVersion(version);
   const platforms = args.platforms.length > 0 ? args.platforms : [hostPlatform()];
 
   if (!args.skipFrontend) buildFrontend();

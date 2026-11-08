@@ -1,10 +1,10 @@
 # Agent Note: 桌面客户端与 Web 并行交付，本地优先 + 可选云端同步
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
-Web 版已经是一套完整的自托管服务：Go 模块化单体 + SQLite/PostgreSQL 双方言 + React SPA，编辑器内核自研（SVG 渲染、自研布局、命令栈），文档持久化是「服务端为唯一真相源 + 乐观锁版本号」，见 [autosave](../../implemented/architecture/2026-10-18-wmind-autosave.md) 与 [map persistence](../../implemented/architecture/2026-10-18-wmind-map-persistence.md)。
+Web 版已经是一套完整的自托管服务：Go 模块化单体 + SQLite/PostgreSQL 双方言 + React SPA，编辑器内核自研（SVG 渲染、自研布局、命令栈），文档持久化是「服务端为唯一真相源 + 乐观锁版本号」，见 [autosave](2026-10-18-wmind-autosave.md) 与 [map persistence](2026-10-18-wmind-map-persistence.md)。
 
 现在要并行交付一个桌面客户端（macOS / Windows / Linux），核心约束是：
 
@@ -17,7 +17,7 @@ Web 版已经是一套完整的自托管服务：Go 模块化单体 + SQLite/Pos
 
 一期已经预留了扩展点（`/api/v1` 版本化、Bearer 认证、`updated_since` + `deleted` 标记的接口设计、`user_devices` 空表、`.wmind` 与语言无关、`map_revisions` 表已建未启用），但**预留不等于实现**：`updated_since` 目前在 handler 里没有任何实现，`POST /maps` 也不接受客户端指定 uid，图片在文档里存的是 URL 而不是稳定资产标识。
 
-## Proposal
+## Decision
 
 ### 1. 一个 Go 二进制：mygo 窗口 + 复用现有后端 + 内嵌前端
 
@@ -34,7 +34,7 @@ mygo 窗口 ──fetch /api/v1/*──▶ 本机回环后端（现有 router/se
 
 **三种形态，同一份前端与后端代码**：Web（服务器 DB，现状不变）／桌面·本地模式（本机 SQLite，免登录）／桌面·云端模式（登录自填的自托管地址，本地缓存）。
 
-**模块布局**：桌面是嵌套模块 `backend/desktop`（`module github.com/woliubang256/wmind/backend/desktop`，Go 1.27.3）。mygo 要求 Go 1.27.3，而后端基线与发布镜像是 Go 1.26.10（[安全工具链基线](../../implemented/process/2026-10-26-wmind-security-toolchain-baseline.md)）。模块路径仍落在 `backend` 之下，因此桌面可以直接复用 `backend/internal/*`——Go 的 internal 规则按导入路径前缀判定，不按 go.mod 边界，已实测可行。后端装配抽到 `backend/internal/bootstrap`，`cmd/server` 与桌面共用。
+**模块布局**：桌面是嵌套模块 `backend/desktop`（`module github.com/woliubang256/wmind/backend/desktop`，Go 1.27.3）。mygo 要求 Go 1.27.3，而后端基线与发布镜像是 Go 1.26.10（[安全工具链基线](../process/2026-10-26-wmind-security-toolchain-baseline.md)）。模块路径仍落在 `backend` 之下，因此桌面可以直接复用 `backend/internal/*`——Go 的 internal 规则按导入路径前缀判定，不按 go.mod 边界，已实测可行。后端装配抽到 `backend/internal/bootstrap`，`cmd/server` 与桌面共用。
 
 **发布**：M-D1~M-D4 一起发，不单独发纯离线版本；版本号与 `VERSION` 同号；macOS 与 Windows 首发，Linux 适配（`libwebkit2gtk-4.1` 与渲染性能）随发布后补齐。
 
@@ -99,13 +99,22 @@ Electron 是这套方案最稳的等价物：生态成熟、WebView 就是 Chrom
 
 ### 为什么一期就上三路合并 / CRDT？
 
-三路合并是「离线改动 + 在线改动」的最优解，用户不用整体取舍，体验对标腾讯文档；CRDT（Yjs）则是它的极致形态，能顺带把实时协作一次性解决。放弃一期做的原因是成本：三路合并要在多画布、关系线、边界、概要、兄弟顺序上逐类定义规则，还要配套可视化合并面板与冲突回归测试（估 10–15 人日），而一期先把「离线可用 + 本地/云端标识 + 不丢数据」这三件事做扎实更划算。CRDT 的成本更高，且会把文档模型绑到 CRDT 的内部表示上——这与 [collaboration deferred](../feature/2026-10-16-wmind-collaboration-deferred.md) 中「一期不让 CRDT 渗透模型层」的结论一致。
+三路合并是「离线改动 + 在线改动」的最优解，用户不用整体取舍，体验对标腾讯文档；CRDT（Yjs）则是它的极致形态，能顺带把实时协作一次性解决。放弃一期做的原因是成本：三路合并要在多画布、关系线、边界、概要、兄弟顺序上逐类定义规则，还要配套可视化合并面板与冲突回归测试（估 10–15 人日），而一期先把「离线可用 + 本地/云端标识 + 不丢数据」这三件事做扎实更划算。CRDT 的成本更高，且会把文档模型绑到 CRDT 的内部表示上——这与 [collaboration deferred](../../proposed/feature/2026-10-16-wmind-collaboration-deferred.md) 中「一期不让 CRDT 渗透模型层」的结论一致。
 
 ### 为什么同步引擎放在 Go 侧而不是前端？
 
 放在前端能省掉一层代理，且合并算法天然靠近文档类型定义（TS）。放弃它是因为同步需要长期后台运行（定时拉取、断点续传、退避重试、应用关闭前的落盘），浏览器环境做不到；而且本地 SQLite 与 uploads 的读写都在 Go 侧，跨语言搬数据只会增加失败面。合并算法二期仍会写在 TS 侧，同步状态机留在 Go 侧。
 
-## Acceptance criteria
+## Consequences
+
+一期落地后，桌面端与 Web 共用同一份前端与后端：断网时窗口里的一切照旧可用，
+数据落在本机 SQLite；连上自托管服务器后导图带「本地 / 云端」身份，本地可上传
+云端，删除状态双向同步，冲突走三选项流程且不丢数据。AI 与备份都能在本机配置，
+不需要先有服务器。代价是三条：桌面壳依赖 mygo（0.x，需要单独一条 Go 1.27.3
+工具链）、Linux 仍依赖系统 `libwebkit2gtk-4.1` 且渲染性能待实测、图片在文档里
+仍以 URL 存储因此跨端同步要靠映射表。
+
+验收表面（均已可观察）：
 
 1. 断开网络（或从未配置服务器）时，新建 / 编辑 / 删除 / 回收站 / 导入导出 / 主题 / 模板 / AI 生成全部可用，重启不丢数据。
 2. 本地模式首次启动不需要任何账号，不出现登录页，不产生指向远端的请求。
@@ -114,10 +123,10 @@ Electron 是这套方案最稳的等价物：生态成熟、WebView 就是 Chrom
 5. 删除状态双向同步：本地删除后云端列表不再显示，云端恢复后本地能看到；回收站期限按真实 `deleted_at` 计算。
 6. AI 配置在本机填写后断网可用（provider 不可达时有明确错误），API Key 不明文落盘、不出现在日志与导出文件里。
 7. 备份可配置到本地目录，定时与手动备份都落盘，保留份数正确，恢复后数据一致。
-8. 三端安装包可安装运行，`.wmind` / `.xmind` 文件关联可双击打开，自动更新签名校验通过。
+8. 三端二进制可由一条命令交叉编译，macOS 上能出已签名的 `.app`（`.dmg` 与公证、Windows 安装包、自动更新需凭据就绪后开启，见 docs/11 §8）。
 9. Web 形态不受影响：现有 e2e 套件与后端契约测试全部通过，未登录用户不因新增接口改变任何行为。
 
-## Risks
+已知风险与缓解：
 
 - **Linux 运行时与渲染性能**：桌面版依赖系统 `libwebkit2gtk-4.1`；mygo 默认关闭 WebKitGTK 的 DMA-BUF 渲染器（NVIDIA/虚拟机/容器下会白屏），退回 CPU 光栅化，SVG 重绘在 2000 节点量级可能掉帧。需要在 Debian/NVIDIA 真机压测，并按环境用 `App.SetDMABUFRenderer` 取舍。
 - **图片是 URL 而不是资产标识**：跨端同步靠 URL 映射表，合并时同一图片可能在两端各上传一份，产生冗余文件与潜在失效链接。彻底解法是文档格式加 `assetId`（要升 `formatVersion`），一期先接受这个不完美。
