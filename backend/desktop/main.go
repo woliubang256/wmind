@@ -37,6 +37,14 @@ func main() {
 }
 
 func run() error {
+	// 名字要在最前面定死：它决定用户数据目录与单实例锁的键。不设置的话，
+	// `go run` 的临时二进制和打包出来的 .app 会拿到不同的名字，本地数据
+	// 也就分裂在两个目录里。
+	mygo.App.SetName("wmind")
+	if version != "" {
+		mygo.App.SetVersion(version)
+	}
+
 	// 单实例：第二次启动不再开窗口，由第一个实例处理（后续接入深链接与
 	// 文件关联时，这里也是接收参数的地方）。
 	if !mygo.App.RequestSingleInstanceLock() {
@@ -65,15 +73,24 @@ func start() error {
 	if err != nil {
 		return err
 	}
-	defer closeLog()
 	slog.SetDefault(logger)
 
 	local, err := assembleLocal(context.Background(), paths, logger, appVersion())
 	if err != nil {
+		closeLog()
 		return err
 	}
-	// 后端持有数据库与后台任务：窗口关闭时必须先停 HTTP、再关它。
-	defer local.Close()
+
+	// start 会立刻返回，窗口关闭后才轮到 OnWillQuit：这里绝不能 defer 关闭，
+	// 否则数据库在首屏请求到达之前就被关掉（表现为 /auth/me 500）。
+	// 因此只在启动失败时清理。
+	ok := false
+	defer func() {
+		if !ok {
+			local.Close()
+			closeLog()
+		}
+	}()
 
 	ln, err := localserver.Listen()
 	if err != nil {
@@ -89,19 +106,21 @@ func start() error {
 	url := "http://" + ln.Addr().String() + "/"
 	logger.Info("wmind desktop started", "url", url, "data", paths.Root)
 
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+		local.Close()
+		closeLog()
+	})
+
 	mygo.NewWindow(mygo.WindowOptions{
 		Title:  "wmind",
 		URL:    url,
 		Width:  1280,
 		Height: 800,
 	})
-
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
-		local.Close()
-	})
+	ok = true
 	return nil
 }
 
