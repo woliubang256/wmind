@@ -7,6 +7,16 @@ import { ErrorBoundary } from './components/error-boundary';
 import './lib/i18n';
 import './styles.css';
 
+/**
+ * 桌面壳的窗口没有系统标题栏（红绿灯叠在页面左上角）。
+ *
+ * 在首帧前就打上标记，样式表据此预留红绿灯区域——等 React 挂载后再加类，
+ * 首帧会把品牌 logo 画到红绿灯底下，然后跳一下。
+ */
+if (typeof window !== 'undefined' && window.__WMIND__) {
+  document.documentElement.classList.add('wmind-desktop');
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/*

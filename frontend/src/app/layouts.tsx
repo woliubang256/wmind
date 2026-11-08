@@ -14,7 +14,7 @@ import { api, setAccessToken, setUnauthorizedHandler } from '@/lib/api/client';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useThemeStore } from './theme-store';
 import { authKeys, useCurrentUser } from './auth';
-import { desktopCapabilities } from '@/lib/desktop';
+import { desktopCapabilities, isDesktop } from '@/lib/desktop';
 
 function LoadingPage() {
   return (
@@ -224,10 +224,31 @@ export function AppLayout() {
    */
   const fullBleed = location.pathname.startsWith('/maps/');
 
+  /**
+   * 桌面壳隐藏了系统标题栏（红绿灯叠在左上角），顶栏就是标题栏：
+   * 整条可拖拽移动窗口（`--app-region: drag` 会继承给所有子元素），可交互
+   * 的元素不用逐个排除——mygo 的桥接层在按下时会对 `closest('button, a[href],
+   * input, …')` 命中的目标自动放行。首尾两条占位给红绿灯和（Windows 的）
+   * 窗口控制按钮让位，宽度由 mygo 运行时注入的 CSS 变量给出。
+   */
+  const titlebarStyle = isDesktop() ? ({ '--app-region': 'drag' } as React.CSSProperties) : undefined;
+  const titlebarInset = (side: 'left' | 'right') =>
+    isDesktop() ? (
+      <span
+        aria-hidden
+        className="h-full shrink-0"
+        style={{ width: `var(--mygo-titlebar-inset-${side}, 0px)` }}
+      />
+    ) : null;
+
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/90 backdrop-blur">
+      <header
+        className="sticky top-0 z-20 border-b border-border/70 bg-background/90 backdrop-blur"
+        style={titlebarStyle}
+      >
         <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
+          {titlebarInset('left')}
           <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
             <LoadingImage src={config.logoUrl || publicAssetUrl('/wmind-logo.jpg')} alt="" containerClassName="size-8 overflow-hidden rounded-lg shadow-sm" className="size-full object-cover" />
             <span className="hidden max-w-40 truncate sm:inline">{config.siteName}</span>
@@ -283,6 +304,7 @@ export function AppLayout() {
             >
               <Icon name="logout" className="size-4" />
             </Button>
+            {titlebarInset('right')}
           </div>
         </div>
       </header>

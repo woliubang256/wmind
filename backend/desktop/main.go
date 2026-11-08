@@ -119,15 +119,17 @@ func start() error {
 		closeLog()
 	})
 
-	// 最小宽度定在 1024：编辑器的画布 + 右侧面板 + 顶栏导航在这个宽度以下
-	// 就只能退化成图标模式，窗口再小下去是「能打开但没法用」。
+	// 隐藏系统标题栏但保留红绿灯（hiddenInset）：页面自己画顶栏，红绿灯叠在
+	// 左上角。前端负责留出红绿灯区域并把顶栏声明为可拖拽（--app-region），
+	// 见 frontend/src/app/layouts.tsx 与 styles.css 的 .wmind-desktop。
 	mygo.NewWindow(mygo.WindowOptions{
-		Title:     "wmind",
-		URL:       url,
-		Width:     1280,
-		Height:    800,
-		MinWidth:  1024,
-		MinHeight: 640,
+		Title:         "wmind",
+		URL:           url,
+		Width:         1280,
+		Height:        800,
+		MinWidth:      1024,
+		MinHeight:     640,
+		TitleBarStyle: mygo.TitleBarHiddenInset,
 	})
 	ok = true
 	return nil

@@ -72,6 +72,13 @@
 
 * { box-sizing: border-box; }
 html { min-width: 320px; min-height: 100%; }
+
+/* 桌面壳（mygo）隐藏标题栏后，红绿灯叠在左上角；这里给一个接近真实值的
+   预留，mygo 的运行时样式表会在窗口就绪后用精确值覆盖。 */
+html.wmind-desktop {
+  --mygo-titlebar-inset-left: 78px;
+  --mygo-titlebar-inset-right: 0px;
+}
 body {
   margin: 0;
   min-width: 320px;
