@@ -12,9 +12,9 @@
 // config.Version，保证窗口里显示与 /site/config 返回的版本一致。
 
 import { execFileSync } from 'node:child_process';
+import { basename, dirname, join, resolve } from 'node:path';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { readVersion } from './release.mjs';
@@ -163,9 +163,15 @@ function createDmg(appPath, version, dir, label) {
     const styled = backgroundFile !== undefined;
 
     try {
-      // 要摆图标、设背景就得挂载读写盘，摆完再压成只读分发包。
+      // 卷名固定为 "wmind <版本>"：如果用户 Finder 里还挂着旧的（同名）卷，
+      // 新盘会被改名成 "wmind <版本> 1"，AppleScript 按 `disk "wmind <版本>"`
+      // 就会找到旧卷，美化打到别人身上、自己回退朴素。所以先弹掉同名旧卷。
+      detachVolume(`wmind ${version}`);
       run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDRW', '-fs', 'HFS+', rwImage]);
       const mount = attachImage(rwImage);
+      if (basename(mount) !== `wmind ${version}`) {
+        throw new Error(`mount point is ${mount}, expected "/Volumes/wmind ${version}"`);
+      }
       try {
         if (icns) {
           cpSync(icns, join(mount, '.VolumeIcon.icns'));
@@ -229,6 +235,15 @@ end tell`;
  * 用系统自带的 sips + iconutil 而不是引一个图像库：这两条命令在所有受支持的
  * macOS 上都在，而且不改变仓库依赖。
  */
+/** 弹掉同名旧卷（不存在时静默）。 */
+function detachVolume(name) {
+  try {
+    run('hdiutil', ['detach', join('/Volumes', name), '-force', '-quiet']);
+  } catch {
+    // 没挂载就是正常情况。
+  }
+}
+
 /** 挂载磁盘映像并返回挂载点（卷名带空格，不能按列切分）。 */
 function attachImage(image) {
   const out = execFileSync('hdiutil', ['attach', '-nobrowse', image], { encoding: 'utf8' });
