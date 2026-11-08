@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
-"""生成 DMG 安装窗口的背景图（backend/desktop/resources/dmg-background.png）。
+"""生成 DMG 安装窗口的背景图（1x + 2x 两份，打包时合成 HiDPI TIFF）。
 
-DMG 窗口的观感 = 一张全幅背景图 + Finder 里摆好位置的图标。注意两点：
+布局：一行品牌文字 + 一行「应用图标 → Applications」，之间一条带弧度的箭头。
+不放说明文字，也不放品牌图标——背景里的图标会和下面真正的应用图标重复。
 
-1. **Finder 不缩放背景图**，它按原始像素 1:1 铺（超出窗口的部分被裁掉），
-   所以背景图必须与窗口**同尺寸**：660×400 pt 的窗口就是 660×400 的图。
-2. 图标由 build-desktop.mjs 用 AppleScript 摆放，坐标必须与这里的箭头对齐：
-     wmind.app     (200, 300) pt
-     Applications  (460, 300) pt
-   箭头画在两者之间，带一点向上的弧度。
+**为什么要出两份**：Finder 的背景图不认 SVG，也不做矢量渲染；它按位图铺。
+窗口是 660×400 pt，只给 1x 图的话，在 Retina 屏上会被放大一倍，文字和箭头
+出现明显锯齿。做法与 create-dmg 一致：出 1x 与 2x，用
+`tiffutil -cathidpicheck` 合成一个多分辨率 TIFF，Finder 自动挑清晰的那份。
+
+坐标约定（与 build-desktop.mjs 的 AppleScript 一致）：
+  wmind.app     (200, 300) pt
+  Applications  (460, 300) pt
 
 用法：python3 scripts/build-dmg-background.py
 依赖：Pillow
 """
 
-from pathlib import Path
-
 import math
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE_LOGO = ROOT / "backend" / "desktop" / "resources" / "icon.png"
-OUTPUT = ROOT / "backend" / "desktop" / "resources" / "dmg-background.png"
+RESOURCES = ROOT / "backend" / "desktop" / "resources"
 
 W, H = 660, 400
 APP_CENTER = (200, 300)
@@ -35,8 +36,8 @@ TITLE_FONTS = [
 ]
 
 
-def load_font(candidates, size):
-    for path in candidates:
+def load_font(size):
+    for path in TITLE_FONTS:
         try:
             return ImageFont.truetype(path, size)
         except OSError:
@@ -53,28 +54,21 @@ def vertical_gradient(size, top, bottom):
     return img.resize((w, h))
 
 
-def centered_text(draw, text, font, cx, y, fill):
-    width = draw.textlength(text, font=font)
-    draw.text((cx - width / 2, y), text, font=font, fill=fill)
-
-
-def curved_arrow(draw, start, end, bend, color, width=9):
+def curved_arrow(draw, start, end, bend, color, width):
     """二次贝塞尔弧线 + 沿切线方向的箭头。bend 为正向上弯。"""
     (x0, y0), (x1, y1) = start, end
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2 - bend
-    steps = 48
     points = []
-    for i in range(steps + 1):
-        t = i / steps
+    for i in range(80):
+        t = i / 79
         x = (1 - t) ** 2 * x0 + 2 * (1 - t) * t * cx + t ** 2 * x1
         y = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t ** 2 * y1
         points.append((x, y))
     draw.line(points, fill=color, width=width, joint="curve")
-    # 箭头方向取曲线末端切线。
     (px, py), (qx, qy) = points[-2], points[-1]
     angle = math.atan2(qy - py, qx - px)
-    head, spread = 26, 0.46
-    tip = (x1 + width * 0.9, y1)
+    head, spread = 36, 0.5
+    tip = (x1 + width * 0.6, y1 + (y1 - py) * 0.2)
     draw.polygon(
         [
             tip,
@@ -85,30 +79,47 @@ def curved_arrow(draw, start, end, bend, color, width=9):
     )
 
 
-def main():
-    title_font = load_font(TITLE_FONTS, 72)
+def render(scale):
+    """按缩放倍数画一张：2x 时所有尺寸翻倍，得到真正的高清图。"""
+    w, h = W * scale, H * scale
+    img = vertical_gradient((w, h), (27, 36, 55), (13, 19, 32)).convert("RGBA")
 
-    img = vertical_gradient((W, H), (27, 36, 55), (13, 19, 32)).convert("RGBA")
-
-    # 品牌色光晕：让标题区域不那么"平"。
-    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(glow).ellipse((W // 2 - 260, -60, W // 2 + 260, 260), fill=(251, 90, 10, 36))
-    glow = glow.filter(ImageFilter.GaussianBlur(70))
+    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse(
+        (w // 2 - 280 * scale, -80 * scale, w // 2 + 280 * scale, 220 * scale),
+        fill=(251, 90, 10, 34),
+    )
+    glow = glow.filter(ImageFilter.GaussianBlur(80 * scale))
     img = Image.alpha_composite(img, glow)
 
     draw = ImageDraw.Draw(img)
 
-    logo = Image.open(SOURCE_LOGO).convert("RGBA")
-    logo = logo.resize((120, 120), Image.LANCZOS)
-    img.paste(logo, (W // 2 - 60, 34), logo)
+    # 品牌：只有一行文字（不再放图标，避免与下面真正的应用图标重复）。
+    title_font = load_font(96 * scale)
+    text = "wmind"
+    text_w = draw.textlength(text, font=title_font)
+    ascent, descent = title_font.getmetrics()
+    baseline_y = 150 * scale - (ascent + descent) / 2
+    draw.text(((w - text_w) / 2, baseline_y), text, font=title_font, fill=(244, 247, 252))
 
-    centered_text(draw, "wmind", title_font, W // 2, 168, (244, 247, 252))
+    # 图标之间的弧形箭头。
+    curved_arrow(
+        draw,
+        (APP_CENTER[0] * scale + 80 * scale, APP_CENTER[1] * scale - 2 * scale),
+        (FOLDER_CENTER[0] * scale - 80 * scale, FOLDER_CENTER[1] * scale - 26 * scale),
+        42 * scale,
+        (139, 149, 167),
+        max(1, round(13 * scale)),
+    )
+    return img.convert("RGB")
 
-    # 图标之间带弧度的引导箭头（起点/终点避开图标本体 64pt 半径）。
-    curved_arrow(draw, (APP_CENTER[0] + 78, APP_CENTER[1] + 6), (FOLDER_CENTER[0] - 78, FOLDER_CENTER[1] - 18), 34, (139, 149, 167))
 
-    img.convert("RGB").save(OUTPUT, optimize=True)
-    print(f"written {OUTPUT} ({W}x{H})")
+def main():
+    RESOURCES.mkdir(parents=True, exist_ok=True)
+    render(1).save(RESOURCES / "dmg-background.png", optimize=True)
+    render(2).save(RESOURCES / "dmg-background@2x.png", optimize=True)
+    print(f"written {RESOURCES / 'dmg-background.png'} (660x400)")
+    print(f"written {RESOURCES / 'dmg-background@2x.png'} (1320x800)")
 
 
 if __name__ == "__main__":

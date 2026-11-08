@@ -52,10 +52,15 @@ jobs:
 
       # 三端交叉编译：不需要 GUI，也不需要平台工具链（无 cgo）。
       # 安装包（.dmg / NSIS / .deb）在发布机上单独出，见 docs/11 §8。
-      - name: Cross-compile desktop binaries
-        run: node scripts/build-desktop.mjs --platform darwin/amd64,darwin/arm64,windows/amd64,linux/amd64
+      # 打包会生成签名更新清单（update-<平台>.json），私钥来自仓库 secret
+      # MYGO_UPDATER_PRIVATE_KEY（mygo keygen 生成，publicKey 已入库）。
+      # 没有 secret 时照样构建，只是不写清单——旧版本无法自动升级，发布前必须配好。
+      - name: Build desktop packages
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64,windows/amd64,windows/arm64
 
-      - name: Upload desktop binaries
+      - name: Upload desktop packages
         uses: actions/upload-artifact@v4
         with:
           name: wmind-desktop

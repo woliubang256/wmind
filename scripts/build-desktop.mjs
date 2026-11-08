@@ -137,15 +137,23 @@ function createDmg(appPath, version, dir, label) {
 
     // 品牌背景图与卷图标：都是「锦上添花」，缺一个就退回朴素窗口，不让出包失败。
     const icon = join(DESKTOP, 'resources', 'icon.png');
-    const background = join(DESKTOP, 'resources', 'dmg-background.png');
-    if (existsSync(background)) {
+    const background1x = join(DESKTOP, 'resources', 'dmg-background.png');
+    const background2x = join(DESKTOP, 'resources', 'dmg-background@2x.png');
+    let backgroundFile;
+    if (existsSync(background1x) && existsSync(background2x)) {
+      // 1x + 2x 合成 HiDPI TIFF：Retina 屏上清晰，普通屏用 1x。tiffutil 是系统自带。
       mkdirSync(join(stage, '.background'), { recursive: true });
-      cpSync(background, join(stage, '.background', 'background.png'));
+      backgroundFile = 'background.tiff';
+      run('tiffutil', ['-cathidpicheck', background1x, background2x, '-out', join(stage, '.background', backgroundFile)]);
+    } else if (existsSync(background1x)) {
+      mkdirSync(join(stage, '.background'), { recursive: true });
+      backgroundFile = 'background.png';
+      cpSync(background1x, join(stage, '.background', backgroundFile));
     }
     const icns = existsSync(icon) ? makeIcns(icon, join(stage, '..', `wmind-${version}-${label}.icns`)) : undefined;
 
     const dmg = join(dir, `wmind-${version}-${label}.dmg`);
-    const styled = existsSync(join(stage, '.background', 'background.png'));
+    const styled = backgroundFile !== undefined;
 
     try {
       // 要摆图标、设背景就得挂载读写盘，摆完再压成只读分发包。
@@ -156,7 +164,7 @@ function createDmg(appPath, version, dir, label) {
           cpSync(icns, join(mount, '.VolumeIcon.icns'));
           if (hasCommand('SetFile')) run('SetFile', ['-a', 'C', mount]);
         }
-        if (styled) arrangeDmgWindow(mount, `wmind ${version}`);
+        if (styled) arrangeDmgWindow(mount, `wmind ${version}`, backgroundFile);
       } finally {
         run('hdiutil', ['detach', mount, '-quiet']);
       }
@@ -177,10 +185,10 @@ function createDmg(appPath, version, dir, label) {
  * 用 Finder 摆好 DMG 窗口：窗口大小、隐藏工具栏、图标尺寸与位置、背景图。
  *
  * 图标坐标必须与 dmg-background.py 画的箭头对齐（窗口 660×400 pt，应用
- * (200,300)、Applications (460,300)）。这段要靠 Finder 自动化，无界面环境
- * 或权限被拒时会抛错，由调用方回退。
+ * (200,300)、Applications (460,300)）。背景图支持 1x+2x 合成的 HiDPI TIFF。
+ * 这段要靠 Finder 自动化，无界面环境或权限被拒时会抛错，由调用方回退。
  */
-function arrangeDmgWindow(mount, volume) {
+function arrangeDmgWindow(mount, volume, backgroundFile) {
   const script = `tell application "Finder"
   tell disk "${volume}"
     open
@@ -191,7 +199,7 @@ function arrangeDmgWindow(mount, volume) {
     set theViewOptions to the icon view options of container window
     set arrangement of theViewOptions to not arranged
     set icon size of theViewOptions to 128
-    set background picture of theViewOptions to file ".background:background.png"
+    set background picture of theViewOptions to file ".background:${backgroundFile}"
     set position of item "wmind.app" of container window to {200, 300}
     set position of item "Applications" of container window to {460, 300}
     close
@@ -337,10 +345,11 @@ function main() {
   const version = readVersion(ROOT);
   checkPackageVersion(version);
   let platforms = args.platforms.length > 0 ? args.platforms : [hostPlatform()];
-  // 打安装包时 macOS 出 arm64 与 amd64 两个包：Apple Silicon 用户下载 arm64，
-  // Intel 用户下载 amd64，各自原生运行。universal 一个包会让所有人多下载一倍。
-  if (args.package && process.platform === 'darwin' && args.platforms.length === 0) {
-    platforms = ['darwin/arm64', 'darwin/amd64'];
+  // 打安装包时的默认目标：macOS 与 Windows 都出 arm64 + amd64 两个包
+  // （Apple Silicon / Intel 各自原生运行，universal 单包会让所有人多下载一倍）。
+  // Linux 需要时用 --platform 显式给。
+  if (args.package && args.platforms.length === 0) {
+    platforms = ['darwin/arm64', 'darwin/amd64', 'windows/amd64', 'windows/arm64'];
   }
 
   if (!args.skipFrontend) buildFrontend();
