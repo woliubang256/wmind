@@ -11,7 +11,8 @@
 // config.Version，保证窗口里显示与 /site/config 返回的版本一致。
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,6 +74,10 @@ function buildFor(platform, version) {
   const dir = join(OUT_DIR, `${goos}-${goarch}`);
   mkdirSync(dir, { recursive: true });
   const output = join(dir, goos === 'windows' ? 'wmind.exe' : 'wmind');
+  if (goarch === 'universal') {
+    buildUniversal(goos, dir, output, version);
+    return output;
+  }
 
   const ldflags = [
     `-X ${DESKTOP_VERSION_SYMBOL}=${version}`,
@@ -90,6 +95,50 @@ function buildFor(platform, version) {
     },
   });
   return output;
+}
+
+/**
+ * darwin/universal：先分别编两个架构，再用 lipo 合成一个二进制。
+ *
+ * 单独写而不是指望 go build 支持 universal（它不支持）：一个包同时覆盖 Intel
+ * 与 Apple Silicon，用户不用挑。
+ */
+function buildUniversal(goos, dir, output, version) {
+  const ldflags = [
+    `-X ${DESKTOP_VERSION_SYMBOL}=${version}`,
+    `-X ${BACKEND_VERSION_SYMBOL}=${version}`,
+  ].join(' ');
+  const parts = ['arm64', 'amd64'].map((arch) => {
+    const part = join(dir, `wmind-${arch}`);
+    run('go', ['build', '-trimpath', '-tags', 'desktopfrontend', '-ldflags', ldflags, '-o', part, '.'], {
+      cwd: DESKTOP,
+      env: { ...process.env, CGO_ENABLED: '0', GOOS: goos, GOARCH: arch },
+    });
+    return part;
+  });
+  run('lipo', ['-create', '-output', output, ...parts]);
+  for (const part of parts) rmSync(part, { force: true });
+}
+
+/**
+ * 用 hdiutil 出 .dmg，而不是让 mygo 自己打包。
+ *
+ * mygo 的 dmg 步骤调用 `ditto --noclone`，这个选项在 macOS 13 及更早的 ditto
+ * 上不存在（会直接报 unrecognized option），而这些版本仍在支持期内。hdiutil
+ * 是同一份系统自带工具，行为在所有版本上都一样，还能顺便把「拖到 Applications」
+ * 的软链接放进去。
+ */
+function createDmg(appPath, version, dir, label) {
+  const stage = mkdtempSync(join(tmpdir(), 'wmind-dmg-'));
+  try {
+    cpSync(appPath, join(stage, 'wmind.app'), { recursive: true, dereference: false });
+    symlinkSync('/Applications', join(stage, 'Applications'));
+    const dmg = join(dir, `wmind-${version}-${label}.dmg`);
+    run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDZO', '-fs', 'HFS+', dmg]);
+    return dmg;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
 }
 
 // packageApps 用 mygo 的 CLI 生成平台安装包（.app/.dmg、NSIS、.deb）。
@@ -110,7 +159,9 @@ function packageApps(platforms, version) {
   ];
   // 没有签名身份时不尝试公证：公证必须有 Developer ID。
   if (!process.env.MYGO_SIGN_IDENTITY) args.push('-skip-notarize');
-  if (process.env.MYGO_SKIP_DMG === '1') args.push('-skip-dmg');
+  // .dmg 由本脚本用 hdiutil 出（见 createDmg）：mygo 的 ditto --noclone 在
+  // macOS 13 上不可用。
+  args.push('-skip-dmg');
 
   console.log('生成安装包…');
   run('go', args, {
@@ -121,6 +172,17 @@ function packageApps(platforms, version) {
       MYGO_LDFLAGS: [process.env.MYGO_LDFLAGS, ldflags].filter(Boolean).join(' '),
     },
   });
+
+  if (process.platform !== 'darwin') return;
+  for (const platform of platforms) {
+    if (!platform.startsWith('darwin/')) continue;
+    const arch = platform.split('/')[1];
+    const dir = join(OUT_DIR, `darwin-${arch}`);
+    const appPath = join(dir, 'wmind.app');
+    if (!existsSync(appPath)) continue;
+    const dmg = createDmg(appPath, version, dir, arch);
+    console.log(`  ${dmg}`);
+  }
 }
 
 /**
