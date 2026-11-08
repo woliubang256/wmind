@@ -55,7 +55,11 @@ def vertical_gradient(size, top, bottom):
 
 
 def curved_arrow(draw, start, end, bend, color, width):
-    """二次贝塞尔弧线 + 沿切线方向的箭头。bend 为正向上弯。"""
+    """浅弧 + 箭头：起止同一水平线，中点向上拱起 bend。
+
+    起止等高、弧度放缓，箭头末端切线接近水平，看起来是「指向右边」而不是
+    「扎进文件夹」。两端补圆头，避免直角断口。
+    """
     (x0, y0), (x1, y1) = start, end
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2 - bend
     points = []
@@ -65,6 +69,8 @@ def curved_arrow(draw, start, end, bend, color, width):
         y = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t ** 2 * y1
         points.append((x, y))
     draw.line(points, fill=color, width=width, joint="curve")
+    for px, py in (points[0], points[-1]):
+        draw.ellipse((px - width / 2, py - width / 2, px + width / 2, py + width / 2), fill=color)
     # 箭头：三角形沿曲线末端的切线方向探出，尖端再往前一点点，
     # 让箭头与弧线连成一个整体而不是两块拼接。
     (px, py), (qx, qy) = points[-2], points[-1]
@@ -121,11 +127,11 @@ def render_raw(scale):
     # 图标之间的弧形箭头。
     curved_arrow(
         draw,
-        (APP_CENTER[0] * scale + 80 * scale, APP_CENTER[1] * scale - 2 * scale),
-        (FOLDER_CENTER[0] * scale - 80 * scale, FOLDER_CENTER[1] * scale - 26 * scale),
-        42 * scale,
+        (APP_CENTER[0] * scale + 82 * scale, APP_CENTER[1] * scale - 4 * scale),
+        (FOLDER_CENTER[0] * scale - 82 * scale, FOLDER_CENTER[1] * scale - 4 * scale),
+        22 * scale,
         (139, 149, 167),
-        max(1, round(11 * scale)),
+        max(1, round(9 * scale)),
     )
     return img.convert("RGB")
 
