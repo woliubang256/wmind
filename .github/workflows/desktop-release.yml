@@ -1,0 +1,101 @@
+name: Desktop release
+
+# 桌面版发布：推 desktop-v<版本> 标签触发。
+#
+# 为什么不并进 ci.yml：那条工作流是 **Web 版**发布（构建镜像、推 latest、
+# 发 Release），桌面版只出安装包与更新清单，两边的产物与副作用完全不同，
+# 合并会让一次桌面发布顺手重推一遍 Web 镜像。
+#
+# 前置条件（在仓库 Settings → Secrets 配置）：
+#   MYGO_UPDATER_PRIVATE_KEY  mygo keygen 生成的 mygo-update.key 内容；
+#                             没有它构建出的版本无法被已安装的客户端升级。
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and publish desktop packages
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: backend/desktop/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.8
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # 标签必须与 VERSION 一致：否则安装包、更新清单和 tag 会各说各话。
+      - name: Verify tag matches VERSION
+        run: |
+          tag_version="${GITHUB_REF_NAME#desktop-v}"
+          file_version="$(cat VERSION)"
+          if [ "$tag_version" != "$file_version" ]; then
+            echo "标签版本 $tag_version 与 VERSION $file_version 不一致" >&2
+            exit 1
+          fi
+          node scripts/release.mjs check "v${tag_version}"
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Test desktop module
+        run: cd backend/desktop && go vet ./... && go test ./...
+
+      # Windows 安装包（NSIS）需要 makensis。
+      - name: Install NSIS for the Windows installer
+        run: brew install nsis
+
+      # 四个平台一起出：macOS / Windows 各 arm64 + amd64。
+      # 私钥来自 secret，缺了会打警告并且不生成更新清单（发布前必须配好）。
+      - name: Build packages
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64,windows/amd64,windows/arm64
+
+      # 只发布升级所需的文件 + 安装包：归档、更新清单、DMG/安装器。
+      # 注意 --latest=false：桌面版发布不能抢 Web 版 v* 的「最新」位置。
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version="${tag#desktop-v}"
+          assets=()
+          for dir in backend/desktop/build/*/; do
+            for f in "$dir"update-*.json "$dir"*.tar.gz "$dir"*.dmg "$dir"*setup*.exe; do
+              [ -f "$f" ] && assets+=("$f")
+            done
+          done
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "没有可发布的产物" >&2
+            exit 1
+          fi
+          gh release create "$tag" --draft --title "wmind 桌面版 $version" "${assets[@]}"
+          gh release edit "$tag" --draft=false --latest=false
+          printf '%s\n' "${assets[@]}"
