@@ -6,9 +6,9 @@ name: Desktop release
 # 发 Release），桌面版只出安装包与更新清单，两边的产物与副作用完全不同，
 # 合并会让一次桌面发布顺手重推一遍 Web 镜像。
 #
-# 为什么分成两个作业：macOS 的 .dmg 要靠 Finder 自动化摆图标、Windows 安装包
-# 要靠 NSIS，这些都只在 macOS 上做；Linux 的 AppImage 只能靠 appimagetool 在
-# Linux 上打。两边各自出产物，最后一个作业汇总发布，避免两个作业抢着建 Release。
+# 为什么是 macOS runner：**.dmg 只能在这上面打**。`hdiutil` 是 macOS 独有的，
+# Linux runner 连 dmg 都生成不了（更谈不上美化窗口）；Windows 安装包靠 NSIS，
+# macOS 上 `brew install nsis` 也能装。所以一台 macOS runner 出全部产物。
 #
 # 前置条件（仓库 Settings → Secrets）：
 #   MYGO_UPDATER_PRIVATE_KEY  mygo keygen 生成的 mygo-update.key 内容；
@@ -27,19 +27,9 @@ concurrency:
 
 jobs:
   build:
-    name: Build (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
+    name: Build and publish desktop packages
+    runs-on: macos-14
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS + Windows
-            os: macos-14
-            platforms: darwin/arm64,darwin/amd64,windows/amd64,windows/arm64
-          - name: Linux
-            os: ubuntu-24.04
-            platforms: linux/amd64,linux/arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -80,53 +70,32 @@ jobs:
       - name: Test desktop module
         run: cd backend/desktop && go vet ./... && go test ./...
 
-      # Windows 安装包（NSIS）需要 makensis：Linux 用 apt，macOS 用 brew。
-      - name: Install NSIS
-        run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then brew install nsis; else sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis; fi
+      - name: Install NSIS for the Windows installer
+        run: brew install nsis
 
+      # 四个平台一起出：macOS / Windows 各 arm64 + amd64。
+      # .dmg 的窗口美化要靠 Finder 自动化，runner 上不一定能驱动；驱动不了会打
+      # 警告并回退成朴素窗口，出包不会失败（见 docs/11 §8）。
       - name: Build packages
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: node scripts/build-desktop.mjs --platform "${{ matrix.platforms }}"
+        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64,windows/amd64,windows/arm64
 
-      - name: Upload packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: wmind-desktop-${{ runner.os }}
-          path: |
-            backend/desktop/build/**/*.dmg
-            backend/desktop/build/**/*.zip
-            backend/desktop/build/**/*.AppImage
-            backend/desktop/build/**/*.tar.gz
-            backend/desktop/build/**/*setup*.exe
-            backend/desktop/build/**/update-*.json
-            backend/desktop/build/**/install.sh
-            backend/desktop/build/**/install.ps1
-            backend/desktop/build/**/SHA256SUMS
-          if-no-files-found: error
-
-  publish:
-    name: Publish release
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - name: Download packages
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      # --latest=false：桌面版发布不能抢 Web 版 v* 的「最新」位置。
-      - name: Create release
+      # 只发布升级所需的文件 + 安装包：归档、更新清单、DMG/安装器。
+      # 注意 --latest=false：桌面版发布不能抢 Web 版 v* 的「最新」位置。
+      - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
           version="${tag#desktop-v}"
-          mapfile -t assets < <(find artifacts -type f | sort)
+          assets=()
+          for dir in backend/desktop/build/*/; do
+            for f in "$dir"update-*.json "$dir"*.tar.gz "$dir"*.zip "$dir"*.dmg "$dir"*setup*.exe; do
+              [ -f "$f" ] && assets+=("$f")
+            done
+          done
           if [ ${#assets[@]} -eq 0 ]; then
             echo "没有可发布的产物" >&2
             exit 1

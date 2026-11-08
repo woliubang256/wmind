@@ -218,110 +218,6 @@ end tell`;
  * 用系统自带的 sips + iconutil 而不是引一个图像库：这两条命令在所有受支持的
  * macOS 上都在，而且不改变仓库依赖。
  */
-/**
- * 把 mygo 产出的 Linux 应用目录打成 AppImage。
- *
- * AppImage 的承诺是「一个文件，下载即用」，但它**不能替用户装上系统库**：
- * 我们的窗口用系统 WebKitGTK 4.1 + GTK3（无 cgo、运行时 dlopen），所以 AppImage
- * 里不带这些库——在没装 libwebkit2gtk-4.1 的老发行版上依然会启动失败。把
- * WebKitGTK 整个塞进去会让包体涨到 200MB 以上，且要处理 LGPL 合规，暂时不做。
- * 因此 AppImage 的定位是「比 tarball 好用、比 .deb 通用」，不是「零依赖」。
- */
-function packageAppImage(platform, version) {
-  const arch = platform.split('/')[1];
-  const appImageArch = arch === 'arm64' ? 'aarch64' : 'x86_64';
-  const dir = join(OUT_DIR, `linux-${arch}`);
-  const appDir = join(dir, 'wmind.AppDir');
-  const slug = 'wmind';
-
-  rmSync(appDir, { recursive: true, force: true });
-  mkdirSync(join(appDir, 'usr', 'bin'), { recursive: true });
-  mkdirSync(join(appDir, 'usr', 'share', 'applications'), { recursive: true });
-  mkdirSync(join(appDir, 'usr', 'share', 'icons', 'hicolor', '256x256', 'apps'), { recursive: true });
-
-  // 只拷应用本身（可执行 + resources），打包产物与安装脚本不进 AppDir。
-  const skipped = new Set(['PKGBUILD', 'install.sh', 'install.ps1', 'SHA256SUMS', 'wmind.AppDir']);
-  for (const name of readdirSync(dir)) {
-    if (name.endsWith('.tar.gz') || name.endsWith('.deb') || name.endsWith('.zip') || name.endsWith('.AppImage')) continue;
-    if (name.startsWith('update-') && name.endsWith('.json')) continue;
-    if (skipped.has(name)) continue;
-    const from = join(dir, name);
-    if (name === slug) {
-      cpSync(from, join(appDir, 'usr', 'bin', slug));
-    } else if (name.endsWith('.png') || name.endsWith('.xml') || name.endsWith('.desktop')) {
-      continue; // 图标与 desktop 文件由下面自己生成，避免和 mygo 的命名打架
-    } else {
-      cpSync(from, join(appDir, 'usr', 'bin', name), { recursive: true });
-    }
-  }
-
-  const icon = join(DESKTOP, 'resources', 'icon.png');
-  if (existsSync(icon)) {
-    cpSync(icon, join(appDir, slug + '.png'));
-    cpSync(icon, join(appDir, 'usr', 'share', 'icons', 'hicolor', '256x256', 'apps', slug + '.png'));
-  }
-
-  writeFileSync(join(appDir, 'AppRun'), `#!/bin/sh
-HERE="$(dirname "$(readlink -f "$0")")"
-exec "$HERE/usr/bin/${slug}" "$@"
-`, { mode: 0o755 });
-
-  writeFileSync(join(appDir, slug + '.desktop'), `[Desktop Entry]
-Type=Application
-Name=wmind
-Comment=思维导图 / Mind map
-Exec=${slug}
-Icon=${slug}
-Categories=Office;Graphics;
-Terminal=false
-StartupWMClass=wmind
-`);
-
-  // WMIND_APPIMAGE_DRYRUN=1：只生成 AppDir 不调 appimagetool，用来在非 Linux
-  // 机器上检查目录结构与 AppRun 是否正确（CI 之外的快速自检）。
-  if (process.env.WMIND_APPIMAGE_DRYRUN === '1') {
-    console.log(`  （dry-run）AppDir: ${appDir}`);
-    for (const entry of readdirSync(appDir)) console.log(`    ${entry}`);
-    return;
-  }
-
-  const tool = appImageTool();
-  if (!tool) {
-    console.warn('警告：拿不到 appimagetool，跳过 AppImage（.deb 与 tarball 仍可用）。');
-    return;
-  }
-  const out = join(dir, `${slug}-${version}-linux-${arch}.AppImage`);
-  rmSync(out, { force: true });
-  run(tool, [appDir, out], {
-    env: { ...process.env, ARCH: appImageArch, APPIMAGE_EXTRACT_AND_RUN: '1' },
-  });
-  rmSync(appDir, { recursive: true, force: true });
-  console.log(`  ${out}`);
-}
-
-/**
- * 下载并缓存 appimagetool（它自己是 AppImage，用 --appimage-extract-and-run 免 FUSE）。
- *
- * 取**宿主架构**的二进制：目标架构由 ARCH 环境变量告诉它（交叉打包的标准做法），
- * 所以 x86_64 的 CI 也能给 arm64 打 AppImage。
- */
-function appImageTool() {
-  const hostArch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
-  const cache = join(homedir(), '.cache', 'wmind');
-  mkdirSync(cache, { recursive: true });
-  const path = join(cache, `appimagetool-${hostArch}.AppImage`);
-  if (existsSync(path)) return path;
-  const url = `https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${hostArch}.AppImage`;
-  try {
-    run('curl', ['-fsSL', '--max-time', '120', '-o', path, url]);
-    execFileSync('chmod', ['+x', path]);
-    return path;
-  } catch (error) {
-    console.warn(`警告：下载 appimagetool 失败（${error.message}）`);
-    return undefined;
-  }
-}
-
 /** 挂载磁盘映像并返回挂载点（卷名带空格，不能按列切分）。 */
 function attachImage(image) {
   const out = execFileSync('hdiutil', ['attach', '-nobrowse', image], { encoding: 'utf8' });
@@ -427,17 +323,6 @@ function packageApps(platforms, version) {
     // 打整个应用目录（exe + 资源 + .mygo-files），只排除归档、更新清单和 zip 自己。
     run('zip', ['-qry', zipName, '.', '-x', archive, '-x', 'update-*.json', '-x', zipName], { cwd: dir });
     console.log(`  ${zip}`);
-  }
-
-  // Linux：在 mygo 的产物（可执行 + .deb + tarball）之外再打一份 AppImage。
-  // appimagetool 只有 Linux 版，所以这一步在 macOS 上跳过、由 CI 的 ubuntu 作业完成。
-  for (const platform of platforms) {
-    if (!platform.startsWith('linux/')) continue;
-    if (process.platform !== 'linux' && process.env.WMIND_APPIMAGE_DRYRUN !== '1') {
-      console.log(`  （跳过 AppImage：appimagetool 只能在 Linux 上运行，${platform} 的 AppImage 由 CI 产出）`);
-      continue;
-    }
-    packageAppImage(platform, version);
   }
 
   if (process.platform !== 'darwin') return;
