@@ -119,11 +119,15 @@ func start() error {
 		closeLog()
 	})
 
+	// 最小宽度定在 1024：编辑器的画布 + 右侧面板 + 顶栏导航在这个宽度以下
+	// 就只能退化成图标模式，窗口再小下去是「能打开但没法用」。
 	mygo.NewWindow(mygo.WindowOptions{
-		Title:  "wmind",
-		URL:    url,
-		Width:  1280,
-		Height: 800,
+		Title:     "wmind",
+		URL:       url,
+		Width:     1280,
+		Height:    800,
+		MinWidth:  1024,
+		MinHeight: 640,
 	})
 	ok = true
 	return nil
