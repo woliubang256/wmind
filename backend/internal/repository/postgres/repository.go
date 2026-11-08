@@ -330,6 +330,28 @@ func (r *MapRepository) ListByOwner(ctx context.Context, ownerID int64, sort dom
 	return mapPGMaps(rows), nil
 }
 
+// ListChangedSince 返回 updated_since 之后有变化的导图（含回收站）。
+func (r *MapRepository) ListChangedSince(ctx context.Context, ownerID int64, since time.Time) ([]*domain.Map, error) {
+	rows, err := r.queries(ctx).ListMapsChangedSince(ctx, pgdb.ListMapsChangedSinceParams{
+		OwnerID: ownerID, UpdatedSince: pgTime(since),
+	})
+	if err != nil {
+		return nil, mapPGError(err)
+	}
+	return mapPGMaps(rows), nil
+}
+
+// GetIncludingDeleted 按 uid 读取，包含回收站里的导图。
+func (r *MapRepository) GetIncludingDeleted(ctx context.Context, uid string, ownerID int64) (*domain.Map, error) {
+	v, err := r.queries(ctx).GetMapByUIDIncludingDeleted(ctx, pgdb.GetMapByUIDIncludingDeletedParams{
+		Uid: uid, OwnerID: ownerID,
+	})
+	if err != nil {
+		return nil, mapPGError(err)
+	}
+	return mapPGMap(v), nil
+}
+
 func (r *MapRepository) CountByOwner(ctx context.Context, ownerID int64) (int64, error) {
 	v, err := r.queries(ctx).CountMapsByOwner(ctx, ownerID)
 	return v, mapPGError(err)

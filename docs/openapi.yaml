@@ -596,8 +596,15 @@ paths:
   /api/v1/maps:
     get:
       tags: [maps]
-      summary: 我的导图列表
-      description: 列表项**不含 document**——一页 20 张图就是 20 MB。
+      summary: 我的导图列表（或增量同步拉取）
+      description: |
+        列表项**不含 document**——一页 20 张图就是 20 MB。
+
+        带 `updated_since` 时切换成**增量同步模式**（docs/11 §5）：返回该时刻之后
+        有变化的导图，**包含回收站里的**（`deleted: true`），不分页、按 `updatedAt`
+        升序，最多 2000 条；客户端拿最后一条的 `updatedAt` 作为下一次的游标。
+        软删除与恢复都算变更。硬删除（清空回收站）不留痕迹，客户端遇到 404 应
+        按「远端已彻底删除」处理。
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -608,6 +615,10 @@ paths:
         - name: sort
           in: query
           schema: { type: string, enum: [updated, title, created], default: updated }
+        - name: updated_since
+          in: query
+          description: 增量同步起点（RFC 3339）。给了就切到增量模式，忽略分页与筛选。
+          schema: { type: string, format: date-time }
       responses:
         '200':
           description: 导图列表
@@ -670,7 +681,8 @@ paths:
       summary: 保存导图
       description: |
         乐观锁：请求必须带上客户端手里那份的 `version`，与服务端不一致时返回 409
-        `MAP_VERSION_CONFLICT`，`details` 里带服务端当前的版本与更新时间。
+        `MAP_VERSION_CONFLICT`，`details` 里带服务端当前的版本、更新时间与内容摘要
+        （`currentHash`）。
 
         响应只有版本号与计数——自动保存每几秒一次，把 1 MB 的文档原样回传是纯浪费。
       requestBody:
@@ -2276,6 +2288,9 @@ components:
         nodeCount: { type: integer }
         sizeBytes: { type: integer, format: int64 }
         version: { type: integer }
+        documentHash:
+          type: string
+          description: 文档内容的 SHA-256 摘要（服务端计算）。客户端用它判断「版本号不同但内容一样」，避免无意义的冲突提示。
         deleted: { type: boolean }
         deletedAt: { type: string, format: date-time, description: 'Present for trashed maps; preserves deletion timestamp precision.' }
         expiresAt: { type: string, format: date-time, description: 'Trash list only; deletedAt plus the current global trash.retention_days policy.' }
@@ -2296,15 +2311,24 @@ components:
       properties:
         title: { type: string, maxLength: 200 }
         document: { $ref: '#/components/schemas/WmindDocument' }
+        uid:
+          type: string
+          description: |
+            可选。客户端指定 uid，用于桌面端把本地导图上传到云端。必须是 ULID；
+            同一 uid 的重复上传是**幂等**的（返回既有导图，不新建第二份）。撞到
+            仍在回收站里的同一 uid 返回 409 `MAP_UID_CONFLICT`。
 
     SaveResult:
       type: object
-      required: [uid, version, nodeCount, updatedAt]
+      required: [uid, version, nodeCount, updatedAt, documentHash]
       properties:
         uid: { type: string }
         version: { type: integer }
         nodeCount: { type: integer }
         updatedAt: { type: string, format: date-time }
+        documentHash:
+          type: string
+          description: 本次落盘内容的 SHA-256 摘要，客户端存下来作为下次同步的基线。
 
     ShareLink:
       type: object

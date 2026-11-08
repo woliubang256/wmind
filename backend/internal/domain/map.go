@@ -114,6 +114,19 @@ type MapRepo interface {
 	ListByOwner(ctx context.Context, ownerID int64, sort MapSort, page Page) ([]*Map, error)
 	CountByOwner(ctx context.Context, ownerID int64) (int64, error)
 
+	// ListChangedSince 返回 updated_since 之后有变化的导图，**包含回收站里的**。
+	//
+	// 软删除与恢复都会更新 updated_at，因此删除也是一次可被客户端看到的变更。
+	// 不做分页：调用方是同步客户端，它需要一次拿到全部变化（服务端另有
+	// 数量上限保护，见 service.MapService.ListChanged）。
+	ListChangedSince(ctx context.Context, ownerID int64, since time.Time) ([]*Map, error)
+
+	// GetIncludingDeleted 按 uid 读取，包含回收站里的导图。
+	//
+	// 客户端上传自带 uid 时用它做幂等判断：撞到已删除的同名 uid 与撞到
+	// 唯一约束是两种不同的错误，不能让用户看到「内部错误」。
+	GetIncludingDeleted(ctx context.Context, uid string, ownerID int64) (*Map, error)
+
 	// SearchByTitle 按标题模糊搜索。pattern 由调用方拼好通配符（如 %关键词%）。
 	//
 	// 方言差异：PostgreSQL 用 ILIKE（英文大小写不敏感），SQLite 用 LIKE

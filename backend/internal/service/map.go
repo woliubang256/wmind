@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -105,6 +107,12 @@ type CreateMapInput struct {
 	Title    string
 	Document []byte
 	OwnerID  int64
+	// UID 由客户端指定，用于桌面端把本地导图上传到云端。
+	//
+	// 为空时服务端生成。给了就必须是合法 ULID，且同一 uid 的重复上传是
+	// **幂等**的：返回既有导图而不是新建第二份——客户端重试、双击上传、
+	// 网络超时后重发都会走到这里。
+	UID string
 }
 
 // SaveMapInput 是全量保存的入参。
@@ -243,10 +251,18 @@ func (s *MapService) Create(ctx context.Context, ownerID int64, in CreateMapInpu
 		}
 	}
 
+	uid, existing, err := s.resolveUploadUID(ctx, ownerID, in.UID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, nil
+	}
+
 	title := normalizeTitle(in.Title)
 	now := s.now()
 	created, err := s.maps.Create(ctx, domain.CreateMapInput{
-		UID:       id.New(),
+		UID:       uid,
 		OwnerID:   ownerID,
 		Title:     title,
 		Document:  in.Document,
@@ -258,6 +274,69 @@ func (s *MapService) Create(ctx context.Context, ownerID int64, in CreateMapInpu
 		return nil, mapMapError(err)
 	}
 	return created, nil
+}
+
+// resolveUploadUID 决定这次创建用哪个 uid，并处理「客户端自带 uid」的幂等。
+//
+// 返回 existing 非空表示这份导图已经在云端了，调用方应当直接返回它。
+func (s *MapService) resolveUploadUID(ctx context.Context, ownerID int64, requested string) (string, *domain.Map, error) {
+	uid := strings.TrimSpace(requested)
+	if uid == "" {
+		return id.New(), nil, nil
+	}
+	if !id.Valid(uid) {
+		return "", nil, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
+			"uid": "标识格式不合法",
+		})
+	}
+	found, err := s.maps.GetIncludingDeleted(ctx, uid, ownerID)
+	switch {
+	case err == nil:
+		if found.IsTrashed() {
+			// 回收站里还占着这个 uid：既不能复用（会覆盖别人的删除状态），
+			// 也不能新建（唯一约束）。让客户端先恢复或彻底删除。
+			return "", nil, apperr.New(apperr.CodeMapUIDConflict, "").WithDetail("uid", uid)
+		}
+		return uid, found, nil
+	case errors.Is(err, domain.ErrNotFound):
+		return uid, nil, nil
+	default:
+		return "", nil, mapMapError(err)
+	}
+}
+
+// maxChangedMaps 是一次增量拉取返回的导图上限。
+//
+// 不做分页而是截断：同步客户端拿最后一条的 updatedAt 作为下一次的游标即可
+// 继续（同一时间戳会被重复取到，但拉取是幂等的）。这个上限只防「客户端
+// 半年没同步、一次要拉几万张」把内存吃满。
+const maxChangedMaps = 2000
+
+// ListChanged 返回 since 之后有变化的导图（含回收站里的）。
+func (s *MapService) ListChanged(ctx context.Context, ownerID int64, since time.Time) ([]*domain.Map, error) {
+	if since.IsZero() {
+		return nil, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
+			"updated_since": "缺少增量同步起点",
+		})
+	}
+	changed, err := s.maps.ListChangedSince(ctx, ownerID, since)
+	if err != nil {
+		return nil, mapMapError(err)
+	}
+	if len(changed) > maxChangedMaps {
+		changed = changed[:maxChangedMaps]
+	}
+	return changed, nil
+}
+
+// DocumentHash 返回文档内容的 SHA-256 十六进制摘要。
+//
+// 用途是判断「两端版本号不同但内容其实一样」：客户端上传前用它比对服务端
+// 的摘要，能避免一次毫无意义的冲突提示。哈希只对服务端返回的字节计算，
+// 客户端不自己重算——序列化差异会让两个哈希永远对不上。
+func DocumentHash(document []byte) string {
+	sum := sha256.Sum256(document)
+	return hex.EncodeToString(sum[:])
 }
 
 // Get 读取完整导图。
@@ -319,7 +398,8 @@ func (s *MapService) Save(ctx context.Context, uid string, ownerID int64, in Sav
 		}
 		return nil, apperr.New(apperr.CodeMapVersionConflict, "").
 			WithDetail("currentVersion", current.Version).
-			WithDetail("currentUpdatedAt", current.UpdatedAt.UTC().Format(time.RFC3339))
+			WithDetail("currentUpdatedAt", current.UpdatedAt.UTC().Format(time.RFC3339)).
+			WithDetail("currentHash", DocumentHash(current.Document))
 	}
 	return nil, mapMapError(err)
 }

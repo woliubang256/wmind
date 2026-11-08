@@ -56,6 +56,7 @@ const (
 	CodeAuthEmailTaken        Code = "AUTH_EMAIL_TAKEN"
 	CodeAuthUsernameTaken     Code = "AUTH_USERNAME_TAKEN"
 	CodeMapVersionConflict    Code = "MAP_VERSION_CONFLICT"
+	CodeMapUIDConflict        Code = "MAP_UID_CONFLICT"
 	CodeAdminLastAdmin        Code = "ADMIN_LAST_ADMIN"
 	CodeAdminCannotDeleteSelf Code = "ADMIN_CANNOT_DELETE_SELF"
 	CodeAdminCannotResetSelf  Code = "ADMIN_CANNOT_RESET_SELF"
@@ -143,6 +144,7 @@ var registry = map[Code]spec{
 	CodeAuthEmailTaken:        {http.StatusConflict, "邮箱已被占用"},
 	CodeAuthUsernameTaken:     {http.StatusConflict, "用户名已被占用"},
 	CodeMapVersionConflict:    {http.StatusConflict, "该导图已在其他位置被修改"},
+	CodeMapUIDConflict:        {http.StatusConflict, "该导图标识已被占用（可能仍在回收站）"},
 	CodeAdminLastAdmin:        {http.StatusConflict, "不能降级或删除最后一个管理员"},
 	CodeAdminCannotDeleteSelf: {http.StatusConflict, "不能删除自己"},
 	CodeAdminCannotResetSelf:  {http.StatusConflict, "不能通过后台重置自己的密码"},

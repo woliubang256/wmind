@@ -409,7 +409,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | `page_size` | int | 默认 20，最大 100 |
 | `q` | string | 标题模糊搜索 |
 | `sort` | string | `updated`（默认）\| `created` \| `title`。未知值回落到默认 |
-| `updated_since` | string | RFC 3339。**客户端增量同步预留**，返回该时间后更新的导图（含已删除标记） |
+| `updated_since` | string | RFC 3339。**增量同步模式**（桌面端使用，见 [11](./11-桌面客户端设计.md) §5）：返回该时刻之后有变化的导图，**含回收站里的**（`deleted: true`），不分页、按 `updatedAt` 升序、最多 2000 条。软删除与恢复都算变更；硬删除不留痕迹，客户端按 404 处理。给了它时忽略 `page` / `page_size` / `q` / `sort` |
 
 > **`sort` 与初版设计的差异**：初版写的是 `-updated_at` / `-created_at`（JSON:API
 > 风格的方向前缀 + 列名）。实现时改成 `updated` / `created` / `title` 三个语义名，
@@ -481,7 +481,9 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 }
 ```
 
-版本不匹配返回 `409 MAP_VERSION_CONFLICT`，`details.currentVersion` 给出服务端当前版本，前端据此提示冲突。
+版本不匹配返回 `409 MAP_VERSION_CONFLICT`，`details` 给出 `currentVersion`、`currentUpdatedAt` 与 `currentHash`（服务端当前内容的 SHA-256）。前端据此提示冲突；桌面端同步引擎用 `currentHash` 区分「真的冲突」与「只是版本号漂移」。
+
+`POST /maps` 接受可选的 `uid`（ULID），供桌面端把本地导图上传到云端：同一 uid 的重复上传幂等返回既有导图；撞到仍在回收站里的同一 uid 返回 `409 MAP_UID_CONFLICT`。`GET /maps`、`GET /maps/{uid}`、`PUT /maps/{uid}` 的响应都带 `documentHash`，客户端存下来作为下次同步的基线。
 
 #### `PATCH /api/v1/maps/{uid}`
 
@@ -1000,6 +1002,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 | 409 | `AUTH_EMAIL_TAKEN` | 邮箱已被占用 |
 | 409 | `AUTH_USERNAME_TAKEN` | 用户名已被占用 |
 | 409 | `MAP_VERSION_CONFLICT` | 导图版本冲突（并发保存） |
+| 409 | `MAP_UID_CONFLICT` | 客户端上传的 uid 已被占用（可能仍在回收站） |
 | 409 | `ADMIN_LAST_ADMIN` | 不能降级或删除最后一个管理员 |
 | 409 | `ADMIN_CANNOT_DELETE_SELF` | 不能删除自己 |
 | 409 | `ADMIN_CANNOT_RESET_SELF` | 管理员不能通过后台重置自己的密码 |

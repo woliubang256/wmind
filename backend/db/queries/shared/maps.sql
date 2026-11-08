@@ -132,3 +132,32 @@ WHERE owner_id = sqlc.arg(owner_id) AND deleted_at IS NOT NULL;
 SELECT * FROM maps
 WHERE owner_id = sqlc.arg(owner_id)
 ORDER BY created_at ASC;
+
+-- ---------------------------------------------------------------------------
+-- Client sync (docs/11 section 5).
+--
+-- ASCII-ONLY: see the header of queries/shared/users.sql -- a non-ASCII byte
+-- anywhere in a statement shifts sqlc's placeholder splice and corrupts the
+-- generated SQL.
+-- ---------------------------------------------------------------------------
+
+-- Incremental pull: maps changed at or after updated_since, TRASHED ONES
+-- INCLUDED. Soft delete and restore both bump updated_at (SoftDeleteMap,
+-- RestoreMap), so a deletion is itself a change the client can see. A hard
+-- delete (empty trash) leaves no trace: the client must treat 404 on push as
+-- "remotely purged" instead of retrying.
+--
+-- name: ListMapsChangedSince :many
+SELECT * FROM maps
+WHERE owner_id = sqlc.arg(owner_id)
+  AND updated_at >= sqlc.arg(updated_since)
+ORDER BY updated_at ASC, id ASC;
+
+-- Idempotency check for an upload that brings its own uid: INCLUDING deleted
+-- rows, otherwise re-uploading a uid that was deleted trips the unique index
+-- and the client gets an error that names the wrong cause.
+--
+-- name: GetMapByUIDIncludingDeleted :one
+SELECT * FROM maps
+WHERE uid = sqlc.arg(uid)
+  AND owner_id = sqlc.arg(owner_id);

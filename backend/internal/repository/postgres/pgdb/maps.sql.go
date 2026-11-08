@@ -151,6 +151,40 @@ func (q *Queries) GetMapByUID(ctx context.Context, arg GetMapByUIDParams) (Map, 
 	return i, err
 }
 
+const getMapByUIDIncludingDeleted = `-- name: GetMapByUIDIncludingDeleted :one
+SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
+WHERE uid = $1
+  AND owner_id = $2
+`
+
+type GetMapByUIDIncludingDeletedParams struct {
+	Uid     string
+	OwnerID int64
+}
+
+// Idempotency check for an upload that brings its own uid: INCLUDING deleted
+// rows, otherwise re-uploading a uid that was deleted trips the unique index
+// and the client gets an error that names the wrong cause.
+func (q *Queries) GetMapByUIDIncludingDeleted(ctx context.Context, arg GetMapByUIDIncludingDeletedParams) (Map, error) {
+	row := q.db.QueryRow(ctx, getMapByUIDIncludingDeleted, arg.Uid, arg.OwnerID)
+	var i Map
+	err := row.Scan(
+		&i.ID,
+		&i.Uid,
+		&i.OwnerID,
+		&i.Title,
+		&i.Document,
+		&i.Version,
+		&i.ThumbnailUrl,
+		&i.NodeCount,
+		&i.SizeBytes,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getMapForUpdate = `-- name: GetMapForUpdate :one
 SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
 WHERE uid = $1
@@ -374,6 +408,64 @@ type ListMapsByOwnerNameParams struct {
 
 func (q *Queries) ListMapsByOwnerName(ctx context.Context, arg ListMapsByOwnerNameParams) ([]Map, error) {
 	rows, err := q.db.Query(ctx, listMapsByOwnerName, arg.OwnerID, arg.RowOffset, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Map{}
+	for rows.Next() {
+		var i Map
+		if err := rows.Scan(
+			&i.ID,
+			&i.Uid,
+			&i.OwnerID,
+			&i.Title,
+			&i.Document,
+			&i.Version,
+			&i.ThumbnailUrl,
+			&i.NodeCount,
+			&i.SizeBytes,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMapsChangedSince = `-- name: ListMapsChangedSince :many
+
+SELECT id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at FROM maps
+WHERE owner_id = $1
+  AND updated_at >= $2
+ORDER BY updated_at ASC, id ASC
+`
+
+type ListMapsChangedSinceParams struct {
+	OwnerID      int64
+	UpdatedSince pgtype.Timestamptz
+}
+
+// ---------------------------------------------------------------------------
+// Client sync (docs/11 section 5).
+//
+// ASCII-ONLY: see the header of queries/shared/users.sql -- a non-ASCII byte
+// anywhere in a statement shifts sqlc's placeholder splice and corrupts the
+// generated SQL.
+// ---------------------------------------------------------------------------
+// Incremental pull: maps changed at or after updated_since, TRASHED ONES
+// INCLUDED. Soft delete and restore both bump updated_at (SoftDeleteMap,
+// RestoreMap), so a deletion is itself a change the client can see. A hard
+// delete (empty trash) leaves no trace: the client must treat 404 on push as
+// "remotely purged" instead of retrying.
+func (q *Queries) ListMapsChangedSince(ctx context.Context, arg ListMapsChangedSinceParams) ([]Map, error) {
+	rows, err := q.db.Query(ctx, listMapsChangedSince, arg.OwnerID, arg.UpdatedSince)
 	if err != nil {
 		return nil, err
 	}

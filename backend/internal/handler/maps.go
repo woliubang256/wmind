@@ -29,12 +29,17 @@ func NewMapHandler(maps *service.MapService) *MapHandler {
 // 不含 document：列表一页 20 张图、每张 1 MB 的话响应体就是 20 MB，
 // 而列表页只需要标题与缩略图（docs/04 §5.3）。
 type mapSummaryDTO struct {
-	UID          string  `json:"uid"`
-	Title        string  `json:"title"`
-	ThumbnailURL string  `json:"thumbnailUrl"`
-	NodeCount    int     `json:"nodeCount"`
-	SizeBytes    int64   `json:"sizeBytes"`
-	Version      int     `json:"version"`
+	UID          string `json:"uid"`
+	Title        string `json:"title"`
+	ThumbnailURL string `json:"thumbnailUrl"`
+	NodeCount    int    `json:"nodeCount"`
+	SizeBytes    int64  `json:"sizeBytes"`
+	Version      int    `json:"version"`
+	// DocumentHash 是文档内容的 SHA-256 摘要。
+	//
+	// 同步客户端用它判断「版本号不同但内容一样」，从而避免无意义的冲突提示。
+	// 列表里给摘要不读第二遍数据库：document 本来就在这一行里。
+	DocumentHash string  `json:"documentHash"`
 	Deleted      bool    `json:"deleted"`
 	DeletedAt    *string `json:"deletedAt,omitempty"`
 	ExpiresAt    *string `json:"expiresAt,omitempty"`
@@ -60,6 +65,8 @@ type saveResultDTO struct {
 	Version   int    `json:"version"`
 	NodeCount int    `json:"nodeCount"`
 	UpdatedAt string `json:"updatedAt"`
+	// DocumentHash 是本次落盘内容的摘要，客户端存下来作为下次同步的基线。
+	DocumentHash string `json:"documentHash"`
 }
 
 func toMapSummaryDTO(m *domain.Map) mapSummaryDTO {
@@ -70,6 +77,7 @@ func toMapSummaryDTO(m *domain.Map) mapSummaryDTO {
 		NodeCount:    m.NodeCount,
 		SizeBytes:    m.SizeBytes,
 		Version:      m.Version,
+		DocumentHash: service.DocumentHash(m.Document),
 		Deleted:      m.IsTrashed(),
 		DeletedAt:    formatMapDeletionTime(m.DeletedAt),
 		CreatedAt:    formatTime(m.CreatedAt),
@@ -104,6 +112,16 @@ func (h *MapHandler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// updated_since 是增量同步入口（docs/11 §5）：返回该时刻之后有变化的
+	// 导图，**包含回收站里的**，不分页。它与列表查询是两条语义不同的路径，
+	// 因此在这里就分开，而不是给列表加一个「要不要包含已删除」的开关。
+	if since, ok := parseUpdatedSince(c); !ok {
+		return
+	} else if since != nil {
+		h.listChanged(c, owner, *since)
+		return
+	}
+
 	page, pageSize := pageParams(c)
 	maps, total, err := h.maps.List(c.Request.Context(), owner, c.Query("q"), domain.ParseMapSort(c.Query("sort")), page, pageSize)
 	if err != nil {
@@ -120,6 +138,9 @@ func (h *MapHandler) List(c *gin.Context) {
 type createMapRequest struct {
 	Title    string          `json:"title"`
 	Document json.RawMessage `json:"document"`
+	// UID 只由客户端上传本地导图时提供（桌面端「上传到云端」）。同一 uid
+	// 重复上传返回既有导图，不会产生第二份。
+	UID string `json:"uid"`
 }
 
 // Create 处理 POST /api/v1/maps。
@@ -141,6 +162,7 @@ func (h *MapHandler) Create(c *gin.Context) {
 	created, err := h.maps.Create(c.Request.Context(), owner, service.CreateMapInput{
 		Title:    req.Title,
 		Document: req.Document,
+		UID:      req.UID,
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -199,10 +221,11 @@ func (h *MapHandler) Save(c *gin.Context) {
 		return
 	}
 	response.OK(c, saveResultDTO{
-		UID:       saved.UID,
-		Version:   saved.Version,
-		NodeCount: saved.NodeCount,
-		UpdatedAt: formatTime(saved.UpdatedAt),
+		UID:          saved.UID,
+		Version:      saved.Version,
+		NodeCount:    saved.NodeCount,
+		UpdatedAt:    formatTime(saved.UpdatedAt),
+		DocumentHash: service.DocumentHash(saved.Document),
 	})
 }
 
@@ -282,6 +305,46 @@ func (h *MapHandler) Duplicate(c *gin.Context) {
 }
 
 // ListTrash 处理 GET /api/v1/trash。
+// parseUpdatedSince 解析增量同步起点。
+//
+// 返回 (nil, true) 表示这次请求不是增量同步；(nil, false) 表示参数非法，
+// 响应已经写好。
+func parseUpdatedSince(c *gin.Context) (*time.Time, bool) {
+	raw := c.Query("updated_since")
+	if raw == "" {
+		return nil, true
+	}
+	at, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		at, err = time.Parse(time.RFC3339, raw)
+	}
+	if err != nil {
+		response.Fail(c, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
+			"updated_since": "时间格式应为 RFC 3339",
+		}))
+		return nil, false
+	}
+	at = at.UTC()
+	return &at, true
+}
+
+// listChanged 处理增量同步请求。
+//
+// 结果按 updatedAt 升序，客户端拿最后一条的 updatedAt 作为下一次的游标；
+// 服务端最多返回 service 层设定的上限条数，超出部分靠下一次拉取补齐。
+func (h *MapHandler) listChanged(c *gin.Context, owner int64, since time.Time) {
+	changed, err := h.maps.ListChanged(c.Request.Context(), owner, since)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	items := make([]mapSummaryDTO, 0, len(changed))
+	for _, m := range changed {
+		items = append(items, toMapSummaryDTO(m))
+	}
+	response.List(c, items, response.NewPagination(1, len(items), int64(len(items))))
+}
+
 func (h *MapHandler) ListTrash(c *gin.Context) {
 	owner, ok := ownerID(c)
 	if !ok {

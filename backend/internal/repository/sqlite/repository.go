@@ -365,6 +365,28 @@ func (r *MapRepository) ListByOwner(ctx context.Context, ownerID int64, sort dom
 	return mapSQLiteMaps(rows)
 }
 
+// ListChangedSince 返回 updated_since 之后有变化的导图（含回收站）。
+func (r *MapRepository) ListChangedSince(ctx context.Context, ownerID int64, since time.Time) ([]*domain.Map, error) {
+	rows, err := queries(ctx, r.db).ListMapsChangedSince(ctx, sqlitedb.ListMapsChangedSinceParams{
+		OwnerID: ownerID, UpdatedSince: sqliteTime(since),
+	})
+	if err != nil {
+		return nil, mapSQLiteError(err)
+	}
+	return mapSQLiteMaps(rows)
+}
+
+// GetIncludingDeleted 按 uid 读取，包含回收站里的导图。
+func (r *MapRepository) GetIncludingDeleted(ctx context.Context, uid string, ownerID int64) (*domain.Map, error) {
+	v, err := queries(ctx, r.db).GetMapByUIDIncludingDeleted(ctx, sqlitedb.GetMapByUIDIncludingDeletedParams{
+		Uid: uid, OwnerID: ownerID,
+	})
+	if err != nil {
+		return nil, mapSQLiteError(err)
+	}
+	return mapSQLiteMap(v)
+}
+
 func (r *MapRepository) CountByOwner(ctx context.Context, ownerID int64) (int64, error) {
 	v, err := queries(ctx, r.db).CountMapsByOwner(ctx, ownerID)
 	return v, mapSQLiteError(err)
