@@ -310,6 +310,21 @@ function packageApps(platforms, version) {
     },
   });
 
+  // Windows 用户更习惯 zip：mygo 只写 tar.gz（那是更新用的归档），这里再补一份
+  // 同名 zip，方便没装 NSIS 安装包的场景下手工分发。
+  for (const platform of platforms) {
+    if (!platform.startsWith('windows/')) continue;
+    const dir = join(OUT_DIR, platform.replace('/', '-'));
+    const archive = readdirSync(dir).find((name) => name.endsWith('.tar.gz'));
+    if (!archive) continue;
+    const zipName = archive.replace(/\.tar\.gz$/, '.zip');
+    const zip = join(dir, zipName);
+    rmSync(zip, { force: true });
+    // 打整个应用目录（exe + 资源 + .mygo-files），只排除归档、更新清单和 zip 自己。
+    run('zip', ['-qry', zipName, '.', '-x', archive, '-x', 'update-*.json', '-x', zipName], { cwd: dir });
+    console.log(`  ${zip}`);
+  }
+
   if (process.platform !== 'darwin') return;
   for (const platform of platforms) {
     if (!platform.startsWith('darwin/')) continue;

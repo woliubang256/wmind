@@ -29,5 +29,9 @@
     "github": "woliubang256/wmind",
     "tagPrefix": "desktop-v",
     "changelog": "CHANGELOG.md"
-  }
+  },
+  "resourcesExclude": [
+    "dmg-background.png",
+    "dmg-background@2x.png"
+  ]
 }
