@@ -3,6 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -29,7 +34,36 @@ type updaterAdapter struct {
 }
 
 func newUpdaterAdapter() *updaterAdapter {
+	// 自托管更新源（也用于本地验证整条升级链）：把 mygo 的更新源换成一个
+	// 普通 HTTP 目录，里面放 mygo build 产出的 update-<os>-<arch>.json 与归档。
+	// 不设置时走 mygo.json 里配置的 GitHub release。
+	if feed := strings.TrimSpace(os.Getenv("WMIND_UPDATE_FEED")); feed != "" {
+		mygo.Updater.SetSource(httpFeed{base: strings.TrimRight(feed, "/")})
+	}
 	return &updaterAdapter{phase: "idle"}
+}
+
+// httpFeed 从 http(s) 目录读更新清单与文件。
+type httpFeed struct{ base string }
+
+func (f httpFeed) Manifest(ctx context.Context, _ bool) (io.ReadCloser, error) {
+	return f.Open(ctx, f.base+"/update-"+runtime.GOOS+"-"+runtime.GOARCH+".json")
+}
+
+func (f httpFeed) Open(ctx context.Context, url string) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("update feed returned HTTP %d", resp.StatusCode)
+	}
+	return resp.Body, nil
 }
 
 // Enabled 报告这个构建能不能自我更新。
@@ -96,12 +130,17 @@ func (u *updaterAdapter) StartInstall(ctx context.Context) error {
 	u.mu.Unlock()
 
 	go func() {
+		// 不能用请求的 context：HTTP 响应一写完它就被取消，下载会立刻以
+		// "context canceled" 失败（这条是端到端测试抓出来的）。安装要活到
+		// 下载结束，所以自己起一个带超时的后台 context。
+		installCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
 		defer func() {
 			u.mu.Lock()
 			u.installing = false
 			u.mu.Unlock()
 		}()
-		err := update.Install(ctx, func(downloaded, total int64) {
+		err := update.Install(installCtx, func(downloaded, total int64) {
 			u.mu.Lock()
 			u.downloaded = downloaded
 			u.total = total
