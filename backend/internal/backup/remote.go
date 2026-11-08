@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -41,6 +42,15 @@ func (r *RemoteStorage) Exists(ctx context.Context, c Configuration, name string
 	}
 	if err := c.Validate(true); err != nil {
 		return false, err
+	}
+	if c.Target == "folder" {
+		if _, err := os.Stat(filepath.Join(c.Folder.Dir, name)); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return false, nil
+			}
+			return false, errors.New("backup folder is not readable")
+		}
+		return true, nil
 	}
 	if c.Target == "s3" {
 		_, err := r.s3Client(c).HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(c.S3.Bucket), Key: aws.String(s3Key(c, name))})
@@ -75,6 +85,12 @@ func (r *RemoteStorage) Delete(ctx context.Context, c Configuration, name string
 	}
 	if err := c.Validate(true); err != nil {
 		return err
+	}
+	if c.Target == "folder" {
+		if err := os.Remove(filepath.Join(c.Folder.Dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return errors.New("backup folder cleanup failed")
+		}
+		return nil
 	}
 	if c.Target == "s3" {
 		_, err := r.s3Client(c).DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(c.S3.Bucket), Key: aws.String(s3Key(c, name))})
@@ -168,6 +184,9 @@ func (r *RemoteStorage) ensureDAV(ctx context.Context, c Configuration, rawURL s
 	return nil
 }
 func (r *RemoteStorage) put(ctx context.Context, c Configuration, name string, body io.ReadSeeker, size int64) error {
+	if c.Target == "folder" {
+		return r.putFolder(c, name, body)
+	}
 	if c.Target == "s3" {
 		_, err := r.s3Client(c).PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(c.S3.Bucket), Key: aws.String(s3Key(c, name)), Body: body, ContentLength: aws.Int64(size), ContentType: aws.String("application/zip")})
 		if err != nil {
@@ -191,6 +210,40 @@ func (r *RemoteStorage) put(ctx context.Context, c Configuration, name string, b
 	}
 	return nil
 }
+
+// putFolder 把内容写进本地目录：先写临时文件再改名，避免半截文件被当成
+// 一份可用备份（retention 会按文件名统计，半截文件会让保留份数失真）。
+func (r *RemoteStorage) putFolder(c Configuration, name string, body io.Reader) error {
+	if err := os.MkdirAll(c.Folder.Dir, 0o700); err != nil {
+		return errors.New("backup folder cannot be created")
+	}
+	tmp, err := os.CreateTemp(c.Folder.Dir, ".wmind-backup-*.tmp")
+	if err != nil {
+		return errors.New("backup folder is not writable")
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		tmp.Close()
+		_ = os.Remove(tmpName)
+	}()
+	if _, err := io.Copy(tmp, body); err != nil {
+		return errors.New("writing the backup file failed")
+	}
+	if err := tmp.Sync(); err != nil {
+		return errors.New("flushing the backup file failed")
+	}
+	if err := tmp.Close(); err != nil {
+		return errors.New("closing the backup file failed")
+	}
+	if err := os.Chmod(tmpName, 0o600); err != nil {
+		return errors.New("backup file permissions failed")
+	}
+	if err := os.Rename(tmpName, filepath.Join(c.Folder.Dir, name)); err != nil {
+		return errors.New("backup file could not be moved into place")
+	}
+	return nil
+}
+
 func (r *RemoteStorage) Upload(ctx context.Context, c Configuration, name, filename string) error {
 	if err := c.Validate(true); err != nil {
 		return err
@@ -213,6 +266,18 @@ func (r *RemoteStorage) Test(ctx context.Context, c Configuration) error {
 	name := ".wmind-connection-test-" + rand.Text() + ".tmp"
 	if err := r.put(ctx, c, name, bytes.NewReader([]byte("wmind connection test\n")), 22); err != nil {
 		return err
+	}
+	if c.Target == "folder" {
+		if err := os.Remove(filepath.Join(c.Folder.Dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return errors.New("backup folder test wrote a file but could not remove it")
+		}
+		return nil
+	}
+	if c.Target == "folder" {
+		if err := os.Remove(filepath.Join(c.Folder.Dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return errors.New("backup folder cleanup failed")
+		}
+		return nil
 	}
 	if c.Target == "s3" {
 		_, err := r.s3Client(c).DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(c.S3.Bucket), Key: aws.String(s3Key(c, name))})

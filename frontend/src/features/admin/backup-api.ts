@@ -6,13 +6,15 @@ export interface BackupConfiguration {
   skipUnchanged: boolean;
   cron: string;
   timezone: string;
-  target: 'webdav' | 's3';
+  target: 'webdav' | 's3' | 'folder';
   webdav: { url: string; username: string; password?: string; passwordSet?: boolean };
   s3: {
     endpoint: string; region: string; bucket: string; prefix: string; pathStyle: boolean;
     accessKey?: string; secretKey?: string; sessionToken?: string;
     accessKeySet?: boolean; secretKeySet?: boolean; sessionTokenSet?: boolean; clearSessionToken?: boolean;
   };
+  /** 桌面端离线备份目标：本机（或外接盘 / 网盘同步目录）的一个绝对路径。 */
+  folder: { dir: string };
 }
 export interface BackupJob {
   id: string; kind: 'backup' | 'restore'; trigger: 'manual' | 'schedule';

@@ -48,7 +48,12 @@ function BackupForm({ state }: { state: BackupState }) {
   const set = <K extends keyof BackupConfiguration>(key: K, value: BackupConfiguration[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const setDAV = (key: keyof BackupConfiguration['webdav'], value: string) => setDraft((current) => ({ ...current, webdav: { ...current.webdav, [key]: value } }));
   const setS3 = (key: keyof BackupConfiguration['s3'], value: string | boolean) => setDraft((current) => ({ ...current, s3: { ...current.s3, [key]: value } }));
-  const credentialsSet = draft.target === 'webdav' ? draft.webdav.passwordSet : draft.s3.accessKeySet || draft.s3.secretKeySet || draft.s3.sessionTokenSet;
+  const setFolder = (dir: string) => setDraft((current) => ({ ...current, folder: { dir } }));
+  const credentialsSet = draft.target === 'folder'
+    ? false
+    : draft.target === 'webdav'
+      ? draft.webdav.passwordSet
+      : draft.s3.accessKeySet || draft.s3.secretKeySet || draft.s3.sessionTokenSet;
   const formatTime = (raw: string) => new Intl.DateTimeFormat(i18n.resolvedLanguage, { timeZone: schedule.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(raw));
   return <Panel title={t('backup.backupTitle')} description={t('backup.backupDescription')}>
     <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (!disabled && scheduleValid && retentionValid) save.mutate(); }}>
@@ -69,8 +74,10 @@ function BackupForm({ state }: { state: BackupState }) {
       </fieldset>
       <fieldset disabled={disabled} className="space-y-4 border-t border-border/70 pt-4">
         <legend className="sr-only">{t('backup.target')}</legend>
-        <Field label={t('backup.target')}><Select value={draft.target} onChange={(value) => set('target', value)} disabled={disabled} aria-label={t('backup.target')} options={[{ value: 'webdav', label: 'WebDAV' }, { value: 's3', label: t('backup.s3Compatible') }]} /></Field>
-        {draft.target === 'webdav' ? <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t('backup.target')}><Select value={draft.target} onChange={(value) => set('target', value)} disabled={disabled} aria-label={t('backup.target')} options={[{ value: 'folder', label: t('backup.folderTarget') }, { value: 'webdav', label: 'WebDAV' }, { value: 's3', label: t('backup.s3Compatible') }]} /></Field>
+        {draft.target === 'folder' ? <div className="grid gap-4">
+          <Field label={t('backup.folderDir')} hint={t('backup.folderDirHint')}><Input value={draft.folder?.dir ?? ''} onChange={(e) => setFolder(e.target.value)} aria-label={t('backup.folderDir')} placeholder="/Users/me/Backups/wmind" spellCheck={false} /></Field>
+        </div> : draft.target === 'webdav' ? <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><Field label={t('backup.davURL')} hint={t('backup.davURLHint')}><Input value={draft.webdav.url} onChange={(e) => setDAV('url', e.target.value)} aria-label={t('backup.davURL')} placeholder="https://dav.example.com/backups/wmind" type="url" spellCheck={false} /></Field></div>
           <Field label={t('backup.davUsername')}><Input value={draft.webdav.username} onChange={(e) => setDAV('username', e.target.value)} aria-label={t('backup.davUsername')} autoComplete="off" /></Field>
           <Field label={t('backup.davPassword')}><Input type="password" value={draft.webdav.password ?? ''} onChange={(e) => setDAV('password', e.target.value)} aria-label={t('backup.davPassword')} autoComplete="new-password" placeholder={draft.webdav.passwordSet ? '••••••••' : ''} /></Field>

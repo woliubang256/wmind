@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/url"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -32,7 +33,10 @@ func targetID(c Configuration) string {
 		return u.String()
 	}
 	var identity any
-	if c.Target == "webdav" {
+	if c.Target == "folder" {
+		// 目录路径本身就是身份：换目录等于换目标，旧目录里的备份不会被误删。
+		identity = []string{c.Target, filepath.Clean(c.Folder.Dir)}
+	} else if c.Target == "webdav" {
 		identity = []string{c.Target, address(c.WebDAV.URL), c.WebDAV.Username}
 	} else {
 		identity = []any{c.Target, address(c.S3.Endpoint), c.S3.Region, c.S3.Bucket, path.Clean(c.S3.Prefix), c.S3.AccessKey, c.S3.PathStyle}

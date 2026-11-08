@@ -1446,7 +1446,10 @@
     },
     "operationFailed": "Operation failed. Check the server logs.",
     "recoveryFile": "Recovery copy retained on the server: {{filename}}",
-    "selectedValues": "Selected: {{values}}"
+    "selectedValues": "Selected: {{values}}",
+    "folderTarget": "Local folder",
+    "folderDir": "Backup folder",
+    "folderDirHint": "An absolute path, e.g. an external drive or a synced folder. Created when missing."
   },
   "desktop": {
     "source": {

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,6 +38,14 @@ type S3Config struct {
 	ClearSessionToken bool   `json:"clearSessionToken,omitempty"`
 	PathStyle         bool   `json:"pathStyle"`
 }
+
+// FolderConfig 是「备份到本机目录」的目标（桌面端离线备份）。
+//
+// 与服务端部署无关：桌面端没有对象存储也常常没有网络，一个本地目录就是最
+// 自然的备份目标（可以指到外接盘或网盘同步目录）。
+type FolderConfig struct {
+	Dir string `json:"dir"`
+}
 type Configuration struct {
 	Enabled       bool         `json:"enabled"`
 	RetainCount   int          `json:"retainCount"`
@@ -46,6 +55,7 @@ type Configuration struct {
 	Target        string       `json:"target"`
 	WebDAV        WebDAVConfig `json:"webdav"`
 	S3            S3Config     `json:"s3"`
+	Folder        FolderConfig `json:"folder"`
 }
 
 func DefaultConfiguration() Configuration {
@@ -136,10 +146,16 @@ func (c Configuration) Validate(requireTarget bool) error {
 	if _, err := Schedule(c.Cron, c.Timezone, time.Now()); err != nil {
 		return err
 	}
-	if c.Target != "webdav" && c.Target != "s3" {
+	if c.Target != "webdav" && c.Target != "s3" && c.Target != "folder" {
 		return errors.New("invalid backup target")
 	}
 	if !requireTarget {
+		return nil
+	}
+	if c.Target == "folder" {
+		if !validFolderDir(c.Folder.Dir) {
+			return errors.New("backup folder must be an absolute path without ..")
+		}
 		return nil
 	}
 	if c.Target == "webdav" {
@@ -158,6 +174,19 @@ func (c Configuration) Validate(requireTarget bool) error {
 		return errors.New("invalid S3 prefix")
 	}
 	return nil
+}
+
+// validFolderDir 校验本地备份目录。
+//
+// 要求绝对路径：相对路径会跟着进程的工作目录走，桌面端从 Dock 启动与从终端
+// 启动的工作目录不同，备份就会静默落到两个地方。不允许 ".." 是为了让这个
+// 配置项不能被用来指向意料之外的目录。
+func validFolderDir(dir string) bool {
+	if !filepath.IsAbs(dir) || strings.Contains(dir, "..") {
+		return false
+	}
+	cleaned := filepath.Clean(dir)
+	return cleaned != string(filepath.Separator) && len(cleaned) > 1
 }
 
 type SecretBox struct{ aead cipher.AEAD }

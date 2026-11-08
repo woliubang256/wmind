@@ -1446,7 +1446,10 @@
     },
     "operationFailed": "操作失败，请检查服务器日志。",
     "recoveryFile": "服务器保留的恢复前副本：{{filename}}",
-    "selectedValues": "已选：{{values}}"
+    "selectedValues": "已选：{{values}}",
+    "folderTarget": "本地目录",
+    "folderDir": "备份目录",
+    "folderDirHint": "绝对路径，可以指向外接盘或网盘同步目录；目录不存在时会自动创建。"
   },
   "desktop": {
     "source": {
