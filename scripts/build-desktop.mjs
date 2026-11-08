@@ -135,39 +135,35 @@ function createDmg(appPath, version, dir, label) {
     cpSync(appPath, join(stage, 'wmind.app'), { recursive: true, dereference: false });
     symlinkSync('/Applications', join(stage, 'Applications'));
 
-    const dmg = join(dir, `wmind-${version}-${label}.dmg`);
-    const plain = ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDZO', '-fs', 'HFS+', dmg];
+    // 品牌背景图与卷图标：都是「锦上添花」，缺一个就退回朴素窗口，不让出包失败。
+    const icon = join(DESKTOP, 'resources', 'icon.png');
+    const background = join(DESKTOP, 'resources', 'dmg-background.png');
+    if (existsSync(background)) {
+      mkdirSync(join(stage, '.background'), { recursive: true });
+      cpSync(background, join(stage, '.background', 'background.png'));
+    }
+    const icns = existsSync(icon) ? makeIcns(icon, join(stage, '..', `wmind-${version}-${label}.icns`)) : undefined;
 
-    // 磁盘映像的图标只能在挂载后写进卷根（macOS 13 的 hdiutil 没有 -volicon）。
-    // 拿不到 SetFile 或任何一步失败都退回「没有卷图标」的普通 dmg：图标是
-    // 装饰，不该让出包失败。
-    const icns = join(stage, '..', `wmind-${version}-${label}.icns`);
-    let withIcon = false;
-    if (existsSync(join(DESKTOP, 'resources', 'icon.png')) && hasCommand('SetFile')) {
-      try {
-        makeIcns(join(DESKTOP, 'resources', 'icon.png'), icns);
-        withIcon = true;
-      } catch {
-        withIcon = false;
-      }
-    }
-    if (!withIcon) {
-      run('hdiutil', plain);
-      return dmg;
-    }
+    const dmg = join(dir, `wmind-${version}-${label}.dmg`);
+    const styled = existsSync(join(stage, '.background', 'background.png'));
 
     try {
+      // 要摆图标、设背景就得挂载读写盘，摆完再压成只读分发包。
       run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDRW', '-fs', 'HFS+', rwImage]);
       const mount = attachImage(rwImage);
       try {
-        cpSync(icns, join(mount, '.VolumeIcon.icns'));
-        run('SetFile', ['-a', 'C', mount]);
+        if (icns) {
+          cpSync(icns, join(mount, '.VolumeIcon.icns'));
+          if (hasCommand('SetFile')) run('SetFile', ['-a', 'C', mount]);
+        }
+        if (styled) arrangeDmgWindow(mount, `wmind ${version}`);
       } finally {
         run('hdiutil', ['detach', mount, '-quiet']);
       }
       run('hdiutil', ['convert', rwImage, '-format', 'UDZO', '-o', dmg]);
-    } catch {
-      run('hdiutil', plain);
+    } catch (error) {
+      console.warn(`警告：定制 dmg 外观失败（${error.message}），回退朴素窗口。`);
+      run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDZO', '-fs', 'HFS+', dmg]);
     }
     return dmg;
   } finally {
@@ -177,9 +173,46 @@ function createDmg(appPath, version, dir, label) {
   }
 }
 
+/**
+ * 用 Finder 摆好 DMG 窗口：窗口大小、隐藏工具栏、图标尺寸与位置、背景图。
+ *
+ * 图标坐标必须与 dmg-background.py 画的箭头对齐（窗口 660×400 pt，应用
+ * (200,300)、Applications (460,300)）。这段要靠 Finder 自动化，无界面环境
+ * 或权限被拒时会抛错，由调用方回退。
+ */
+function arrangeDmgWindow(mount, volume) {
+  const script = `tell application "Finder"
+  tell disk "${volume}"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {300, 200, 960, 600}
+    set theViewOptions to the icon view options of container window
+    set arrangement of theViewOptions to not arranged
+    set icon size of theViewOptions to 128
+    set background picture of theViewOptions to file ".background:background.png"
+    set position of item "wmind.app" of container window to {200, 300}
+    set position of item "Applications" of container window to {460, 300}
+    close
+    open
+    update without registering applications
+    delay 2
+  end tell
+end tell`;
+  run('osascript', ['-e', script]);
+}
+
+/**
+ * 把 1024 的 PNG 转成 .icns。/**
+ * 把 1024 的 PNG 转成 .icns。
+ *
+ * 用系统自带的 sips + iconutil 而不是引一个图像库：这两条命令在所有受支持的
+ * macOS 上都在，而且不改变仓库依赖。
+ */
 /** 挂载磁盘映像并返回挂载点（卷名带空格，不能按列切分）。 */
 function attachImage(image) {
-  const out = execFileSync('hdiutil', ['attach', '-nobrowse', '-readwrite', image], { encoding: 'utf8' });
+  const out = execFileSync('hdiutil', ['attach', '-nobrowse', image], { encoding: 'utf8' });
   const match = out.split('\n').map((line) => line.trim()).find((line) => line.includes('/Volumes/'));
   if (!match) throw new Error('hdiutil attach did not report a mount point');
   return match.slice(match.indexOf('/Volumes/'));
@@ -194,12 +227,6 @@ function hasCommand(name) {
   }
 }
 
-/**
- * 把 1024 的 PNG 转成 .icns。
- *
- * 用系统自带的 sips + iconutil 而不是引一个图像库：这两条命令在所有受支持的
- * macOS 上都在，而且不改变仓库依赖。
- */
 function makeIcns(pngPath, outPath) {
   const iconset = `${outPath}.iconset`;
   mkdirSync(iconset, { recursive: true });
