@@ -252,7 +252,7 @@ export function AppLayout() {
                   className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors ${active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'}`}
                 >
                   <Icon name={icon} className="size-4 shrink-0" />
-                  <span className="hidden xl:inline">{label}</span>
+                  <span className="hidden lg:inline">{label}</span>
                 </Link>
               );
             })}
