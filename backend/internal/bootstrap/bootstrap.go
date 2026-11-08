@@ -10,6 +10,7 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -43,6 +44,12 @@ type Options struct {
 	Logger *slog.Logger
 	// StartupTimeout 限制数据库连接与迁移的时间，默认 30s。
 	StartupTimeout time.Duration
+	// Prepare 在数据库迁移完成后执行一次，供调用方建自己的表。
+	//
+	// 桌面端用它建 map_sync 等「只存在于客户端」的表：这些表不该进服务端的
+	// 迁移集（那会让 Web 侧多出无用的表，还要维护两套方言的 parity）。
+	// 只在 SQLite 方言下调用——桌面端只用 SQLite。
+	Prepare func(ctx context.Context, db *sql.DB) error
 	// Quiet 关掉 gin 的路由表打印。
 	//
 	// 桌面端把日志写进用户数据目录，启动时刷一屏路由表只会淹没真正有用的
@@ -71,6 +78,7 @@ type App struct {
 	Users domain.UserRepo
 
 	closeOnce     sync.Once
+	prepare       func(ctx context.Context, db *sql.DB) error
 	closeDatabase func()
 
 	stopSettings context.CancelFunc
@@ -101,8 +109,8 @@ func New(ctx context.Context, cfg *config.Config, opts Options) (*App, error) {
 	if opts.Quiet {
 		gin.SetMode(gin.ReleaseMode)
 	}
+	app := &App{Config: cfg, Logger: log, prepare: opts.Prepare}
 
-	app := &App{Config: cfg, Logger: log}
 	startupCtx, startupCancel := context.WithTimeout(ctx, timeout)
 	defer startupCancel()
 
@@ -182,6 +190,11 @@ func (a *App) assemble(ctx context.Context) error {
 		if cfg.AutoMigrate {
 			if err := migrate.Up(config.DriverSQLite, db, log); err != nil {
 				return err
+			}
+		}
+		if a.prepare != nil {
+			if err := a.prepare(ctx, db); err != nil {
+				return fmt.Errorf("prepare client schema: %w", err)
 			}
 		}
 		ready = append(ready, httpapi.ReadyCheck{Name: "database", Ping: sqliterepo.Check(db)})
