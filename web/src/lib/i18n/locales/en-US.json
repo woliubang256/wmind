@@ -1542,7 +1542,8 @@
       "siteSettings": "Site settings",
       "siteSettingsFailed": "Could not open site settings",
       "about": "About",
-      "deployGuide": "Deployment guide"
+      "deployGuide": "Deployment guide",
+      "shortcuts": "Keyboard shortcuts"
     },
     "about": {
       "title": "About",
@@ -1553,6 +1554,43 @@
       "project": "Project page",
       "deployGuide": "Deployment guide",
       "openFailed": "Could not open the link"
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "hint": "While editing text the whole table is disabled and keys go to the input.",
+      "group": {
+        "edit": "Editing",
+        "navigate": "Navigation and view"
+      },
+      "keys": {
+        "wheel": "Wheel",
+        "spaceDrag": "Space + drag"
+      },
+      "items": {
+        "newChild": "New child topic and edit it",
+        "newSibling": "New sibling topic and edit it",
+        "editTitle": "Edit the selected topic",
+        "lineBreak": "Line break inside a topic",
+        "deselect": "Clear selection",
+        "delete": "Delete the selected topics",
+        "collapse": "Collapse / expand",
+        "selectAllSiblings": "Select all siblings",
+        "clipboard": "Copy / cut / paste",
+        "bold": "Bold",
+        "cycleFill": "Cycle fill colour",
+        "undo": "Undo",
+        "redo": "Redo",
+        "save": "Save now",
+        "nearestTopic": "Jump to the nearest topic",
+        "parent": "Jump to the parent",
+        "firstChild": "Jump to the first child",
+        "siblings": "Previous / next sibling",
+        "zoomReset": "Reset zoom to 100%",
+        "zoomFit": "Zoom to fit",
+        "zoom": "Zoom the canvas",
+        "pan": "Pan the canvas",
+        "blurCanvas": "Move focus out of the canvas"
+      }
     }
   }
 }

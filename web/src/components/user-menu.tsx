@@ -8,7 +8,7 @@ import { UserAvatar } from './user-avatar';
 import type { AvatarUser } from '@/lib/avatar';
 import { useSiteConfig } from '@/features/site/use-site-config';
 
-export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, displayName, siteSettings, onAbout, onDeployGuide }: {
+export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, displayName, siteSettings, onAbout, onDeployGuide, onShortcuts }: {
   user: AvatarUser;
   links: readonly { to: string; label: string; icon: IconName }[];
   isActive: (to: string) => boolean;
@@ -30,6 +30,8 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
   onAbout?: () => void;
   /** 「部署说明」：用系统浏览器打开部署文档。 */
   onDeployGuide?: () => void;
+  /** 「快捷键速查」：打开快捷键表。 */
+  onShortcuts?: () => void;
   /** 强制头像（本地用户用品牌 logo）。 */
   avatarSrc?: string;
   /** 强制显示名（本地用户的名字要跟随界面语言）。 */
@@ -59,12 +61,13 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
    * 四个动作项，估算高度小于真实高度，菜单就出现了滚动条，最后两项被藏在
    * 滚动区外面（表现为「装了新版却没看到关于」）。这里按真实项数算。
    */
-  const actionCount = (onOpenAccount ? 1 : 0) + (onAbout ? 1 : 0) + (onDeployGuide ? 1 : 0) + (siteSettings ? 1 : 0);
+  const actionCount = (onOpenAccount ? 1 : 0) + (onAbout ? 1 : 0) + (onShortcuts ? 1 : 0)
+    + (onDeployGuide ? 1 : 0) + (siteSettings ? 1 : 0);
   // 分隔线：账户之后、链接之间（仅当没有账户项时）、关于组之前、网站设置之前。
   const separatorCount =
     (onOpenAccount ? 1 : 0) +
     (!onOpenAccount && links.length > 1 ? 1 : 0) +
-    (onAbout || onDeployGuide ? 1 : 0) +
+    (onAbout || onShortcuts || onDeployGuide ? 1 : 0) +
     (siteSettings ? 1 : 0);
   const itemCount = links.length + actionCount;
   const menuHeight = itemCount * 36 + 10 + separatorCount * 9;
@@ -148,7 +151,7 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
           {to === '/account' ? <span data-app-version className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{displayVersion}</span> : null}
         </Link>
       </div>)}
-      {onAbout || onDeployGuide ? (
+      {onAbout || onShortcuts || onDeployGuide ? (
         <div role="none">
           <div role="separator" className="my-1 border-t border-border" />
           {onAbout ? (
@@ -157,6 +160,14 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
               className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
               <Icon name="flag" className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">{t('desktop.menu.about')}</span>
+            </button>
+          ) : null}
+          {onShortcuts ? (
+            <button type="button" role="menuitem" tabIndex={-1}
+              onClick={() => { close(false); onShortcuts(); }}
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
+              <Icon name="clipboard-list" className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">{t('desktop.menu.shortcuts')}</span>
             </button>
           ) : null}
           {onDeployGuide ? (

@@ -13,6 +13,29 @@
  * 路由意味着两套回归。这里只做能力开关，页面本身共用。
  */
 
+/** 快捷键展示用的平台：mac 用 ⌘，pc 用 Ctrl。 */
+export type ShortcutPlatform = 'mac' | 'pc';
+
+declare global {
+  interface Window {
+    /** mygo 注入的运行时（桌面壳才有）。 */
+    mygo?: { platform?: string };
+  }
+}
+
+/**
+ * 判断该用 ⌘ 还是 Ctrl。
+ *
+ * 桌面壳里以 mygo 上报的真实平台为准（darwin → mac，windows/linux → pc），
+ * 这是唯一可靠来源——WebView 的 userAgent 在 macOS 上也会带 Macintosh。
+ * Web 端读不到系统，按 Windows 展示（产品约定）。
+ */
+export function shortcutPlatform(): ShortcutPlatform {
+  if (!isDesktop()) return 'pc';
+  const platform = typeof window === 'undefined' ? undefined : window.mygo?.platform;
+  return platform === 'darwin' ? 'mac' : 'pc';
+}
+
 export interface DesktopRuntime {
   mode?: 'local' | 'cloud';
   version?: string;

@@ -1542,7 +1542,8 @@
       "siteSettings": "网站设置",
       "siteSettingsFailed": "打开网站设置失败",
       "about": "关于",
-      "deployGuide": "部署说明"
+      "deployGuide": "部署说明",
+      "shortcuts": "快捷键速查"
     },
     "about": {
       "title": "关于",
@@ -1553,6 +1554,43 @@
       "project": "项目地址",
       "deployGuide": "部署说明",
       "openFailed": "打开链接失败"
+    },
+    "shortcuts": {
+      "title": "快捷键速查",
+      "hint": "编辑文字时整张表都不生效，按键交还给输入框。",
+      "group": {
+        "edit": "编辑",
+        "navigate": "导航与视图"
+      },
+      "keys": {
+        "wheel": "滚轮",
+        "spaceDrag": "空格 + 拖动"
+      },
+      "items": {
+        "newChild": "新建子主题并进入编辑",
+        "newSibling": "新建同级主题并进入编辑",
+        "editTitle": "编辑选中主题的文字",
+        "lineBreak": "主题内换行",
+        "deselect": "取消选中",
+        "delete": "删除选中的主题",
+        "collapse": "折叠 / 展开",
+        "selectAllSiblings": "选中同级全部",
+        "clipboard": "复制 / 剪切 / 粘贴",
+        "bold": "加粗",
+        "cycleFill": "循环切换填充色",
+        "undo": "撤销",
+        "redo": "重做",
+        "save": "立即保存",
+        "nearestTopic": "按位置跳到最近的节点",
+        "parent": "跳到父节点",
+        "firstChild": "跳到第一个子节点",
+        "siblings": "上一个 / 下一个兄弟",
+        "zoomReset": "缩放复位到 100%",
+        "zoomFit": "缩放到适应",
+        "zoom": "缩放画布",
+        "pan": "平移画布",
+        "blurCanvas": "焦点离开画布"
+      }
     }
   }
 }

@@ -18,6 +18,7 @@ import { desktopCapabilities, isDesktop } from '@/lib/desktop';
 import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dialog';
 import { AccountDialog } from '@/features/account/account-dialog';
 import { AboutDialog } from '@/features/about/about-dialog';
+import { ShortcutsDialog } from '@/features/shortcuts/shortcuts-dialog';
 import { fetchDesktopStatus, openDeployGuide, openSiteSettings } from '@/lib/desktop';
 import { useQuery } from '@tanstack/react-query';
 
@@ -207,7 +208,11 @@ export function AppLayout() {
       ]
     : [];
 
-  const userLinks = [{ to: '/account', label: t('nav.account'), icon: 'settings' as const }, ...adminLinks];
+  // 桌面端菜单里已有「账户」动作项（打开弹窗），不再重复放一个指向 /account 的链接。
+  const userLinks = [
+    ...(localDesktop ? [] : [{ to: '/account', label: t('nav.account'), icon: 'settings' as const }]),
+    ...adminLinks,
+  ];
   const allLinks = [...links, ...userLinks];
 
   /**
@@ -244,6 +249,8 @@ export function AppLayout() {
   const [accountOpen, setAccountOpen] = useState(false);
   // 「关于」弹窗：项目介绍、版本、检查更新、项目地址。
   const [aboutOpen, setAboutOpen] = useState(false);
+  // 「快捷键速查」弹窗。
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // 「网站设置」只在登录且远程账号是管理员时出现。
   const cloudStatus = useQuery({
     queryKey: ['desktop', 'status'],
@@ -319,6 +326,7 @@ export function AppLayout() {
                 onOpenAccount={localDesktop ? () => setAccountOpen(true) : undefined}
                 siteSettings={siteSettings}
                 onAbout={localDesktop ? () => setAboutOpen(true) : undefined}
+                onShortcuts={localDesktop ? () => setShortcutsOpen(true) : undefined}
                 onDeployGuide={localDesktop ? () => {
                   void openDeployGuide().catch((error) => {
                     toast.error(error instanceof Error ? error.message : t('desktop.about.openFailed'));
@@ -361,6 +369,7 @@ export function AppLayout() {
       <UpdateDialog update={autoUpdate.update} open={autoUpdate.open} onClose={autoUpdate.close} />
       <AccountDialog open={accountOpen} onClose={() => setAccountOpen(false)} />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>
