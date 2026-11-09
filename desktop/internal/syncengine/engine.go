@@ -77,6 +77,8 @@ type Engine struct {
 
 	mu     sync.Mutex
 	remote Remote
+	// client 是 remote 的具体类型（云端客户端），代理与资料拉取要用它的令牌。
+	client *cloud.Client
 	// serverURL 是当前连接的云端地址；换服务器等于换绑定。
 	serverURL string
 	now       func() time.Time
@@ -96,6 +98,7 @@ func (e *Engine) Connect(serverURL string, remote Remote) {
 	defer e.mu.Unlock()
 	e.serverURL = serverURL
 	e.remote = remote
+	e.client, _ = remote.(*cloud.Client)
 }
 
 // Disconnect 断开云端连接（本地数据与同步记录保留）。
@@ -104,6 +107,14 @@ func (e *Engine) Disconnect() {
 	defer e.mu.Unlock()
 	e.serverURL = ""
 	e.remote = nil
+	e.client = nil
+}
+
+// Client 返回当前的云端客户端；未连接或不是云端客户端时为 nil。
+func (e *Engine) Client() *cloud.Client {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.client
 }
 
 // Connected 报告是否已连接云端。

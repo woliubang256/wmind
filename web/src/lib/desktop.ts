@@ -87,6 +87,8 @@ export interface CloudStatus {
   email?: string;
   /** 云端账号昵称（/auth/me），顶栏登录后显示它。 */
   nickname?: string;
+  /** 远程站点在客户端内的入口（本机回环代理）；未连接时为空。 */
+  remoteUrl?: string;
   /** 上次登录过的服务器（登出后仍在），用于预填登录表单。 */
   lastServerUrl?: string;
   /** 上次登录过的账号（登出后仍在）。 */
@@ -149,11 +151,6 @@ export function openProjectPage(): Promise<{ opened: boolean }> {
 /** 用系统浏览器打开部署说明。 */
 export function openDeployGuide(): Promise<{ opened: boolean }> {
   return desktopRequest('/desktop/about/open-docs', { method: 'POST' });
-}
-
-/** 用系统浏览器打开远程服务器的管理后台（与 Web 端同一个页面）。 */
-export function openSiteSettings(): Promise<{ opened: boolean }> {
-  return desktopRequest('/desktop/cloud/open-site', { method: 'POST' });
 }
 
 export function fetchDesktopStatus(): Promise<DesktopStatus> {

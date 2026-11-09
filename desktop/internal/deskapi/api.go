@@ -18,6 +18,7 @@ import (
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloudcreds"
+	"github.com/woliubang256/wmind/backend/desktop/internal/remoteproxy"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 )
@@ -181,7 +182,6 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("GET /desktop/status", a.status)
 	mux.HandleFunc("POST /desktop/cloud/connect", a.connect)
 	mux.HandleFunc("POST /desktop/cloud/disconnect", a.disconnect)
-	mux.HandleFunc("POST /desktop/cloud/open-site", a.openSite)
 	mux.HandleFunc("POST /desktop/about/open-project", a.openProject)
 	mux.HandleFunc("POST /desktop/about/open-docs", a.openDocs)
 	mux.HandleFunc("POST /desktop/cloud/verify-2fa", a.verifyTwoFactor)
@@ -204,6 +204,8 @@ type api struct {
 	// pending 是等待两步验证码的登录（内存里，5 分钟后作废）。
 	mu      sync.Mutex
 	pending *pendingTwoFactor
+	// remote 是把远端 Web 界面搬进客户端的回环代理（懒启动）。
+	remote *remoteproxy.Server
 }
 
 type pendingTwoFactor struct {
@@ -243,6 +245,9 @@ type cloudStatus struct {
 	ServerURL string `json:"serverUrl,omitempty"`
 	Email     string `json:"email,omitempty"`
 	Nickname  string `json:"nickname,omitempty"`
+	// RemoteURL 是远程站点在客户端内的入口（回环代理），「网站设置」用它加载
+	// 服务器自己的管理界面；未连接时为空。
+	RemoteURL string `json:"remoteUrl,omitempty"`
 	// LastServerURL / LastIdentifier 是上次登录过的服务器与账号，登出后仍在，
 	// 供登录表单预填。
 	LastServerURL  string `json:"lastServerUrl,omitempty"`
@@ -272,6 +277,7 @@ func (a *api) status(w http.ResponseWriter, r *http.Request) {
 	resp.Cloud.ServerURL = a.deps.Engine.ServerURL()
 
 	last := a.loadLastConnection()
+	resp.Cloud.RemoteURL = a.remoteURL()
 	resp.Cloud.LastServerURL = last.ServerURL
 	resp.Cloud.LastIdentifier = last.Identifier
 	if creds, err := a.deps.Creds.Load(); err == nil && creds != nil {
@@ -383,6 +389,41 @@ func (a *api) disconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"connected": false}})
+}
+
+// remoteURL 返回（必要时启动）远程界面的回环代理地址。
+func (a *api) remoteURL() string {
+	client := a.deps.Engine.Client()
+	if client == nil {
+		a.stopRemote()
+		return ""
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.remote != nil {
+		return a.remote.URL()
+	}
+	serverURL := a.deps.Engine.ServerURL()
+	if serverURL == "" {
+		return ""
+	}
+	proxy, err := remoteproxy.Start(context.Background(), client, serverURL, a.deps.Logger)
+	if err != nil {
+		if a.deps.Logger != nil {
+			a.deps.Logger.Warn("remote proxy: start failed", "err", err)
+		}
+		return ""
+	}
+	a.remote = proxy
+	return proxy.URL()
+}
+
+func (a *api) stopRemote() {
+	a.mu.Lock()
+	proxy := a.remote
+	a.remote = nil
+	a.mu.Unlock()
+	proxy.Close()
 }
 
 // verifyTwoFactor 用动态码（或恢复码）完成登录。
@@ -554,27 +595,6 @@ func (a *api) touch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"mapUid": uid}})
-}
-
-// openSite 在系统浏览器里打开远程服务器的管理后台。
-//
-// 桌面端只跟本机回环后端说话，远程站点的管理界面不搬进客户端——
-// 用默认浏览器打开最直接，权限体系也还是服务器自己的。
-func (a *api) openSite(w http.ResponseWriter, r *http.Request) {
-	creds, err := a.deps.Creds.Load()
-	if err != nil || creds == nil || creds.ServerURL == "" {
-		fail(w, http.StatusConflict, "尚未连接云端")
-		return
-	}
-	if creds.Role != "admin" {
-		fail(w, http.StatusForbidden, "只有管理员可以打开网站设置")
-		return
-	}
-	if err := a.deps.OpenExternal(creds.ServerURL + "/admin/settings"); err != nil {
-		fail(w, http.StatusInternalServerError, "打开浏览器失败")
-		return
-	}
-	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"opened": true}})
 }
 
 // logProfileError 记录拉取远端资料失败（不致命：顶栏退回显示邮箱）。

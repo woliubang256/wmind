@@ -18,9 +18,10 @@ import { desktopCapabilities, isDesktop } from '@/lib/desktop';
 import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dialog';
 import { AccountDialog } from '@/features/account/account-dialog';
 import { AboutDialog } from '@/features/about/about-dialog';
+import type { AvatarUser } from '@/lib/avatar';
 import { ShortcutsDialog } from '@/features/shortcuts/shortcuts-dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { disconnectCloud, fetchDesktopStatus, openDeployGuide, openSiteSettings } from '@/lib/desktop';
+import { disconnectCloud, fetchDesktopStatus, openDeployGuide } from '@/lib/desktop';
 import { useQuery } from '@tanstack/react-query';
 
 function LoadingPage() {
@@ -262,15 +263,20 @@ export function AppLayout() {
     enabled: localDesktop,
     staleTime: 10_000,
   });
+  /**
+   * 已登录云端时的账号身份。
+   *
+   * 头像不取服务器字段：Web 端用的是 gravatar（由邮箱本地派生，服务端不存
+   * 图片）。这里同样交给 `UserAvatar` 按邮箱算，取不到再退回首字母。
+   */
+  const cloudAccount: AvatarUser | undefined = (() => {
+    const cloud = cloudStatus.data?.cloud;
+    if (!localDesktop || !cloud?.connected || !cloud.email) return undefined;
+    return { uid: cloud.email, username: cloud.nickname || cloud.email, nickname: cloud.nickname, email: cloud.email };
+  })();
+  // 「网站设置」在客户端内打开（加载服务器自己的管理界面），不再跳浏览器。
   const siteSettings = localDesktop && cloudStatus.data?.cloud.connected && cloudStatus.data?.cloud.role === 'admin'
-    ? {
-        label: t('desktop.menu.siteSettings'),
-        onClick: () => {
-          void openSiteSettings().catch((error) => {
-            toast.error(error instanceof Error ? error.message : t('desktop.menu.siteSettingsFailed'));
-          });
-        },
-      }
+    ? { label: t('desktop.menu.siteSettings'), to: '/site-settings' }
     : undefined;
 
   const titlebarStyle = isDesktop() ? ({ '--app-region': 'drag' } as React.CSSProperties) : undefined;
@@ -324,14 +330,15 @@ export function AppLayout() {
           <div className="ml-auto flex items-center gap-1">
             {user ? (
               <UserMenu
-                user={user}
+                user={cloudAccount ?? user}
                 links={userLinks}
                 isActive={isActive}
                 onOpenAccount={localDesktop ? () => setAccountOpen(true) : undefined}
-                account={localDesktop && cloudStatus.data?.cloud.connected
+                account={cloudAccount
                   ? {
-                      name: cloudStatus.data.cloud.nickname || cloudStatus.data.cloud.email || t('desktop.localUser'),
-                      detail: cloudStatus.data.cloud.email || cloudStatus.data.cloud.serverUrl,
+                      name: cloudAccount.nickname || cloudAccount.email,
+                      detail: cloudAccount.email,
+                      user: cloudAccount,
                     }
                   : undefined}
                 onSignOut={localDesktop && cloudStatus.data?.cloud.connected ? () => setSignOutOpen(true) : undefined}
@@ -343,12 +350,8 @@ export function AppLayout() {
                     toast.error(error instanceof Error ? error.message : t('desktop.about.openFailed'));
                   });
                 } : undefined}
-                avatarSrc={localDesktop ? publicAssetUrl('/wmind-logo.jpg') : undefined}
-                displayName={localDesktop
-                  ? (cloudStatus.data?.cloud.connected
-                    ? cloudStatus.data.cloud.nickname || cloudStatus.data.cloud.email || t('desktop.localUser')
-                    : t('desktop.localUser'))
-                  : undefined}
+                avatarSrc={localDesktop && !cloudAccount ? publicAssetUrl('/wmind-logo.jpg') : undefined}
+                displayName={localDesktop ? (cloudAccount?.nickname || cloudAccount?.email || t('desktop.localUser')) : undefined}
               />
             ) : null}
             <Button

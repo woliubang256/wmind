@@ -593,56 +593,6 @@ func TestRelaunchReportsBeforeRestarting(t *testing.T) {
 	}
 }
 
-// 网站设置入口：只有「已连接 + 远程管理员」才允许打开，且走系统浏览器。
-func TestOpenSiteRequiresAdminAndConnection(t *testing.T) {
-	base := newFixture(t)
-	opened := ""
-	api := New(Deps{
-		Engine: base.engine, Store: base.store, Creds: base.creds, Version: "1.0.0",
-		OpenExternal: func(url string) error { opened = url; return nil },
-	})
-
-	// 未连接：409
-	req := httptest.NewRequest(http.MethodPost, "/desktop/cloud/open-site", nil)
-	rec := httptest.NewRecorder()
-	api.ServeHTTP(rec, req)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("未连接期望 409，实际 %d", rec.Code)
-	}
-
-	// 普通用户：403
-	if err := base.creds.Save(cloudcreds.Credentials{
-		ServerURL: "https://cloud.example", Identifier: "a@example.test", Email: "a@example.test", Role: "user",
-	}, "pw"); err != nil {
-		t.Fatal(err)
-	}
-	req = httptest.NewRequest(http.MethodPost, "/desktop/cloud/open-site", nil)
-	rec = httptest.NewRecorder()
-	api.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("非管理员期望 403，实际 %d", rec.Code)
-	}
-	if opened != "" {
-		t.Fatalf("非管理员不应打开浏览器: %q", opened)
-	}
-
-	// 管理员：200，打开远程的 /admin/settings
-	if err := base.creds.Save(cloudcreds.Credentials{
-		ServerURL: "https://cloud.example", Identifier: "a@example.test", Email: "a@example.test", Role: "admin",
-	}, "pw"); err != nil {
-		t.Fatal(err)
-	}
-	req = httptest.NewRequest(http.MethodPost, "/desktop/cloud/open-site", nil)
-	rec = httptest.NewRecorder()
-	api.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("管理员期望 200，实际 %d %s", rec.Code, rec.Body.String())
-	}
-	if opened != "https://cloud.example/admin/settings" {
-		t.Fatalf("打开的地址不对: %q", opened)
-	}
-}
-
 // 两步验证：密码通过后先要动态码，验证成功才真正连上并保存凭据。
 func TestConnectWithTwoFactor(t *testing.T) {
 	f := newFixture(t)

@@ -1599,6 +1599,10 @@
         "pan": "平移画布",
         "blurCanvas": "焦点离开画布"
       }
-    }
+    },
+    "siteSettings.title": "网站设置",
+    "siteSettings.hint": "这里加载的是服务器的配置，与 Web 端后台一致。",
+    "siteSettings.unavailable": "未连接云端，或服务器版本不支持内嵌。",
+    "siteSettings.openExternal": "在浏览器打开"
   }
 }

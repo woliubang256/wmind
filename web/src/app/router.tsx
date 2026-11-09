@@ -32,6 +32,11 @@ const adminRoutes = [
     lazy: async () => ({ Component: (await import('@/features/admin/settings-page')).AdminSettingsPage }),
   },
   {
+    // 桌面端：客户端内嵌加载服务器的管理后台（走本机回环代理）。
+    path: '/site-settings',
+    lazy: async () => ({ Component: (await import('@/features/admin/remote-settings-page')).RemoteSettingsPage }),
+  },
+  {
     path: '/admin/audit-logs',
     lazy: async () => ({ Component: (await import('@/features/admin/audit-logs-page')).AdminAuditLogsPage }),
   },

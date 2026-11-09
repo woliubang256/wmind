@@ -1599,6 +1599,10 @@
         "pan": "Pan the canvas",
         "blurCanvas": "Move focus out of the canvas"
       }
-    }
+    },
+    "siteSettings.title": "Site settings",
+    "siteSettings.hint": "These are the server's settings, the same as the web admin.",
+    "siteSettings.unavailable": "Not connected, or the server cannot be embedded.",
+    "siteSettings.openExternal": "Open in browser"
   }
 }

@@ -26,7 +26,7 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
    * 它打开的是**远程服务器**的管理后台（和 Web 端一样），桌面端不做代理，
    * 用系统浏览器打开。
    */
-  siteSettings?: { label: string; onClick: () => void };
+  siteSettings?: { label: string; to: string };
   /** 「关于」：打开关于弹窗（项目介绍、版本、检查更新、项目地址）。 */
   onAbout?: () => void;
   /** 「部署说明」：用系统浏览器打开部署文档。 */
@@ -39,7 +39,7 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
    * 未连接时传 undefined：那时菜单顶部不需要多一行「本地用户」——头像旁边
    * 已经写着这个名字了。
    */
-  account?: { name: string; detail?: string; avatarSrc?: string };
+  account?: { name: string; detail?: string; avatarSrc?: string; user?: AvatarUser };
   /** 已登录云端：首项变成「退出登录」，点击直接登出。 */
   onSignOut?: () => void;
   /** 强制头像（本地用户用品牌 logo）。 */
@@ -149,9 +149,12 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
           <button type="button" role="menuitem" tabIndex={-1}
             onClick={() => { close(false); onOpenAccount?.(); }}
             className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
-            {account.avatarSrc
-              ? <LoadingImage src={account.avatarSrc} alt="" containerClassName="size-7 shrink-0 overflow-hidden rounded-full" className="size-full object-cover" />
-              : <UserAvatar user={user} src={avatarSrc} className="size-7" />}
+            {account.user
+              // 云端账号：邮箱派生 gravatar（与 Web 端一致），没有再退回首字母。
+              ? <UserAvatar user={account.user} className="size-7" />
+              : account.avatarSrc
+                ? <LoadingImage src={account.avatarSrc} alt="" containerClassName="size-7 shrink-0 overflow-hidden rounded-full" className="size-full object-cover" />
+                : <UserAvatar user={user} src={avatarSrc} className="size-7" />}
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm font-medium">{account.name}</span>
               {account.detail ? <span className="truncate text-xs text-muted-foreground">{account.detail}</span> : null}
@@ -216,12 +219,11 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
       {siteSettings ? (
         <div role="none">
           <div role="separator" className="my-1 border-t border-border" />
-          <button type="button" role="menuitem" tabIndex={-1}
-            onClick={() => { close(false); siteSettings.onClick(); }}
-            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
+          <Link to={siteSettings.to} role="menuitem" tabIndex={-1} onClick={() => close(false)}
+            className="flex items-center gap-2.5 rounded-md px-3 py-2 outline-none hover:bg-accent focus-visible:bg-accent">
             <Icon name="globe" className="size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1">{siteSettings.label}</span>
-          </button>
+          </Link>
         </div>
       ) : null}
     </div>, document.body) : null}
