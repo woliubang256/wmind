@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -128,6 +129,8 @@ type Deps struct {
 	Updater Updater
 	// OpenExternal 用系统默认浏览器打开 URL；为空时用默认实现（测试替换）。
 	OpenExternal func(url string) error
+	// Logger 记录非致命的降级（比如拉不到远端资料）。
+	Logger *slog.Logger
 }
 
 // New 构造 /desktop/ 的 Handler。
@@ -201,6 +204,7 @@ type cloudStatus struct {
 	Connected    bool   `json:"connected"`
 	ServerURL    string `json:"serverUrl,omitempty"`
 	Email        string `json:"email,omitempty"`
+	Nickname     string `json:"nickname,omitempty"`
 	Role         string `json:"role,omitempty"`
 	LastSyncedAt string `json:"lastSyncedAt,omitempty"`
 }
@@ -228,6 +232,7 @@ func (a *api) status(w http.ResponseWriter, r *http.Request) {
 	if creds, err := a.deps.Creds.Load(); err == nil && creds != nil {
 		resp.Cloud.Email = creds.Email
 		resp.Cloud.Role = creds.Role
+		resp.Cloud.Nickname = creds.Nickname
 		if resp.Cloud.ServerURL == "" {
 			resp.Cloud.ServerURL = creds.ServerURL
 		}
@@ -286,6 +291,9 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 拉一次远端资料：顶栏要显示登录后的昵称。失败不致命，退回邮箱。
+	a.logProfileError(client.Me(r.Context()))
+
 	session := client.Session()
 	// 账号开了两步验证：服务端只给了挑战令牌。把这次登录挂在内存里，
 	// 等前端提交动态码后再完成（密码不用再传一遍，也不会留在前端）。
@@ -305,19 +313,20 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 	if err := a.deps.Creds.Save(cloudcreds.Credentials{
 		ServerURL: session.ServerURL, Identifier: req.Identifier,
 		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,
+		Nickname:     session.Nickname,
 		RefreshToken: session.RefreshToken,
 	}, req.Password); err != nil {
 		fail(w, http.StatusInternalServerError, "保存连接信息失败")
 		return
 	}
 
-	// 连接成功后立刻同步一次；失败不算连接失败——离线优先，用户可以稍后重试。
-	result, syncErr := a.deps.Engine.Sync(r.Context())
+	// 这里**不做同步**：首次同步要拉全部导图，几秒到几十秒，放在登录响应里
+	// 会让「登录」按钮一直转（两步验证时尤其明显）。前端登录成功后再异步
+	// 触发 /desktop/sync，失败也不影响已建立的连接。
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
 		"serverUrl": session.ServerURL,
 		"email":     session.UserEmail,
-		"sync":      result,
-		"syncError": errorText(syncErr),
+		"nickname":  session.Nickname,
 	}})
 }
 
@@ -370,20 +379,22 @@ func (a *api) verifyTwoFactor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 动态码通过后再拉一次资料（两步验证前拿不到会话）。
+	a.logProfileError(pending.client.Me(r.Context()))
 	session := pending.client.Session()
 	a.deps.Engine.Connect(session.ServerURL, pending.client)
 	if err := a.deps.Creds.Save(cloudcreds.Credentials{
 		ServerURL: session.ServerURL, Identifier: pending.identifier,
 		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,
+		Nickname:     session.Nickname,
 		RefreshToken: session.RefreshToken,
 	}, pending.password); err != nil {
 		fail(w, http.StatusInternalServerError, "保存连接信息失败")
 		return
 	}
-	result, syncErr := a.deps.Engine.Sync(r.Context())
+	// 同步交给前端异步触发，别让它拖慢验证响应。
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
-		"serverUrl": session.ServerURL, "email": session.UserEmail,
-		"sync": result, "syncError": errorText(syncErr),
+		"serverUrl": session.ServerURL, "email": session.UserEmail, "nickname": session.Nickname,
 	}})
 }
 
@@ -517,6 +528,14 @@ func (a *api) openSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"opened": true}})
+}
+
+// logProfileError 记录拉取远端资料失败（不致命：顶栏退回显示邮箱）。
+func (a *api) logProfileError(_ *cloud.Profile, err error) {
+	if err == nil || a.deps.Logger == nil {
+		return
+	}
+	a.deps.Logger.Warn("cloud: profile unavailable", "err", err)
 }
 
 // openProject 在浏览器里打开项目主页。

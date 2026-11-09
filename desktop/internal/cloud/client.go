@@ -71,6 +71,8 @@ type Session struct {
 	// Role 是云端账号的角色（admin/user）。桌面端菜单用「网站设置」入口的
 	// 显隐就靠它：只有远程管理员才看得到。
 	Role string
+	// Nickname 是云端账号的昵称（/auth/me 拿到的），顶栏显示用。
+	Nickname string
 	// TwoFactorChallenge 非空表示账号开了两步验证：密码已通过，还差一次
 	// 动态码。此时没有任何令牌，调用方要拿它去 CompleteTwoFactor。
 	TwoFactorChallenge string
@@ -294,6 +296,42 @@ func (c *Client) CompleteTwoFactor(ctx context.Context, code string) error {
 	c.session.Role = result.User.Role
 	c.mu.Unlock()
 	return nil
+}
+
+// Profile 是远端账号的公开资料。
+type Profile struct {
+	UID       string `json:"uid"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	Nickname  string `json:"nickname"`
+	Role      string `json:"role"`
+	AvatarURL string `json:"avatarUrl"`
+}
+
+// Me 读取远端账号资料，用于顶栏显示登录后的名字。
+//
+// 失败不致命：拿不到昵称就退回邮箱，连接本身仍然有效。
+func (c *Client) Me(ctx context.Context) (*Profile, error) {
+	var profile Profile
+	status, details, err := c.do(ctx, http.MethodGet, "/api/v1/auth/me", nil, &profile, true)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("cloud: profile failed with status %d (%s)", status, details.Code)
+	}
+	c.mu.Lock()
+	if profile.Nickname != "" {
+		c.session.Nickname = profile.Nickname
+	}
+	if profile.Email != "" {
+		c.session.UserEmail = profile.Email
+	}
+	if profile.Role != "" {
+		c.session.Role = profile.Role
+	}
+	c.mu.Unlock()
+	return &profile, nil
 }
 
 // Refresh 用 refresh cookie 换一个新的访问令牌。

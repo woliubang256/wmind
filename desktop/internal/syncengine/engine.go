@@ -309,7 +309,7 @@ func (e *Engine) applyRemoteChange(ctx context.Context, remote Remote, serverURL
 		UID: record.MapUID, OwnerID: e.ownerID,
 		Title: detail.Title, Document: detail.Document,
 		NodeCount: detail.NodeCount, SizeBytes: int64(len(detail.Document)),
-		ExpectedVersion: local.Version, Now: e.now(),
+		ExpectedVersion: local.Version, Now: remoteTime(item.UpdatedAt, e.now()),
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrVersionConflict) {
@@ -330,16 +330,28 @@ func (e *Engine) applyRemoteChange(ctx context.Context, remote Remote, serverURL
 	return e.store.Put(ctx, record)
 }
 
+// remoteTime 解析云端时间戳；解析不了就退回本地时间（宁可显示同步时刻，
+// 也不能显示零值时间）。
+func remoteTime(value string, fallback time.Time) time.Time {
+	if at, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return at
+	}
+	return fallback
+}
+
 func (e *Engine) createLocalFromRemote(ctx context.Context, remote Remote, serverURL string, item *cloud.Map, result *Result) error {
 	detail, err := remote.GetMap(ctx, item.UID)
 	if err != nil {
 		return err
 	}
 	// 沿用云端 uid：之后两端指向同一份文档，排查问题时不用再查映射表。
+	//
+	// 时间也沿用云端的：列表里的「更新于」表示内容什么时候改的，同步动作
+	// 发生在什么时候与此无关——用本地 now 会让所有拉下来的图都变成「刚刚」。
 	created, err := e.local.Create(ctx, domain.CreateMapInput{
 		UID: detail.UID, OwnerID: e.ownerID, Title: detail.Title,
 		Document: detail.Document, NodeCount: detail.NodeCount,
-		SizeBytes: int64(len(detail.Document)), Now: e.now(),
+		SizeBytes: int64(len(detail.Document)), Now: remoteTime(item.UpdatedAt, e.now()),
 	})
 	if err != nil {
 		return err
@@ -349,7 +361,9 @@ func (e *Engine) createLocalFromRemote(ctx context.Context, remote Remote, serve
 		MapUID: created.UID, RemoteUID: detail.UID, RemoteURL: serverURL,
 		BaseVersion: detail.Version, BaseHash: detail.DocumentHash,
 		BaseLocalHash: hashBytes(created.Document),
-		LastSyncedAt:  &synced, State: syncstate.StateSynced, UpdatedAt: synced,
+		// Record.UpdatedAt 是**同步状态**的更新时间（内部用），列表展示的时间
+		// 来自导图本身（上面已用云端时间）。
+		LastSyncedAt: &synced, State: syncstate.StateSynced, UpdatedAt: synced,
 	}
 	result.Pulled++
 	return e.store.Put(ctx, record)

@@ -312,6 +312,26 @@ func TestPullCreatesLocalCopy(t *testing.T) {
 	}
 }
 
+// 拉取下来的导图要沿用**云端**的更新时间：列表里的「更新于」表示内容是什么
+// 时候改的。之前用本地 now，首次同步后所有图都变成「刚刚」。
+func TestPullKeepsRemoteUpdatedAt(t *testing.T) {
+	engine, local, remote, _ := newEngine(t)
+	serverTime := time.Date(2026, 11, 1, 9, 30, 0, 0, time.UTC)
+	remote.maps["remote-1"] = &cloud.Map{UID: "remote-1", Title: "云端图", Version: 2, DocumentHash: hashOf(doc("云端图")), UpdatedAt: serverTime.Format(time.RFC3339Nano)}
+	remote.docs["remote-1"] = doc("云端图")
+
+	if _, err := engine.Sync(t.Context()); err != nil {
+		t.Fatalf("同步失败: %v", err)
+	}
+	got, err := local.GetByUID(t.Context(), "remote-1", local.owner)
+	if err != nil {
+		t.Fatalf("本地没有副本: %v", err)
+	}
+	if !got.UpdatedAt.Equal(serverTime) {
+		t.Fatalf("更新时间应沿用服务器 %v，实际 %v", serverTime, got.UpdatedAt)
+	}
+}
+
 func TestPullAppliesRemoteUpdate(t *testing.T) {
 	engine, local, remote, store := newEngine(t)
 	createLocal(t, local, "map-1", "第一版")

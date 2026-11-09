@@ -85,6 +85,8 @@ export interface CloudStatus {
   connected: boolean;
   serverUrl?: string;
   email?: string;
+  /** 云端账号昵称（/auth/me），顶栏登录后显示它。 */
+  nickname?: string;
   /** 云端账号角色：只有 admin 才看得到「网站设置」。 */
   role?: 'admin' | 'user' | string;
   lastSyncedAt?: string;

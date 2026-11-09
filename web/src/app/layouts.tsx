@@ -333,7 +333,11 @@ export function AppLayout() {
                   });
                 } : undefined}
                 avatarSrc={localDesktop ? publicAssetUrl('/wmind-logo.jpg') : undefined}
-                displayName={localDesktop ? t('desktop.localUser') : undefined}
+                displayName={localDesktop
+                  ? (cloudStatus.data?.cloud.connected
+                    ? cloudStatus.data.cloud.nickname || cloudStatus.data.cloud.email || t('desktop.localUser')
+                    : t('desktop.localUser'))
+                  : undefined}
               />
             ) : null}
             <Button

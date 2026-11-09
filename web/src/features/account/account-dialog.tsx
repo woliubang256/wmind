@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { mapKeys } from '@/features/maps/queries';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,28 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
     void queryClient.invalidateQueries({ queryKey: ['desktop'] });
   };
 
+  /**
+   * 连接成功后的首次同步。
+   *
+   * 放在**前端异步触发**而不是登录响应里：首次同步要拉全部导图，几秒到几十
+   * 秒，放在登录里会让按钮一直转（两步验证时尤其明显）。这里弹窗先关掉，
+   * 同步完成后刷列表并给提示。
+   */
+  const syncAfterConnect = () => {
+    void syncNow()
+      .then((result) => {
+        toast.success(t('desktop.sync.done', { pulled: result.Pulled, pushed: result.Pushed, deleted: result.Deleted }));
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : t('desktop.sync.error'));
+      })
+      .finally(() => {
+        void queryClient.invalidateQueries({ queryKey: mapKeys.lists() });
+        void queryClient.invalidateQueries({ queryKey: ['desktop', 'map-sources'] });
+        refresh();
+      });
+  };
+
   const connect = useMutation({
     mutationFn: () => connectCloud({ serverUrl: serverUrl.trim(), identifier: identifier.trim(), password }),
     onSuccess: (result) => {
@@ -67,9 +90,10 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
         return;
       }
       toast.success(t('desktop.cloud.connectSuccess'));
-      if (result.syncError) toast.error(result.syncError);
       setPassword('');
+      onClose();
       refresh();
+      syncAfterConnect();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('desktop.cloud.connectError')),
   });
@@ -85,21 +109,27 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
 
   const verify = useMutation({
     mutationFn: () => verifyCloudTwoFactor(code.trim()),
-    onSuccess: (result) => {
+    onSuccess: () => {
       toast.success(t('desktop.cloud.connectSuccess'));
-      if (result.syncError) toast.error(result.syncError);
       setCode('');
       setPassword('');
       setTwoFactor(false);
+      onClose();
       refresh();
+      syncAfterConnect();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('desktop.account.twoFactorFailed')),
   });
 
+
+
+  // 连接状态下「立即同步」：同步完成后必须刷导图列表，否则用户要切个页面才看得到。
   const sync = useMutation({
     mutationFn: syncNow,
     onSuccess: (result) => {
       toast.success(t('desktop.sync.done', { pulled: result.Pulled, pushed: result.Pushed, deleted: result.Deleted }));
+      void queryClient.invalidateQueries({ queryKey: mapKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: ['desktop', 'map-sources'] });
       refresh();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('desktop.sync.error')),
