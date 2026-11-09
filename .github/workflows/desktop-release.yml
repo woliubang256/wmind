@@ -5,7 +5,7 @@ name: Desktop release
 # 成本考量（macOS / Windows runner 按分钟计费，比 ubuntu 贵一个数量级）：
 #
 #   packages  ubuntu-24.04  go test + Windows 两个包（zip、NSIS 安装包）
-#   dmg       macos-14      构建 darwin/arm64 与 darwin/amd64 的 .app，再出 .dmg
+#   dmg       macos-latest  构建 darwin/arm64 与 darwin/amd64 的 .app，再出 .dmg
 #   publish   ubuntu-24.04  汇总产物、建 Release
 #
 # 为什么 darwin 必须在 macOS 上构建：mygo 只在 macOS 上产出 `.app` 包
@@ -104,7 +104,9 @@ jobs:
 
   dmg:
     name: Build DMGs (macOS)
-    runs-on: macos-14
+    # 用 macos-latest 而不是 macos-14：实测本仓库上 macos-14 标签的任务会被
+    # 立刻取消（从未分配到 runner），macos-latest / macos-15 正常。
+    runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - name: Check out repository
