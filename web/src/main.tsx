@@ -15,6 +15,10 @@ import './styles.css';
  */
 if (typeof window !== 'undefined' && window.__WMIND__) {
   document.documentElement.classList.add('wmind-desktop');
+  // 平台标记：WebKit（macOS / Linux）对 backdrop-filter 不做 GPU 加速，桌面端
+  // 要关掉整屏模糊；Windows 的 WebView2 是 Chromium，模糊很便宜，保留原效果。
+  const platform = window.mygo?.platform;
+  if (platform) document.documentElement.dataset.platform = platform;
 }
 
 createRoot(document.getElementById('root')!).render(

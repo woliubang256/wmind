@@ -226,14 +226,20 @@ body {
  * 底下压着一屏缩略图时）每次重绘都要在 CPU 上重算，表现为「打开任何弹窗、
  * 下拉都要等几秒」。同一个页面在 Chrome 里瞬间打开，就是因为 Blink 走了合成器。
  *
- * 桌面端统一去掉模糊，只保留半透明遮罩：视觉上几乎看不出差别，交互流畅度差
- * 一个数量级。Web 端保持原样。
+ * 因此只在 **WebKit 平台**（macOS 的 WKWebView、Linux 的 WebKitGTK）关掉模糊，
+ * 只保留半透明遮罩：视觉上几乎看不出差别，交互流畅度差一个数量级。
+ * Windows 的 WebView2 是 Chromium，模糊走合成器，保留原效果；Web 端同理。
  */
-.wmind-desktop dialog::backdrop,
-.wmind-desktop .backdrop-blur,
-.wmind-desktop .backdrop-blur-sm,
-.wmind-desktop .backdrop-blur-md,
-.wmind-desktop .backdrop-blur-lg {
+.wmind-desktop[data-platform="darwin"] dialog::backdrop,
+.wmind-desktop[data-platform="darwin"] .backdrop-blur,
+.wmind-desktop[data-platform="darwin"] .backdrop-blur-sm,
+.wmind-desktop[data-platform="darwin"] .backdrop-blur-md,
+.wmind-desktop[data-platform="darwin"] .backdrop-blur-lg,
+.wmind-desktop[data-platform="linux"] dialog::backdrop,
+.wmind-desktop[data-platform="linux"] .backdrop-blur,
+.wmind-desktop[data-platform="linux"] .backdrop-blur-sm,
+.wmind-desktop[data-platform="linux"] .backdrop-blur-md,
+.wmind-desktop[data-platform="linux"] .backdrop-blur-lg {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
