@@ -2131,7 +2131,6 @@ components:
         siteName: { type: string }
         logoUrl: { type: string }
         description: { type: string }
-        icp: { type: string }
         registrationEnabled: { type: boolean }
         passwordMinLength: { type: integer }
         importEnabled: { type: boolean }

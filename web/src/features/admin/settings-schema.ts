@@ -42,7 +42,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     id: 'site',
     titleKey: 'admin.settings.groupSiteTitle',
     fields: [
-      { key: 'site.name', labelKey: 'admin.settings.fieldSiteName', kind: 'string', placeholder: 'wmind' },
+      { key: 'site.name', labelKey: 'admin.settings.fieldSiteName', kind: 'string', placeholder: 'Wmind' },
       {
         key: 'site.brand',
         labelKey: 'admin.settings.fieldSiteBrand',
@@ -57,7 +57,6 @@ export const SETTING_GROUPS: SettingGroup[] = [
         kind: 'text',
         hintKey: 'admin.settings.hintSiteDescription',
       },
-      { key: 'site.icp', labelKey: 'admin.settings.fieldSiteIcp', kind: 'string', hintKey: 'admin.settings.hintSiteIcp', width: 'half' },
       {
         key: 'site.base_url',
         width: 'half',

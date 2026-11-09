@@ -34,7 +34,6 @@ export interface SiteConfig {
   brand: string;
   logoUrl: string;
   description: string;
-  icp: string;
   registrationEnabled: boolean;
   passwordMinLength: number;
   importEnabled: boolean;

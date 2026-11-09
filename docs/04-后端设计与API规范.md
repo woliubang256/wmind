@@ -283,7 +283,6 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
     "siteName": "wmind",
     "logoUrl": "",
     "description": "",
-    "icp": "",
     "registrationEnabled": true,
     "passwordMinLength": 8,
     "importEnabled": true,

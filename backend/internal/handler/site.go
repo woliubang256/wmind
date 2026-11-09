@@ -36,7 +36,6 @@ type siteConfig struct {
 	Brand               string `json:"brand"`
 	LogoURL             string `json:"logoUrl"`
 	Description         string `json:"description"`
-	ICP                 string `json:"icp"`
 	RegistrationEnabled bool   `json:"registrationEnabled"`
 	PasswordMinLength   int    `json:"passwordMinLength"`
 	ImportEnabled       bool   `json:"importEnabled"`
@@ -61,7 +60,6 @@ func (h *SiteHandler) Config(c *gin.Context) {
 		Brand:               snapshot.BrandName(),
 		LogoURL:             snapshot.String("site.logo"),
 		Description:         snapshot.String("site.description"),
-		ICP:                 snapshot.String("site.icp"),
 		RegistrationEnabled: snapshot.RegistrationEnabled(),
 		PasswordMinLength:   snapshot.PasswordMinLength(),
 		ImportEnabled:       snapshot.Bool("feature.import_enabled"),

@@ -53,7 +53,6 @@ var specs = []Spec{
 	{Key: "site.brand", Kind: KindString, Default: `""`, Public: true, MaxRunes: 64},
 	{Key: "site.logo", Kind: KindString, Default: `""`, Public: true, MaxRunes: 512},
 	{Key: "site.description", Kind: KindString, Default: `""`, Public: true, MaxRunes: 512},
-	{Key: "site.icp", Kind: KindString, Default: `""`, Public: true, MaxRunes: 64},
 	{Key: "site.base_url", Kind: KindString, Default: `""`, MaxRunes: 512},
 
 	{Key: "auth.registration_enabled", Kind: KindBool, Default: `true`, Public: true},

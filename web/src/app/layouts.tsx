@@ -188,6 +188,13 @@ export function AppLayout() {
    * 过滤，而不是在页面里各写一遍判断。
    */
   const localDesktop = isDesktop();
+  const cloudStatus = useQuery({
+    queryKey: ['desktop', 'status'],
+    queryFn: fetchDesktopStatus,
+    enabled: localDesktop,
+    staleTime: 10_000,
+  });
+
   const links = [
     { to: '/', label: t('nav.recent'), icon: 'files' as const },
     { to: '/templates', label: t('nav.templates'), icon: 'waypoints' as const },
@@ -203,7 +210,11 @@ export function AppLayout() {
           ? [{ to: '/admin/users', label: t('nav.adminUsers'), icon: 'shield' as const }]
           : []),
         // 桌面端这是本机配置（AI、备份、更新），叫「网站设置」名不副实。
-        { to: '/admin/settings', label: localDesktop ? t('desktop.systemSettings') : t('nav.adminSettings'), icon: 'settings' as const },
+        // 登录云端后隐藏本机的「系统设置」：AI / 备份用的都是服务器的配置，
+        // 本地这套没有意义；改用菜单里的「网站设置」。
+        ...(localDesktop && cloudStatus.data?.cloud.connected
+          ? []
+          : [{ to: '/admin/settings', label: localDesktop ? t('desktop.systemSettings') : t('nav.adminSettings'), icon: 'settings' as const }]),
         ...(desktopCapabilities.userManagement
           ? [{ to: '/admin/audit-logs', label: t('nav.adminAudit'), icon: 'clock' as const }]
           : []),
@@ -257,12 +268,6 @@ export function AppLayout() {
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signOutPending, setSignOutPending] = useState(false);
   // 「网站设置」只在登录且远程账号是管理员时出现。
-  const cloudStatus = useQuery({
-    queryKey: ['desktop', 'status'],
-    queryFn: fetchDesktopStatus,
-    enabled: localDesktop,
-    staleTime: 10_000,
-  });
   /**
    * 已登录云端时的账号身份。
    *

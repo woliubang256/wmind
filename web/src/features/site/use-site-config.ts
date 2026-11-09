@@ -12,7 +12,6 @@ const FALLBACK: SiteConfig = {
   brand: 'wmind',
   logoUrl: '',
   description: '',
-  icp: '',
   registrationEnabled: false,
   passwordMinLength: 8,
   importEnabled: true,
