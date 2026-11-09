@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -116,7 +117,10 @@ func start() error {
 		}
 	}()
 
-	url := "http://" + ln.Addr().String() + "/"
+	// WMIND_DESKTOP_ROUTE 让窗口直接打开某个前端路由（如 /maps/<uid>），
+	// 只用于本地冒烟与截图核对，正常启动不设它就进首页。
+	route := strings.TrimSpace(os.Getenv("WMIND_DESKTOP_ROUTE"))
+	url := "http://" + ln.Addr().String() + "/" + strings.TrimPrefix(route, "/")
 	logger.Info("wmind desktop started", "url", url, "data", paths.Root)
 
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {

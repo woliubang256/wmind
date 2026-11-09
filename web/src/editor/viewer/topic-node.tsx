@@ -56,6 +56,14 @@ export interface TopicNodeProps {
   collapseInteractive?: boolean;
   collapseLabel?: string;
   loadingImages?: boolean;
+  /**
+   * 行盒中心到字形基线的距离（来自布局测量）。
+   *
+   * 用它算 `y` 而不是写 `dominant-baseline="central"`：WebKit（macOS/iOS 的
+   * WebView、WebKitGTK）对该属性支持不可靠，会退回默认基线，文字整体上移
+   * 约半个字高——桌面客户端里「文字没垂直居中」就是这个原因。
+   */
+  baselineOffset?: number;
 }
 
 const SELECTION_INSET = 3;
@@ -79,10 +87,11 @@ export const TopicNode = memo(function TopicNode({
   collapseInteractive = false,
   collapseLabel = 'Collapse / expand',
   loadingImages = false,
+  baselineOffset = 0,
 }: TopicNodeProps) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
   const showImage = image !== null && image.src !== '';
-  const geometry = topicContentGeometry(box, style, lines, image, markers, details);
+  const geometry = topicContentGeometry(box, style, lines, image, markers, details, baselineOffset);
   const { textX, textAnchor: anchor, firstY, imageX, imageY, markerRects } = geometry;
 
   // 折叠徽标放在「远离根」的一侧：左侧分支在左边缘，右侧在右边缘，
@@ -143,7 +152,6 @@ export const TopicNode = memo(function TopicNode({
         x={textX}
         y={firstY}
         textAnchor={anchor}
-        dominantBaseline="central"
         pointerEvents="none"
         aria-hidden="true"
         style={{
@@ -186,8 +194,8 @@ export const TopicNode = memo(function TopicNode({
           {box.collapsed ? <text
             x={badgeX}
             y={badgeY}
+            dy="0.35em"
             textAnchor="middle"
-            dominantBaseline="central"
             pointerEvents="none"
             style={{ fontSize: 10, fontWeight: 600, fill: style.lineColor }}
           >

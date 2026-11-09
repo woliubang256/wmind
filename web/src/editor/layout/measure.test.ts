@@ -18,6 +18,7 @@ import type { TopicImage } from '../model/types';
  */
 const halfEm: MeasureBackend = {
   widthOf: (text, font) => [...text].length * font.size * 0.5,
+  baselineOffset: (font) => font.size * 0.3,
 };
 
 const font: FontSpec = { family: 'sans', size: 20, weight: 400, italic: false };
@@ -68,7 +69,10 @@ describe('measureText 折行', () => {
   });
 
   it('宽度四舍五入到 0.5px', () => {
-    const odd: MeasureBackend = { widthOf: () => 10.3 };
+    const odd: MeasureBackend = {
+      widthOf: () => 10.3,
+      baselineOffset: (font) => font.size * 0.3,
+    };
     setMeasureBackend(odd);
     expect(measureText('x', font, 100).width).toBe(10.5);
   });
@@ -86,6 +90,7 @@ describe('measureText 缓存', () => {
         calls += 1;
         return [...text].length * f.size;
       },
+      baselineOffset: (f) => f.size * 0.3,
     });
     measureText('缓存', font, 200);
     const afterFirst = calls;
@@ -100,6 +105,7 @@ describe('measureText 缓存', () => {
         calls += 1;
         return [...text].length * f.size;
       },
+      baselineOffset: (f) => f.size * 0.3,
     });
     const a = measureText('同样文本', font, 500);
     const b = measureText('同样文本', { ...font, size: 40 }, 500);
@@ -114,6 +120,7 @@ describe('measureText 缓存', () => {
         calls += 1;
         return 10;
       },
+      baselineOffset: (f) => f.size * 0.3,
     });
     measureText('x', font, 100);
     measureText('x', { ...font, weight: 700 }, 100);
@@ -241,6 +248,7 @@ describe('clearMeasureCache', () => {
   it('清空后重新量一遍（换字体族后必须作废旧宽度）', () => {
     let calls = 0;
     setMeasureBackend({
+      baselineOffset: (spec) => spec.size * 0.3,
       widthOf: (text, spec) => {
         calls += 1;
         return [...text].length * spec.size;

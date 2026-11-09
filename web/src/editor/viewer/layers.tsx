@@ -111,6 +111,7 @@ export const TopicsLayer = memo(function TopicsLayer({
             box={box}
             style={layout.styles.get(box.id) ?? fallbackStyle(box)}
             lines={size?.lines ?? ['']}
+            baselineOffset={size?.baselineOffset ?? 0}
             title={titles?.get(box.id) ?? ''}
             image={size?.image ?? null}
             markers={size?.markers}

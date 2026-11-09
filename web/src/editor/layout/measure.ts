@@ -32,6 +32,15 @@ export interface FontSpec {
 export interface MeasureBackend {
   /** 单行文本的宽度（px）。不得折行。 */
   widthOf(text: string, font: FontSpec): number;
+  /**
+   * 从「行盒中心」到「字形基线」的距离（px，向下为正）。
+   *
+   * 为什么需要它：SVG 的 `dominant-baseline: central` 在 WebKit（macOS/iOS 的
+   * WKWebView、WebKitGTK）里支持不可靠，退回默认基线后文字会整体上移约半个
+   * 字高——桌面客户端里「文字没垂直居中」就是这个原因。改成自己算基线，
+   * 三个引擎（Blink / WebKit / Gecko）结果一致。
+   */
+  baselineOffset(font: FontSpec): number;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +69,21 @@ class CanvasBackend implements MeasureBackend {
     }
     return this.ctx.measureText(text).width;
   }
+
+  baselineOffset(font: FontSpec): number {
+    if (!this.ctx) {
+      const canvas = document.createElement('canvas');
+      this.ctx = canvas.getContext('2d');
+      if (!this.ctx) return font.size * 0.3;
+    }
+    this.ctx.font = canvasFont(font.family, font.size, font.weight, font.italic);
+    const metrics = this.ctx.measureText('Mg');
+    // fontBoundingBox* 是「字体设计框」，比 actualBoundingBox* 稳定（后者随
+    // 具体字形变化）。老引擎没有这个字段时按 0.8/0.2 em 估算。
+    const ascent = metrics.fontBoundingBoxAscent || font.size * 0.8;
+    const descent = metrics.fontBoundingBoxDescent || font.size * 0.2;
+    return (ascent - descent) / 2;
+  }
 }
 
 /**
@@ -69,6 +93,11 @@ class CanvasBackend implements MeasureBackend {
  * 不要拿它做像素级断言。
  */
 class HeuristicBackend implements MeasureBackend {
+  /** 无 DOM 时按 0.8 / 0.2 em 的典型升降部估算。 */
+  baselineOffset(font: FontSpec): number {
+    return font.size * 0.3;
+  }
+
   widthOf(text: string, font: FontSpec): number {
     let em = 0;
     for (const ch of text) em += charEm(ch);
@@ -389,6 +418,7 @@ export function measureTopic(
   return {
     width: roundHalf(width),
     height: bodyHeight + (details?.labelHeight ?? 0),
+    baselineOffset: impl.baselineOffset(font),
     ...(details?.labelHeight ? { bodyHeight } : {}),
     lines: measured.lines,
     image,

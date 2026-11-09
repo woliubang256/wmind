@@ -5,7 +5,7 @@ import { DETAIL_CONTROL_SIZE, DETAIL_CONTROL_SPACE } from './topic-details';
 import { NODE_METRICS } from './constants';
 
 /** 主行、图片、正文和外置标签共享几何；HTML 编辑框只覆盖标题区域。 */
-export function topicContentGeometry(box: NodeBox, style: ComputedStyle, lines: readonly string[], image: ImageSize | null, markers?: MarkerLayout, details?: TopicDetails) {
+export function topicContentGeometry(box: NodeBox, style: ComputedStyle, lines: readonly string[], image: ImageSize | null, markers?: MarkerLayout, details?: TopicDetails, baselineOffset = 0) {
   const lineHeight = Math.round(style.fontSize * NODE_METRICS.lineHeightRatio);
   const textHeight = lines.length * lineHeight;
   const prefix = markers?.inline ? markers.width + markers.gap : 0;
@@ -32,7 +32,9 @@ export function topicContentGeometry(box: NodeBox, style: ComputedStyle, lines: 
   const markerX = markers ? markers.inline ? rowX + todoSpace : rowX + todoSpace + (rowWidth - todoSpace - entrySpace - markers.width) / 2 : 0;
   const markerY = top + (markers?.inline ? (headerHeight - markers.height) / 2 : 0);
   const controlY = textRect.y + (textHeight - DETAIL_CONTROL_SIZE) / 2;
-  return { detailsY: top + contentHeight - detailsHeight, textRect, textX, textAnchor, firstY: textRect.y + lineHeight / 2,
+  // firstY 是「字形基线」：行盒中心 + 基线偏移。不依赖 dominant-baseline，
+  // 各引擎渲染一致（WebKit 对该属性支持不可靠）。
+  return { detailsY: top + contentHeight - detailsHeight, textRect, textX, textAnchor, firstY: textRect.y + lineHeight / 2 + baselineOffset,
     todoRect: todoSpace ? { x: rowX, y: controlY, width: DETAIL_CONTROL_SIZE, height: DETAIL_CONTROL_SIZE } : undefined,
     entryRect: entrySpace ? { x: rowX + rowWidth - DETAIL_CONTROL_SIZE, y: controlY, width: DETAIL_CONTROL_SIZE, height: DETAIL_CONTROL_SIZE } : undefined,
     imageX: box.x + (box.width - (image?.width ?? 0)) / 2, imageY: top + headerHeight + NODE_METRICS.imageGap,

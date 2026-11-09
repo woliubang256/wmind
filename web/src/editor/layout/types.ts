@@ -139,6 +139,8 @@ export interface TopicSize {
   bodyHeight?: number;
   /** 折行后的文本行。渲染层直接逐行输出 `<tspan>`。 */
   lines: string[];
+  /** 行盒中心到字形基线的距离（px），渲染层用它算出垂直居中的 y。 */
+  baselineOffset: number;
   /** 节点内的图片；没有图片为 null。 */
   image: ImageSize | null;
   markers?: MarkerLayout;
