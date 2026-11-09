@@ -216,3 +216,24 @@ body {
 
 .wmind-topic { outline: none; }
 .wmind-topic:focus-visible > rect:last-of-type { stroke: var(--primary); }
+
+/* ------------------------------------------------------------------ */
+/* 桌面壳：关掉整屏模糊                                                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * WKWebView / WebKitGTK 对 `backdrop-filter` 不做 GPU 加速：整屏模糊（尤其是
+ * 底下压着一屏缩略图时）每次重绘都要在 CPU 上重算，表现为「打开任何弹窗、
+ * 下拉都要等几秒」。同一个页面在 Chrome 里瞬间打开，就是因为 Blink 走了合成器。
+ *
+ * 桌面端统一去掉模糊，只保留半透明遮罩：视觉上几乎看不出差别，交互流畅度差
+ * 一个数量级。Web 端保持原样。
+ */
+.wmind-desktop dialog::backdrop,
+.wmind-desktop .backdrop-blur,
+.wmind-desktop .backdrop-blur-sm,
+.wmind-desktop .backdrop-blur-md,
+.wmind-desktop .backdrop-blur-lg {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
