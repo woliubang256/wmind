@@ -29,12 +29,23 @@ const adminRoutes = [
   },
   {
     path: '/admin/settings',
-    lazy: async () => ({ Component: (await import('@/features/admin/settings-page')).AdminSettingsPage }),
+    lazy: async () => {
+      const { AdminSettingsPage } = await import('@/features/admin/settings-page');
+      const { default: i18n } = await import('@/lib/i18n');
+      const { isDesktop } = await import('@/lib/desktop');
+      // 桌面端这个页面管的是**本机**配置，标题叫「系统设置」；Web 端仍是「网站设置」。
+      return { Component: () => <AdminSettingsPage title={isDesktop() ? i18n.t('desktop.systemSettings') : undefined} /> };
+    },
   },
   {
-    // 桌面端：客户端内嵌加载服务器的管理后台（走本机回环代理）。
+    // 桌面端「网站设置」：同一套设置表单，但读写的是**服务器**的配置
+    // （`/desktop/remote-api` 由本机后端转发，已带登录令牌，无需再登录）。
     path: '/site-settings',
-    lazy: async () => ({ Component: (await import('@/features/admin/remote-settings-page')).RemoteSettingsPage }),
+    lazy: async () => {
+      const { AdminSettingsPage } = await import('@/features/admin/settings-page');
+      const { default: i18n } = await import('@/lib/i18n');
+      return { Component: () => <AdminSettingsPage base="/desktop/remote-api" title={i18n.t('desktop.menu.siteSettings')} /> };
+    },
   },
   {
     path: '/admin/audit-logs',

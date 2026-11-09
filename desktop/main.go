@@ -28,6 +28,7 @@ import (
 	_ "github.com/egoist/mygo/locales/zh-Hans"
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
+	"github.com/woliubang256/wmind/backend/desktop/internal/credstore"
 	"github.com/woliubang256/wmind/backend/desktop/internal/deskapi"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localserver"
@@ -193,13 +194,18 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	// 桌面端自己的表（map_sync / sync_meta）在迁移之后建：它们不属于服务端
 	// schema，走 bootstrap 的 Prepare 钩子而不是迁移集。
 	var syncStore *syncstate.Store
+	var localDB *sql.DB
 	app, err := bootstrap.New(ctx, localmode.Config(paths, secrets), bootstrap.Options{
 		Logger: logger, Quiet: true,
 		Prepare: func(ctx context.Context, db *sql.DB) error {
 			if err := syncstate.Prepare(ctx, db); err != nil {
 				return err
 			}
+			if err := credstore.Prepare(ctx, db); err != nil {
+				return err
+			}
 			syncStore = syncstate.NewStore(db)
+			localDB = db
 			return nil
 		},
 	})
@@ -236,20 +242,11 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	}
 
 	engine := syncengine.New(app.Maps, syncStore, user.ID, logger)
-	creds := &deskapi.CredentialStore{
-		Path:     filepath.Join(paths.Root, "cloud.json"),
-		Secret:   secrets.JWTSecret,
-		Keychain: keychainSecrets{},
-	}
-
-	// 系统凭据存储不可用时（Linux 没有 libsecret）提前说清楚：登录信息会退回
-	// 应用数据目录里的加密文件，两者在「重装后是否还在」上的行为不同。
-	if _, err := mygo.Secrets.Get("startup-probe"); err != nil && !errors.Is(err, mygo.ErrSecretNotFound) {
-		logger.Warn("system credential store unavailable; cloud credentials fall back to an encrypted file", "err", err)
-	}
+	// 凭据存本地数据库（不用系统钥匙串：见 internal/credstore 的说明）。
+	creds := &deskapi.CredentialStore{Repo: credstore.New(localDB, secrets.JWTSecret)}
 
 	// 上次连接过就试着接上：失败只记日志，不阻塞启动——离线优先。
-	restoreCloud(ctx, engine, creds, logger)
+	restoreCloud(ctx, engine, creds, secrets.JWTSecret, logger)
 
 	// 更新检查走 mygo 的签名更新源（GitHub releases，标签前缀 desktop-v）。
 	// 开发构建里 Enabled() 为 false，接口会明确返回「不支持」，界面据此隐藏入口。
@@ -286,21 +283,11 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	}, nil
 }
 
-// keychainSecrets 把 mygo 的系统凭据存储接到 deskapi 的接口上。
-//
-// macOS 是登录钥匙串、Windows 是凭据管理器、Linux 是 Secret Service；
-// 不可用时（Linux 没有 libsecret）返回错误，凭据会退回加密文件。
-type keychainSecrets struct{}
-
-func (keychainSecrets) Set(key string, value []byte) error { return mygo.Secrets.Set(key, value) }
-func (keychainSecrets) Get(key string) ([]byte, error)     { return mygo.Secrets.Get(key) }
-func (keychainSecrets) Delete(key string) error            { return mygo.Secrets.Delete(key) }
-
 // restoreCloud 用上次保存的凭据恢复云端连接。
 //
 // 密码用本地主密钥解开再登录：刷新令牌虽然也存了，但桌面端长期离线，令牌
 // 过期是常态，直接重登比处理「刷新失败再重登」简单且不会漏掉安全版本变化。
-func restoreCloud(ctx context.Context, engine *syncengine.Engine, creds *deskapi.CredentialStore, logger *slog.Logger) {
+func restoreCloud(ctx context.Context, engine *syncengine.Engine, creds *deskapi.CredentialStore, secret string, logger *slog.Logger) {
 	stored, err := creds.Load()
 	if err != nil {
 		logger.Warn("cloud: read saved connection failed", "err", err)
@@ -309,7 +296,7 @@ func restoreCloud(ctx context.Context, engine *syncengine.Engine, creds *deskapi
 	if stored == nil {
 		return
 	}
-	password, err := stored.Decrypt(creds.Secret)
+	password, err := stored.Decrypt(secret)
 	if err != nil {
 		// 主密钥变了（用户删过 secrets.json）：凭据作废，让用户重新连接。
 		logger.Warn("cloud: saved credentials cannot be decrypted", "err", err)

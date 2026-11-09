@@ -23,14 +23,6 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 )
 
-// SecretStore 是系统的凭据存储（macOS 钥匙串 / Windows 凭据管理器 /
-// Linux Secret Service）。由桌面入口注入，测试里用假实现。
-type SecretStore interface {
-	Set(key string, value []byte) error
-	Get(key string) ([]byte, error)
-	Delete(key string) error
-}
-
 // lastConnection 记住上次登录过的服务器与账号，**登出后不清**：下次登录时
 // 预填，省得用户重敲地址。只存这两项，不含任何凭据。
 type lastConnection struct {
@@ -38,6 +30,7 @@ type lastConnection struct {
 	Identifier string `json:"identifier"`
 }
 
+// saveLastConnection 记住上次登录过的服务器与账号（非机密，登出后不清）。
 func (a *api) saveLastConnection(serverURL, identifier string) {
 	if a.deps.LastConnectionPath == "" || serverURL == "" {
 		return
@@ -51,6 +44,7 @@ func (a *api) saveLastConnection(serverURL, identifier string) {
 	}
 }
 
+// loadLastConnection 读取上次连接信息；没有时返回零值。
 func (a *api) loadLastConnection() lastConnection {
 	if a.deps.LastConnectionPath == "" {
 		return lastConnection{}
@@ -66,9 +60,6 @@ func (a *api) loadLastConnection() lastConnection {
 	return last
 }
 
-// credentialKey 是凭据在系统存储里的键。
-const credentialKey = "cloud-connection"
-
 // 关于页用到的固定链接。
 //
 // 刻意不接受前端传 URL：`Shell.OpenExternal` 能打开任意 scheme，一旦可以传参
@@ -80,52 +71,31 @@ const (
 
 // CredentialStore 读写云端连接凭据。
 //
-// 优先放**系统凭据存储**：它由系统按用户加密，比应用数据目录里的文件更安全，
-// 也不会因为重装应用、清理数据目录而丢（Keychain 里的条目独立存在）。
-// 没有可用凭据存储时（如 Linux 没有 libsecret）退回加密文件。
+// 凭据存在**本地数据库**里（desktop_secrets 表，密码 AES-GCM 加密），不用系统
+// 钥匙串：自构建应用每次更新签名都会变，钥匙串会把它当成另一个应用，于是每次
+// 升级都要重新授权、甚至重新登录。凭据本就是「本机这份数据」的一部分，跟着数据
+// 目录走更符合预期。
 type CredentialStore struct {
-	Path     string
-	Secret   string
-	Keychain SecretStore
+	Repo CredentialRepo
 }
 
-// Load 读取凭据：先问系统存储，再退回文件；都没有时返回 nil。
-func (c *CredentialStore) Load() (*cloudcreds.Credentials, error) {
-	if c.Keychain != nil {
-		if raw, err := c.Keychain.Get(credentialKey); err == nil && len(raw) > 0 {
-			var creds cloudcreds.Credentials
-			if err := json.Unmarshal(raw, &creds); err == nil && creds.ServerURL != "" {
-				return &creds, nil
-			}
-		}
-	}
-	return cloudcreds.Load(c.Path, c.Secret)
+// CredentialRepo 是凭据存储的实现（见 internal/credstore）。
+type CredentialRepo interface {
+	Load() (*cloudcreds.Credentials, error)
+	Save(creds cloudcreds.Credentials, password string) error
+	Clear() error
 }
 
-// Save 保存凭据：系统存储可用时写它（含密码，由系统加密），否则写加密文件。
+// Load 读取凭据；没有连接时返回 nil。
+func (c *CredentialStore) Load() (*cloudcreds.Credentials, error) { return c.Repo.Load() }
+
+// Save 保存凭据。
 func (c *CredentialStore) Save(creds cloudcreds.Credentials, password string) error {
-	if password != "" {
-		creds.Password = password
-	}
-	if c.Keychain != nil {
-		if raw, err := json.Marshal(creds); err == nil && len(raw) <= 2560 {
-			if err := c.Keychain.Set(credentialKey, raw); err == nil {
-				// 系统存储成功就不再写文件：两份真源会漂移。
-				_ = cloudcreds.Clear(c.Path)
-				return nil
-			}
-		}
-	}
-	return cloudcreds.Save(c.Path, c.Secret, creds, password)
+	return c.Repo.Save(creds, password)
 }
 
-// Clear 删除凭据（两处都清）。
-func (c *CredentialStore) Clear() error {
-	if c.Keychain != nil {
-		_ = c.Keychain.Delete(credentialKey)
-	}
-	return cloudcreds.Clear(c.Path)
-}
+// Clear 删除凭据。
+func (c *CredentialStore) Clear() error { return c.Repo.Clear() }
 
 // UpdateInfo 是检查更新的结果。
 type UpdateInfo struct {
@@ -182,6 +152,7 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("GET /desktop/status", a.status)
 	mux.HandleFunc("POST /desktop/cloud/connect", a.connect)
 	mux.HandleFunc("POST /desktop/cloud/disconnect", a.disconnect)
+	mux.Handle(remoteproxy.Prefix, a.remoteHandler())
 	mux.HandleFunc("POST /desktop/about/open-project", a.openProject)
 	mux.HandleFunc("POST /desktop/about/open-docs", a.openDocs)
 	mux.HandleFunc("POST /desktop/cloud/verify-2fa", a.verifyTwoFactor)
@@ -204,8 +175,8 @@ type api struct {
 	// pending 是等待两步验证码的登录（内存里，5 分钟后作废）。
 	mu      sync.Mutex
 	pending *pendingTwoFactor
-	// remote 是把远端 Web 界面搬进客户端的回环代理（懒启动）。
-	remote *remoteproxy.Server
+	// remoteAPI 是远端 API 的本机转发处理器（懒启动）。
+	remoteAPI http.Handler
 }
 
 type pendingTwoFactor struct {
@@ -245,9 +216,6 @@ type cloudStatus struct {
 	ServerURL string `json:"serverUrl,omitempty"`
 	Email     string `json:"email,omitempty"`
 	Nickname  string `json:"nickname,omitempty"`
-	// RemoteURL 是远程站点在客户端内的入口（回环代理），「网站设置」用它加载
-	// 服务器自己的管理界面；未连接时为空。
-	RemoteURL string `json:"remoteUrl,omitempty"`
 	// LastServerURL / LastIdentifier 是上次登录过的服务器与账号，登出后仍在，
 	// 供登录表单预填。
 	LastServerURL  string `json:"lastServerUrl,omitempty"`
@@ -277,7 +245,6 @@ func (a *api) status(w http.ResponseWriter, r *http.Request) {
 	resp.Cloud.ServerURL = a.deps.Engine.ServerURL()
 
 	last := a.loadLastConnection()
-	resp.Cloud.RemoteURL = a.remoteURL()
 	resp.Cloud.LastServerURL = last.ServerURL
 	resp.Cloud.LastIdentifier = last.Identifier
 	if creds, err := a.deps.Creds.Load(); err == nil && creds != nil {
@@ -391,39 +358,35 @@ func (a *api) disconnect(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"connected": false}})
 }
 
-// remoteURL 返回（必要时启动）远程界面的回环代理地址。
-func (a *api) remoteURL() string {
-	client := a.deps.Engine.Client()
-	if client == nil {
-		a.stopRemote()
-		return ""
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.remote != nil {
-		return a.remote.URL()
-	}
-	serverURL := a.deps.Engine.ServerURL()
-	if serverURL == "" {
-		return ""
-	}
-	proxy, err := remoteproxy.Start(context.Background(), client, serverURL, a.deps.Logger)
-	if err != nil {
-		if a.deps.Logger != nil {
-			a.deps.Logger.Warn("remote proxy: start failed", "err", err)
+// remoteHandler 把 /desktop/remote-api/* 转发到云端同名接口。
+//
+// 懒启动：没连接云端时返回 409，前端据此显示「未连接」而不是空白页。
+func (a *api) remoteHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		client := a.deps.Engine.Client()
+		if client == nil {
+			a.mu.Lock()
+			a.remoteAPI = nil
+			a.mu.Unlock()
+			fail(w, http.StatusConflict, "尚未连接云端")
+			return
 		}
-		return ""
-	}
-	a.remote = proxy
-	return proxy.URL()
-}
-
-func (a *api) stopRemote() {
-	a.mu.Lock()
-	proxy := a.remote
-	a.remote = nil
-	a.mu.Unlock()
-	proxy.Close()
+		a.mu.Lock()
+		handler := a.remoteAPI
+		if handler == nil {
+			serverURL := a.deps.Engine.ServerURL()
+			built, err := remoteproxy.Handler(client, serverURL, a.deps.Logger)
+			if err != nil {
+				a.mu.Unlock()
+				fail(w, http.StatusBadGateway, "服务器地址无效")
+				return
+			}
+			a.remoteAPI = built
+			handler = built
+		}
+		a.mu.Unlock()
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // verifyTwoFactor 用动态码（或恢复码）完成登录。

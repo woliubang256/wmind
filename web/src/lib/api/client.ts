@@ -60,6 +60,14 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: BodyInit | object | null;
   auth?: boolean;
   retryAuth?: boolean;
+  /**
+   * 覆盖接口根路径。
+   *
+   * 桌面端「网站设置」要读写**服务器**的配置，而不是本机的：它走
+   * `/desktop/remote-api`，由本机后端把请求转发到远端（注入令牌、刷新重试）。
+   * 用显式参数而不是全局变量——全局切换会让同时在跑的其它请求串到远端去。
+   */
+  base?: string;
 }
 
 /**
@@ -115,7 +123,7 @@ function isBodyInit(body: RequestOptions['body']): body is BodyInit {
 }
 
 async function requestEnvelope<T>(path: string, options: RequestOptions = {}): Promise<ApiEnvelope<T>> {
-  const { auth = true, retryAuth = true, headers: inputHeaders, body, ...init } = options;
+  const { auth = true, retryAuth = true, headers: inputHeaders, body, base = API_BASE, ...init } = options;
   const headers = new Headers(inputHeaders);
   headers.set('Accept', 'application/json');
   let requestBody: BodyInit | null | undefined;
@@ -133,7 +141,7 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}): P
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await fetch(`${base}${path}`, {
       ...init,
       body: requestBody,
       headers,

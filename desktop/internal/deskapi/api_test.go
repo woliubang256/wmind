@@ -15,7 +15,6 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -25,6 +24,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloudcreds"
+	"github.com/woliubang256/wmind/backend/desktop/internal/credstore"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 	"github.com/woliubang256/wmind/backend/internal/config"
@@ -43,6 +43,8 @@ type fixture struct {
 	creds   *CredentialStore
 	cloud   *fakeCloudServer
 	store   *syncstate.Store
+	// secret 是加密凭据用的测试主密钥。
+	secret string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -75,7 +77,12 @@ func newFixture(t *testing.T) *fixture {
 	mapRepo := sqliterepo.NewMapRepository(db)
 	store := syncstate.NewStore(db)
 	engine := syncengine.New(mapRepo, store, owner.ID, logger)
-	creds := &CredentialStore{Path: filepath.Join(dir, "cloud.json"), Secret: strings.Repeat("ab", 32)}
+	// 凭据存数据库（与生产一致）；主密钥用一个固定的测试串。
+	secret := strings.Repeat("ab", 32)
+	if err := credstore.Prepare(t.Context(), db); err != nil {
+		t.Fatalf("建凭据表失败: %v", err)
+	}
+	creds := &CredentialStore{Repo: credstore.New(db, secret)}
 	cloud := newFakeCloudServer(t)
 
 	api := New(Deps{
@@ -83,7 +90,7 @@ func newFixture(t *testing.T) *fixture {
 		// 上次连接信息落到临时文件：登出后预填表单靠它。
 		LastConnectionPath: filepath.Join(t.TempDir(), "last-connection.json"),
 	})
-	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud, store: store}
+	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud, store: store, secret: secret}
 }
 
 func (f *fixture) createMap(t *testing.T, uid, title string) *domain.Map {
@@ -207,6 +214,17 @@ func newFakeCloudServer(t *testing.T) *fakeCloudServer {
 			"accessToken": "access-1", "refreshToken": "refresh-1",
 			"user": map[string]any{"uid": "remote-user", "email": "a@example.test"},
 		}})
+	})
+	mux.HandleFunc("/api/v1/admin/settings", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-1" {
+			writeCloudJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": "AUTH_TOKEN_INVALID"}})
+			return
+		}
+		if r.Method == http.MethodPut {
+			writeCloudJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"site.name": "远端改名"}})
+			return
+		}
+		writeCloudJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"site.name": "远端站点"}})
 	})
 	mux.HandleFunc("/api/v1/auth/2fa/verify", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -347,7 +365,7 @@ func TestConnectStoresCredentialsAndSyncs(t *testing.T) {
 	if stored.ServerURL != f.cloud.server.URL {
 		t.Fatalf("保存的地址不对: %+v", stored)
 	}
-	if _, err := stored.Decrypt(f.creds.Secret); err != nil {
+	if _, err := stored.Decrypt(f.secret); err != nil {
 		t.Fatalf("保存的密码解不开: %v", err)
 	}
 
@@ -648,101 +666,50 @@ func TestVerifyTwoFactorWithoutPending(t *testing.T) {
 
 // ── 凭据存储 ────────────────────────────────────────────────────────────────
 
-type fakeSecrets struct {
-	data map[string][]byte
-	err  error
-}
-
-func (f *fakeSecrets) Set(key string, value []byte) error {
-	if f.err != nil {
-		return f.err
-	}
-	if f.data == nil {
-		f.data = map[string][]byte{}
-	}
-	f.data[key] = value
-	return nil
-}
-
-func (f *fakeSecrets) Get(key string) ([]byte, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	value, ok := f.data[key]
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	return value, nil
-}
-
-func (f *fakeSecrets) Delete(key string) error {
-	if f.data != nil {
-		delete(f.data, key)
-	}
-	return nil
-}
-
-// 有系统凭据存储时优先用它：重装应用、清掉数据目录之后登录信息仍然在。
-func TestCredentialsPreferKeychain(t *testing.T) {
+// 凭据存本地数据库：写入后能从库里读回，密码加密、能解密，清除后消失。
+func TestCredentialsInDatabase(t *testing.T) {
 	dir := t.TempDir()
-	keychain := &fakeSecrets{}
-	store := &CredentialStore{Path: filepath.Join(dir, "cloud.json"), Secret: strings.Repeat("ab", 32), Keychain: keychain}
+	db, err := sql.Open("sqlite", filepath.Join(dir, "creds.db"))
+	if err != nil {
+		t.Fatalf("打开数据库: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := credstore.Prepare(t.Context(), db); err != nil {
+		t.Fatalf("建表失败: %v", err)
+	}
+	secret := strings.Repeat("ab", 32)
+	store := &CredentialStore{Repo: credstore.New(db, secret)}
+
+	if loaded, err := store.Load(); err != nil || loaded != nil {
+		t.Fatalf("初始应为空: %+v %v", loaded, err)
+	}
 
 	creds := cloudcreds.Credentials{ServerURL: "https://cloud.example", Identifier: "a@example.test", Email: "a@example.test", Role: "admin"}
 	if err := store.Save(creds, "pw"); err != nil {
 		t.Fatalf("保存失败: %v", err)
 	}
-	if len(keychain.data[credentialKey]) == 0 {
-		t.Fatal("凭据应当写进系统存储")
+
+	var raw string
+	if err := db.QueryRow(`SELECT value FROM desktop_secrets`).Scan(&raw); err != nil {
+		t.Fatalf("库里没有记录: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "cloud.json")); err == nil {
-		t.Fatal("系统存储成功时不该再写文件（两份真源会漂移）")
+	if strings.Contains(raw, `"pw"`) {
+		t.Fatal("库里的密码必须是加密的")
 	}
 
 	loaded, err := store.Load()
-	if err != nil || loaded == nil {
-		t.Fatalf("读取失败: %v", err)
+	if err != nil || loaded == nil || loaded.ServerURL != creds.ServerURL || loaded.Role != "admin" {
+		t.Fatalf("读回内容不对: %+v %v", loaded, err)
 	}
-	if loaded.ServerURL != creds.ServerURL || loaded.Email != creds.Email || loaded.Role != "admin" {
-		t.Fatalf("读回内容不对: %+v", loaded)
-	}
-	if loaded.Password != "pw" {
-		t.Fatalf("系统存储里应当有密码（由系统加密）: %q", loaded.Password)
+	if password, err := loaded.Decrypt(secret); err != nil || password != "pw" {
+		t.Fatalf("密码解不开: %q %v", password, err)
 	}
 
-	// 清掉数据目录里的文件不影响读取：这正是「重装后登录还在」的场景。
 	if err := store.Clear(); err != nil {
 		t.Fatalf("清除失败: %v", err)
 	}
 	if loaded, err := store.Load(); err != nil || loaded != nil {
-		t.Fatalf("清除后应当没有凭据: %+v %v", loaded, err)
-	}
-}
-
-// 系统存储不可用（Linux 没有 libsecret）时退回加密文件。
-func TestCredentialsFallbackToEncryptedFile(t *testing.T) {
-	dir := t.TempDir()
-	store := &CredentialStore{
-		Path: filepath.Join(dir, "cloud.json"), Secret: strings.Repeat("ab", 32),
-		Keychain: &fakeSecrets{err: errors.New("no secret service")},
-	}
-	creds := cloudcreds.Credentials{ServerURL: "https://cloud.example", Identifier: "a@example.test"}
-	if err := store.Save(creds, "pw"); err != nil {
-		t.Fatalf("保存失败: %v", err)
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, "cloud.json"))
-	if err != nil {
-		t.Fatalf("应当退回写文件: %v", err)
-	}
-	if strings.Contains(string(raw), `"pw"`) {
-		t.Fatal("回退文件里的密码必须是加密的")
-	}
-	loaded, err := store.Load()
-	if err != nil || loaded == nil || loaded.ServerURL != creds.ServerURL {
-		t.Fatalf("回退读取失败: %+v %v", loaded, err)
-	}
-	if password, err := loaded.Decrypt(store.Secret); err != nil || password != "pw" {
-		t.Fatalf("回退密码解不开: %q %v", password, err)
+		t.Fatalf("清除后应为空: %+v %v", loaded, err)
 	}
 }
 
@@ -768,5 +735,38 @@ func TestDisconnectKeepsLastConnection(t *testing.T) {
 	}
 	if cloudStatus["lastServerUrl"] != f.cloud.server.URL || cloudStatus["lastIdentifier"] != "a@example.test" {
 		t.Fatalf("应当记住上次的服务器与账号: %#v", cloudStatus)
+	}
+}
+
+// 「网站设置」走本机转发：读写的都是服务器上的配置，且请求带上了令牌。
+func TestRemoteApiProxiesSettings(t *testing.T) {
+	f := newFixture(t)
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/connect", map[string]any{
+		"serverUrl": f.cloud.server.URL, "identifier": "a@example.test", "password": "pw",
+	})
+	if resp.status != http.StatusOK {
+		t.Fatalf("连接 = %d %s", resp.status, string(resp.Data))
+	}
+
+	got := f.do(t, http.MethodGet, "/desktop/remote-api/admin/settings", nil)
+	if got.status != http.StatusOK {
+		t.Fatalf("远端设置读取 = %d %s", got.status, string(got.Data))
+	}
+	if dataOf(t, got)["site.name"] != "远端站点" {
+		t.Fatalf("没有拿到远端配置: %#v", got.Data)
+	}
+
+	saved := f.do(t, http.MethodPut, "/desktop/remote-api/admin/settings", map[string]any{"site.name": "远端改名"})
+	if saved.status != http.StatusOK {
+		t.Fatalf("远端设置保存 = %d %s", saved.status, string(saved.Data))
+	}
+	if dataOf(t, saved)["site.name"] != "远端改名" {
+		t.Fatalf("保存结果不对: %#v", saved.Data)
+	}
+
+	// 没连接云端时明确拒绝，而不是 404 或空响应。
+	f.do(t, http.MethodPost, "/desktop/cloud/disconnect", nil)
+	if refused := f.do(t, http.MethodGet, "/desktop/remote-api/admin/settings", nil); refused.status != http.StatusConflict {
+		t.Fatalf("未连接时应当 409，实际 %d", refused.status)
 	}
 }

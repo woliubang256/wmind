@@ -31,12 +31,23 @@ export interface RestorePreview {
   database: { driver: string; schema: number }; files: number; bytes: number;
 }
 export const backupKeys = { state: ['admin', 'backups'] as const };
+/**
+ * 备份接口。
+ *
+ * `base` 用于桌面端「网站设置」：那些请求要打到**服务器**上（本机后端转发），
+ * 而不是客户端自己的本地库。
+ */
 export const backupApi = {
-  get: () => api.get<BackupState>('/admin/backups'),
-  save: (configuration: BackupConfiguration) => api.put<BackupState>('/admin/backups/config', configuration),
-  test: (configuration: BackupConfiguration) => api.post<{ success: boolean }>('/admin/backups/test', configuration),
-  run: () => api.post<BackupJob>('/admin/backups/run'),
-  schedule: (cron: string, timezone: string) => api.post<{ nextRuns: string[] }>('/admin/backups/schedule', { cron, timezone }),
-  inspect: (file: File) => api.post<RestorePreview>('/admin/backups/restore/preview', file, { headers: { 'Content-Type': 'application/zip' }, retryAuth: false }),
-  restore: (id: string) => api.post<BackupJob>('/admin/backups/restore', { id, confirm: true }, { retryAuth: false }),
+  get: (base?: string) => api.get<BackupState>('/admin/backups', base ? { base } : undefined),
+  save: (configuration: BackupConfiguration, base?: string) =>
+    api.put<BackupState>('/admin/backups/config', configuration, base ? { base } : undefined),
+  test: (configuration: BackupConfiguration, base?: string) =>
+    api.post<{ success: boolean }>('/admin/backups/test', configuration, base ? { base } : undefined),
+  run: (base?: string) => api.post<BackupJob>('/admin/backups/run', undefined, base ? { base } : undefined),
+  schedule: (cron: string, timezone: string, base?: string) =>
+    api.post<{ nextRuns: string[] }>('/admin/backups/schedule', { cron, timezone }, base ? { base } : undefined),
+  inspect: (file: File, base?: string) =>
+    api.post<RestorePreview>('/admin/backups/restore/preview', file, { headers: { 'Content-Type': 'application/zip' }, retryAuth: false, ...(base ? { base } : {}) }),
+  restore: (id: string, base?: string) =>
+    api.post<BackupJob>('/admin/backups/restore', { id, confirm: true }, { retryAuth: false, ...(base ? { base } : {}) }),
 };

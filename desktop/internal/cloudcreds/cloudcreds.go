@@ -56,6 +56,44 @@ func aead(secret string) (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
+// Encode 把凭据序列化成可落库的字符串（密码用 AES-GCM 加密）。
+//
+// 与 Save 共用同一套加密：数据库里的凭据和以前文件里的强度一致。
+func Encode(creds Credentials, password, secret string) (string, error) {
+	if len(secret) < 32 {
+		return "", errors.New("cloudcreds: secret is too short")
+	}
+	box, err := aead(secret)
+	if err != nil {
+		return "", fmt.Errorf("cloudcreds: %w", err)
+	}
+	if password != "" {
+		nonce := make([]byte, box.NonceSize())
+		if _, err := rand.Read(nonce); err != nil {
+			return "", fmt.Errorf("cloudcreds: nonce: %w", err)
+		}
+		sealed := box.Seal(nil, nonce, []byte(password), nil)
+		creds.Password = base64.StdEncoding.EncodeToString(append(nonce, sealed...))
+	}
+	raw, err := json.Marshal(creds)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// Decode 解析 Encode 的结果。
+func Decode(raw, secret string) (*Credentials, error) {
+	var creds Credentials
+	if err := json.Unmarshal([]byte(raw), &creds); err != nil {
+		return nil, fmt.Errorf("cloudcreds: parse credentials: %w", err)
+	}
+	if creds.ServerURL == "" || creds.Identifier == "" {
+		return nil, errors.New("cloudcreds: credentials are incomplete")
+	}
+	return &creds, nil
+}
+
 // Save 写入凭据文件（0600）。password 明文只在这里出现一次。
 func Save(path, secret string, creds Credentials, password string) error {
 	if len(secret) < 32 {

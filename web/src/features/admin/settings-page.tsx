@@ -22,22 +22,30 @@ import { cn } from '@/lib/utils';
 
 const SETTINGS_TABS = ['general', 'backup', 'ai'] as const;
 
-export function AdminSettingsPage() {
+/**
+ * @param base 接口根路径覆盖：桌面端「网站设置」传 `/desktop/remote-api`，
+ *   读写的是**服务器**的配置；不传就是本机（Web 端后台或桌面端系统设置）。
+ * @param title 页面标题：同一套表单在两处用不同的名字（系统设置 / 网站设置）。
+ */
+export function AdminSettingsPage({ base, title }: { base?: string; title?: string } = {}) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<(typeof SETTINGS_TABS)[number]>('general');
-  const settings = useQuery({ queryKey: adminKeys.settings, queryFn: adminApi.getSettings });
+  const settings = useQuery({
+    queryKey: [...adminKeys.settings, base ?? 'local'],
+    queryFn: () => adminApi.getSettings(base),
+  });
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('admin.settings.title')} />
+      <PageHeader title={title ?? t('admin.settings.title')} />
       <div role="tablist" aria-label={t('backup.sections')} className="flex gap-1 border-b border-border">
         {SETTINGS_TABS.map((key, index) => <button key={key} type="button" role="tab" id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} onKeyDown={(event) => {
           const next = event.key === 'Home' ? SETTINGS_TABS[0] : event.key === 'End' ? SETTINGS_TABS.at(-1) : event.key === 'ArrowRight' || event.key === 'ArrowLeft' ? SETTINGS_TABS[(index + (event.key === 'ArrowRight' ? 1 : -1) + SETTINGS_TABS.length) % SETTINGS_TABS.length] : undefined;
           if (next) { event.preventDefault(); setTab(next); document.getElementById(`settings-tab-${next}`)?.focus(); }
         }} onClick={() => setTab(key)} className={`border-b-2 px-4 py-2.5 text-sm transition-colors ${tab === key ? 'border-primary font-medium text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{t(key === 'general' ? 'backup.generalTab' : key === 'backup' ? 'backup.tab' : 'ai.settingsTab')}</button>)}
       </div>
-      <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}><BackupPanel /></div>
-      <div role="tabpanel" id="settings-panel-ai" aria-labelledby="settings-tab-ai" hidden={tab !== 'ai'}><AISettingsPanel active={tab === 'ai'} /></div>
+      <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}><BackupPanel base={base} /></div>
+      <div role="tabpanel" id="settings-panel-ai" aria-labelledby="settings-tab-ai" hidden={tab !== 'ai'}><AISettingsPanel active={tab === 'ai'} base={base} /></div>
       <div role="tabpanel" id="settings-panel-general" aria-labelledby="settings-tab-general" hidden={tab !== 'general'}>
       {settings.isError ? (
         <EmptyState
@@ -53,7 +61,7 @@ export function AdminSettingsPage() {
       ) : settings.data ? (
         // 表单自己持有草稿状态，因此只在拿到数据后挂载一次；重新挂载会把
         // 用户还没保存的改动抹掉，所以这里不随 refetch 重建。
-        <SettingsForm initial={settings.data} />
+        <SettingsForm initial={settings.data} base={base} />
       ) : (
         <LoadingState label={t('admin.settings.loading')} className="min-h-64" />
       )}
@@ -75,7 +83,7 @@ function fieldError(
   return undefined;
 }
 
-function SettingsForm({ initial }: { initial: SettingsMap }) {
+function SettingsForm({ initial, base }: { initial: SettingsMap; base?: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<SettingsMap>(initial);
@@ -85,7 +93,7 @@ function SettingsForm({ initial }: { initial: SettingsMap }) {
   const dirtyKeys = Object.keys(patch);
 
   const save = useMutation({
-    mutationFn: () => adminApi.updateSettings(patch),
+    mutationFn: () => adminApi.updateSettings(patch, base),
     onSuccess: (updated) => {
       queryClient.setQueryData(adminKeys.settings, updated);
       // 站点名、注册开关等会出现在登录页与页头，必须让公开配置跟着刷新。

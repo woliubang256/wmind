@@ -10,22 +10,26 @@ import { Switch } from '@/components/ui/switch';
 import { siteKeys } from '@/features/site/use-site-config';
 import { AI_REASONING_EFFORTS, aiApi, aiKeys, type AIConfiguration, type AIConfigurationInput } from '@/features/ai/api';
 
-export function AISettingsPanel({ active }: { active: boolean }) {
+export function AISettingsPanel({ active, base }: { active: boolean; base?: string }) {
   const { t } = useTranslation();
-  const query = useQuery({ queryKey: aiKeys.configuration, queryFn: aiApi.configuration, enabled: active });
+  const query = useQuery({
+    queryKey: [...aiKeys.configuration, base ?? 'local'],
+    queryFn: () => aiApi.configuration(base),
+    enabled: active,
+  });
   if (query.isError) return <EmptyState icon="alert" title={t('ai.loadFailed')}
     description={query.error.message} action={<Button size="sm" variant="outline" onClick={() => void query.refetch()}>{t('common.retry')}</Button>} />;
   if (!query.data) return <LoadingState className="min-h-64" />;
   return <AISettingsForm initial={query.data} />;
 }
 
-function AISettingsForm({ initial }: { initial: AIConfiguration }) {
+function AISettingsForm({ initial, base }: { initial: AIConfiguration; base?: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<AIConfigurationInput>({ enabled: initial.enabled, baseUrl: initial.baseUrl, apiKey: '', model: initial.model, reasoningEffort: initial.reasoningEffort ?? '' });
   const dirty = draft.enabled !== initial.enabled || draft.baseUrl !== initial.baseUrl || draft.model !== initial.model || draft.reasoningEffort !== (initial.reasoningEffort ?? '') || Boolean(draft.apiKey) || Boolean(draft.clearApiKey);
   const set = <K extends keyof AIConfigurationInput>(key: K, value: AIConfigurationInput[K]) => setDraft((previous) => ({ ...previous, [key]: value }));
-  const save = useMutation({ mutationFn: () => aiApi.save(draft), onSuccess: (updated) => {
+  const save = useMutation({ mutationFn: () => aiApi.save(draft, base), onSuccess: (updated) => {
     queryClient.setQueryData(aiKeys.configuration, updated);
     void queryClient.invalidateQueries({ queryKey: siteKeys.config });
     setDraft({ enabled: updated.enabled, baseUrl: updated.baseUrl, apiKey: '', model: updated.model, reasoningEffort: updated.reasoningEffort ?? '' });

@@ -17,9 +17,9 @@ import { timezoneOptions } from './timezones';
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function size(bytes: number): string { return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`; }
 
-export function BackupPanel() {
+export function BackupPanel({ base }: { base?: string }) {
   const { t } = useTranslation();
-  const query = useQuery({ queryKey: backupKeys.state, queryFn: backupApi.get, refetchInterval: (state) => state.state.data?.busy ? 2000 : 15000 });
+  const query = useQuery({ queryKey: [...backupKeys.state, base ?? 'local'], queryFn: () => backupApi.get(base), refetchInterval: (state) => state.state.data?.busy ? 2000 : 15000 });
   if (query.isError) return <EmptyState icon="alert" title={t('backup.loadFailed')} description={errorMessage(query.error)} action={<Button size="sm" variant="outline" onClick={() => void query.refetch()}>{t('common.retry')}</Button>} />;
   if (!query.data) return <LoadingState label={t('backup.loading')} className="min-h-64" />;
   return <div className="space-y-5"><BackupForm state={query.data} /><RestorePanel busy={query.data.busy} maxBytes={query.data.maxUploadBytes} /><JobHistory state={query.data} /></div>;
@@ -29,21 +29,21 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return <label className="block min-w-0 space-y-1.5"><span className="text-xs font-medium">{label}</span>{children}{hint && <span className="block text-xs leading-5 text-muted-foreground">{hint}</span>}</label>;
 }
 
-function BackupForm({ state }: { state: BackupState }) {
+function BackupForm({ state, base }: { state: BackupState; base?: string }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<BackupConfiguration>(state.configuration);
   const [schedule, setSchedule] = useState({ cron: draft.cron, timezone: draft.timezone });
   const timezones = useMemo(() => timezoneOptions(draft.timezone), [draft.timezone]);
   useEffect(() => { const timer = setTimeout(() => setSchedule({ cron: draft.cron, timezone: draft.timezone }), 350); return () => clearTimeout(timer); }, [draft.cron, draft.timezone]);
-  const preview = useQuery({ queryKey: ['admin', 'backup-schedule', schedule], queryFn: () => backupApi.schedule(schedule.cron, schedule.timezone), retry: false, staleTime: 60000 });
+  const preview = useQuery({ queryKey: ['admin', 'backup-schedule', schedule], queryFn: () => backupApi.schedule(schedule.cron, schedule.timezone, base), retry: false, staleTime: 60000 });
   const scheduleCurrent = schedule.cron === draft.cron && schedule.timezone === draft.timezone;
   const scheduleValid = scheduleCurrent && preview.isSuccess;
   const dirty = JSON.stringify(draft) !== JSON.stringify(state.configuration);
   const retentionValid = Number.isInteger(draft.retainCount) && draft.retainCount >= 1 && draft.retainCount <= 1000;
-  const save = useMutation({ mutationFn: () => backupApi.save(draft), onSuccess: (updated) => { queryClient.setQueryData(backupKeys.state, updated); setDraft(updated.configuration); toast.success(t('backup.saved')); }, onError: (error) => toast.error(errorMessage(error)) });
-  const test = useMutation({ mutationFn: () => backupApi.test(draft), onSuccess: () => toast.success(t('backup.testPassed')), onError: (error) => toast.error(errorMessage(error)) });
-  const run = useMutation({ mutationFn: backupApi.run, onSuccess: () => { void queryClient.invalidateQueries({ queryKey: backupKeys.state }); toast.success(t('backup.started')); }, onError: (error) => toast.error(errorMessage(error)) });
+  const save = useMutation({ mutationFn: () => backupApi.save(draft, base), onSuccess: (updated) => { queryClient.setQueryData(backupKeys.state, updated); setDraft(updated.configuration); toast.success(t('backup.saved')); }, onError: (error) => toast.error(errorMessage(error)) });
+  const test = useMutation({ mutationFn: () => backupApi.test(draft, base), onSuccess: () => toast.success(t('backup.testPassed')), onError: (error) => toast.error(errorMessage(error)) });
+  const run = useMutation({ mutationFn: () => backupApi.run(base), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: backupKeys.state }); toast.success(t('backup.started')); }, onError: (error) => toast.error(errorMessage(error)) });
   const disabled = state.busy || save.isPending || test.isPending || run.isPending;
   const set = <K extends keyof BackupConfiguration>(key: K, value: BackupConfiguration[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const setDAV = (key: keyof BackupConfiguration['webdav'], value: string) => setDraft((current) => ({ ...current, webdav: { ...current.webdav, [key]: value } }));
@@ -106,15 +106,15 @@ function BackupForm({ state }: { state: BackupState }) {
   </Panel>;
 }
 
-function RestorePanel({ busy, maxBytes }: { busy: boolean; maxBytes: number }) {
+function RestorePanel({ busy, maxBytes, base }: { busy: boolean; maxBytes: number; base?: string }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [preview, setPreview] = useState<RestorePreview>();
   const [confirmed, setConfirmed] = useState(false);
   const [filename, setFilename] = useState('');
   const [uploadError, setUploadError] = useState('');
-  const inspect = useMutation({ mutationFn: backupApi.inspect, onSuccess: (data) => { setPreview(data); setConfirmed(false); }, onError: (error) => { setUploadError(errorMessage(error)); toast.error(errorMessage(error)); } });
-  const restore = useMutation({ mutationFn: () => backupApi.restore(preview!.id), onSuccess: () => { setPreview(undefined); setConfirmed(false); void queryClient.invalidateQueries({ queryKey: backupKeys.state }); toast.success(t('backup.restoreStarted')); }, onError: (error) => toast.error(errorMessage(error)) });
+  const inspect = useMutation({ mutationFn: (file: File) => backupApi.inspect(file, base), onSuccess: (data) => { setPreview(data); setConfirmed(false); }, onError: (error) => { setUploadError(errorMessage(error)); toast.error(errorMessage(error)); } });
+  const restore = useMutation({ mutationFn: () => backupApi.restore(preview!.id, base), onSuccess: () => { setPreview(undefined); setConfirmed(false); void queryClient.invalidateQueries({ queryKey: backupKeys.state }); toast.success(t('backup.restoreStarted')); }, onError: (error) => toast.error(errorMessage(error)) });
   return <Panel title={t('backup.restoreTitle')}>
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-4">

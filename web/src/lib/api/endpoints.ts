@@ -55,10 +55,12 @@ export const adminApi = {
   auditLogs: ({ page, pageSize, action, actorUid, from, to }: AuditLogQuery = {}) =>
     api.list<AuditLog>(`/admin/audit-logs${query({ page, page_size: pageSize, action, actor_uid: actorUid, from, to })}`),
 
-  getSettings: () => api.get<SettingsMap>('/admin/settings'),
+  // base 用于桌面端「网站设置」：读的是**服务器**的配置（走本机转发）。
+  getSettings: (base?: string) => api.get<SettingsMap>('/admin/settings', base ? { base } : undefined),
 
   /** 部分更新：只传要改的键。 */
-  updateSettings: (patch: SettingsMap) => api.put<SettingsMap>('/admin/settings', patch),
+  updateSettings: (patch: SettingsMap, base?: string) =>
+    api.put<SettingsMap>('/admin/settings', patch, base ? { base } : undefined),
 };
 
 export type AdminUsersPage = Paged<User>;

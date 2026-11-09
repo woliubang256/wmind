@@ -30,8 +30,10 @@ export interface AINode {
 }
 export const aiKeys = { configuration: ['admin', 'ai'] as const };
 export const aiApi = {
-  configuration: () => api.get<AIConfiguration>('/admin/ai'),
-  save: (input: AIConfigurationInput) => api.put<AIConfiguration>('/admin/ai', input),
+  // base 同 backupApi：桌面端「网站设置」读的是服务器的 AI 配置。
+  configuration: (base?: string) => api.get<AIConfiguration>('/admin/ai', base ? { base } : undefined),
+  save: (input: AIConfigurationInput, base?: string) =>
+    api.put<AIConfiguration>('/admin/ai', input, base ? { base } : undefined),
   generate: (input: { prompt: string; sources: AISource[] }, signal: AbortSignal) =>
     api.post<AINode>('/ai/generate', input, { signal }),
 };
