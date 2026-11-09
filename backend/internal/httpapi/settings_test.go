@@ -29,7 +29,7 @@ func TestSiteConfigIsPublic(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("site/config = %d %#v", status, body.Error)
 	}
-	if body.Data["siteName"] != "wmind" {
+	if body.Data["siteName"] != "Wmind" {
 		t.Fatalf("siteName = %#v", body.Data["siteName"])
 	}
 	if body.Data["registrationEnabled"] != true {

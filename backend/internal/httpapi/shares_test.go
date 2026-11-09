@@ -138,7 +138,7 @@ func TestShareCreateAndPublicRead(t *testing.T) {
 	if body.Data["title"] != "产品规划" {
 		t.Fatalf("title = %#v", body.Data["title"])
 	}
-	if body.Data["siteName"] != "wmind" {
+	if body.Data["siteName"] != "Wmind" {
 		t.Fatalf("siteName = %#v", body.Data["siteName"])
 	}
 	if body.Data["ownerNickname"] != "alice" {

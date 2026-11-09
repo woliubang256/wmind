@@ -457,6 +457,22 @@ func (s *AuthService) Authenticate(ctx context.Context, accessToken string) (*do
 	return user, nil
 }
 
+// IssueLocalSession 为**本机用户**签发一次会话，不校验密码。
+//
+// 只给桌面端的本地模式用：那台机器上只有一个由客户端自己创建的本地用户，
+// 没有登录页也没有密码。它解决的是「/uploads 的图片鉴权走的是媒体会话
+// （refresh token 派生），而媒体会话只能由登录产生」——本地模式没有登录，
+// 于是缩略图与图片一律 404。
+//
+// 与登录的区别只有一处：不校验凭据。会话本身照常落库、可撤销、按 TTL 过期，
+// 因此退出登录（删除令牌行）后媒体访问立即失效。
+func (s *AuthService) IssueLocalSession(ctx context.Context, user *domain.User, meta SessionMeta) (*AuthResult, error) {
+	if user == nil || user.UID == "" {
+		return nil, apperr.New(apperr.CodeAuthTokenInvalid, "")
+	}
+	return s.issueSession(ctx, user, meta)
+}
+
 // SeedAdmin 在用户表为空时创建首个管理员。
 //
 // 只在 Count()==0 时执行：一旦有人用过这个实例，配置里的种子密码就失去

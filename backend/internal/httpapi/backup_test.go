@@ -182,7 +182,7 @@ func TestBackupHTTPConfigurationScheduleAndRestore(t *testing.T) {
 		t.Fatal("old token survived", status)
 	}
 	status, body = s.do("GET", "/api/v1/site/config", "", nil)
-	if status != 200 || body.Data["siteName"] != "wmind" {
+	if status != 200 || body.Data["siteName"] != "Wmind" {
 		t.Fatalf("settings cache not restored %d %+v", status, body)
 	}
 }

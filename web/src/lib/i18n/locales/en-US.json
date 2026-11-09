@@ -726,7 +726,8 @@
     "duplicated": "Copy created",
     "deleted": "Moved to the recycle bin",
     "error": "Something went wrong. Please try again.",
-    "create": "New mind map"
+    "create": "New mind map",
+    "thumbnailError": "Thumbnail failed to load"
   },
   "trash": {
     "title": "Recycle bin",

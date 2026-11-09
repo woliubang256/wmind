@@ -98,6 +98,7 @@ export function MapCard({ map, actions, busy = false, meta, href, badge }: MapCa
           <LoadingImage
             src={map.thumbnailUrl}
             alt={t('maps.thumbnailAlt', { title: map.title })}
+            errorText={t('maps.thumbnailError')}
             loading="lazy"
             decoding="async"
             containerClassName="size-full"

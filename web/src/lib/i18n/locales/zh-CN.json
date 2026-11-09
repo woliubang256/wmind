@@ -726,7 +726,8 @@
     "duplicated": "已创建副本",
     "deleted": "已移到回收站",
     "error": "操作失败，请稍后重试。",
-    "create": "新建导图"
+    "create": "新建导图",
+    "thumbnailError": "缩略图加载失败"
   },
   "trash": {
     "title": "回收站",

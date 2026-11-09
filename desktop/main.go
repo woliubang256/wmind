@@ -34,6 +34,7 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 	"github.com/woliubang256/wmind/backend/internal/bootstrap"
+	"github.com/woliubang256/wmind/backend/internal/service"
 )
 
 // version 由构建时通过 -ldflags 注入（见 scripts/build-desktop.mjs），
@@ -50,7 +51,7 @@ func run() error {
 	// 名字要在最前面定死：它决定用户数据目录与单实例锁的键。不设置的话，
 	// `go run` 的临时二进制和打包出来的 .app 会拿到不同的名字，本地数据
 	// 也就分裂在两个目录里。
-	mygo.App.SetName("wmind")
+	mygo.App.SetName("Wmind")
 	// 声明应用的语言：mygo 会据此从系统偏好里挑出界面语言（中文系统给
 	// zh-Hans），并通过 mygo:locale 事件告诉页面。不声明的话默认只有英文，
 	// 中文系统的用户在桌面端会看到一整屏英文——这就是「画布没有国际化」
@@ -144,7 +145,7 @@ func start() error {
 	// 左上角。前端负责留出红绿灯区域并把顶栏声明为可拖拽（--app-region），
 	// 见 frontend/src/app/layouts.tsx 与 styles.css 的 .wmind-desktop。
 	mygo.NewWindow(mygo.WindowOptions{
-		Title:         "wmind",
+		Title:         "Wmind",
 		URL:           url,
 		Width:         1280,
 		Height:        800,
@@ -211,6 +212,17 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		app.Close()
 		return nil, err
 	}
+	// 媒体会话：/uploads 的鉴权只认 refresh token 派生的媒体令牌，而本地模式
+	// 没有登录。这里替本机用户签发一次会话，把派生的媒体令牌下发成 cookie。
+	mediaToken := ""
+	if session, err := app.Auth.IssueLocalSession(ctx, user, service.SessionMeta{Platform: "desktop"}); err != nil {
+		logger.Warn("local media session failed; thumbnails and images will not load", "err", err)
+	} else if token, err := app.Auth.MediaToken(session); err != nil {
+		logger.Warn("local media token failed; thumbnails and images will not load", "err", err)
+	} else {
+		mediaToken = token
+	}
+
 	accessToken, err := localmode.Token(secrets.JWTSecret, user)
 	if err != nil {
 		app.Close()
@@ -250,6 +262,7 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		Mode:               "local",
 		Version:            appVersion,
 		AuthToken:          accessToken,
+		MediaToken:         mediaToken,
 		Locale:             locale.Locale,
 		PreferredLanguages: locale.Preferred,
 		Desktop: deskapi.New(deskapi.Deps{

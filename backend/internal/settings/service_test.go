@@ -136,7 +136,7 @@ func TestDefaultsBeforeLoad(t *testing.T) {
 
 	// Load 之前就必须可用：启动早期可能有请求进来，不能 panic 或读到零值。
 	snapshot := svc.Snapshot()
-	if snapshot.SiteName() != "wmind" {
+	if snapshot.SiteName() != "Wmind" {
 		t.Fatalf("站点名 = %q; 期望 wmind", snapshot.SiteName())
 	}
 	if !svc.RegistrationEnabled() {
@@ -254,7 +254,7 @@ func TestUpdateEmptyPatchIsNoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("空 patch 不该报错: %v", err)
 	}
-	if snapshot.SiteName() != "wmind" || repo.writes != 0 {
+	if snapshot.SiteName() != "Wmind" || repo.writes != 0 {
 		t.Fatalf("空 patch 不该写库: writes=%d", repo.writes)
 	}
 }

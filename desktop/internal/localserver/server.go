@@ -44,6 +44,9 @@ type Config struct {
 	// AuthToken 注入给前端的访问令牌：本地模式没有登录页，前端拿它直接
 	// 调 API。
 	AuthToken string
+	// MediaToken 是媒体会话令牌：/uploads 的图片鉴权只认它（或 Bearer），
+	// 而 <img> 发不出请求头，所以由这里下发成 cookie。
+	MediaToken string
 	// Locale 是 mygo 解析出的界面语言（跟随系统），前端据此解析「跟随系统」。
 	Locale string
 	// PreferredLanguages 是系统偏好语言列表（最优先在前）。
@@ -86,6 +89,7 @@ func (s *server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isDocumentRequest(r) && !s.hasToken(r) {
 			s.setToken(w)
+			s.setMediaToken(w)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -114,6 +118,22 @@ func (s *server) setToken(w http.ResponseWriter) {
 		// 回环 http 源，不能用 Secure；SameSite=Strict 让别的站点发起的
 		// 请求带不上它，本机其它进程也拿不到（cookie 不跨进程共享）。
 		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+// setMediaToken 下发媒体会话 cookie。
+//
+// Path 必须是 /uploads：后端就是这么设的（登录路径），别的地方带不上它。
+func (s *server) setMediaToken(w http.ResponseWriter) {
+	if s.cfg.MediaToken == "" {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "wmind_media",
+		Value:    s.cfg.MediaToken,
+		Path:     "/uploads",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 

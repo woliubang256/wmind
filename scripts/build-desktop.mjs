@@ -26,6 +26,16 @@ const EMBED_DIR = join(DESKTOP, 'frontend-dist');
 const OUT_DIR = join(DESKTOP, 'build');
 
 const DESKTOP_VERSION_SYMBOL = 'main.version';
+
+/** 应用包名：mygo 用 mygo.json 的 name 命名 .app（现在叫 Wmind.app）。 */
+function appBundleName() {
+  try {
+    const config = JSON.parse(readFileSync(join(DESKTOP, 'mygo.json'), 'utf8'));
+    return `${config.name || 'Wmind'}.app`;
+  } catch {
+    return 'Wmind.app';
+  }
+}
 const BACKEND_VERSION_SYMBOL = 'github.com/woliubang256/wmind/backend/internal/config.Version';
 
 function parseArgs(argv) {
@@ -139,7 +149,7 @@ function createDmg(appPath, version, dir, label) {
   const stage = mkdtempSync(join(tmpdir(), 'wmind-dmg-'));
   const rwImage = join(stage, '..', `wmind-${version}-${label}-rw.dmg`);
   try {
-    cpSync(appPath, join(stage, 'wmind.app'), { recursive: true, dereference: false });
+    cpSync(appPath, join(stage, appBundleName()), { recursive: true, dereference: false });
     symlinkSync('/Applications', join(stage, 'Applications'));
 
     // 品牌背景图与卷图标：都是「锦上添花」，缺一个就退回朴素窗口，不让出包失败。
@@ -215,7 +225,7 @@ function arrangeDmgWindow(mount, volume, backgroundFile) {
     set arrangement of theViewOptions to not arranged
     set icon size of theViewOptions to 128
     set background picture of theViewOptions to file ".background:${backgroundFile}"
-    set position of item "wmind.app" of container window to {200, 300}
+    set position of item "${appBundleName()}" of container window to {200, 300}
     set position of item "Applications" of container window to {460, 300}
     close
     open
@@ -356,8 +366,11 @@ function packageApps(platforms, version) {
     if (!platform.startsWith('darwin/')) continue;
     const arch = platform.split('/')[1];
     const dir = join(OUT_DIR, `darwin-${arch}`);
-    const appPath = join(dir, 'wmind.app');
-    if (!existsSync(appPath)) continue;
+    const appPath = join(dir, appBundleName());
+    if (!existsSync(appPath)) {
+      console.warn(`警告：找不到 ${appPath}，跳过 ${platform} 的 dmg`);
+      continue;
+    }
     const dmg = createDmg(appPath, version, dir, arch);
     console.log(`  ${dmg}`);
   }
@@ -393,7 +406,7 @@ function main() {
       const [goos, goarch] = platform.split('/');
       if (goos !== 'darwin') throw new Error(`--dmg-only 只支持 darwin，收到 ${platform}`);
       const dir = join(OUT_DIR, `darwin-${goarch}`);
-      const appPath = join(dir, 'wmind.app');
+      const appPath = join(dir, appBundleName());
       if (!existsSync(appPath)) {
         throw new Error(`找不到 ${appPath}：先用 --platform ${platform} 跑一次打包（不需要 .dmg）`);
       }
