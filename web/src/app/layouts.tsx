@@ -19,6 +19,7 @@ import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dial
 import { AccountDialog } from '@/features/account/account-dialog';
 import { AboutDialog } from '@/features/about/about-dialog';
 import { ShortcutsDialog } from '@/features/shortcuts/shortcuts-dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { disconnectCloud, fetchDesktopStatus, openDeployGuide, openSiteSettings } from '@/lib/desktop';
 import { useQuery } from '@tanstack/react-query';
 
@@ -251,6 +252,9 @@ export function AppLayout() {
   const [aboutOpen, setAboutOpen] = useState(false);
   // 「快捷键速查」弹窗。
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // 退出登录的二次确认：登出会丢掉云端连接状态，不能一点就走。
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signOutPending, setSignOutPending] = useState(false);
   // 「网站设置」只在登录且远程账号是管理员时出现。
   const cloudStatus = useQuery({
     queryKey: ['desktop', 'status'],
@@ -330,18 +334,7 @@ export function AppLayout() {
                       detail: cloudStatus.data.cloud.email || cloudStatus.data.cloud.serverUrl,
                     }
                   : undefined}
-                onSignOut={localDesktop && cloudStatus.data?.cloud.connected
-                  ? () => {
-                      void disconnectCloud()
-                        .then(() => {
-                          toast.success(t('desktop.cloud.disconnectSuccess'));
-                          void cloudStatus.refetch();
-                        })
-                        .catch((error) => {
-                          toast.error(error instanceof Error ? error.message : t('desktop.cloud.connectError'));
-                        });
-                    }
-                  : undefined}
+                onSignOut={localDesktop && cloudStatus.data?.cloud.connected ? () => setSignOutOpen(true) : undefined}
                 siteSettings={siteSettings}
                 onAbout={localDesktop ? () => setAboutOpen(true) : undefined}
                 onShortcuts={localDesktop ? () => setShortcutsOpen(true) : undefined}
@@ -392,6 +385,27 @@ export function AppLayout() {
       <AccountDialog open={accountOpen} onClose={() => setAccountOpen(false)} />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ConfirmDialog
+        open={signOutOpen}
+        title={t('desktop.account.signOutConfirm.title')}
+        description={t('desktop.account.signOutConfirm.body')}
+        confirmLabel={t('desktop.account.signOutConfirm.confirm')}
+        cancelLabel={t('common.cancel')}
+        destructive
+        pending={signOutPending}
+        onClose={() => setSignOutOpen(false)}
+        onConfirm={() => {
+          setSignOutPending(true);
+          void disconnectCloud()
+            .then(() => {
+              toast.success(t('desktop.cloud.disconnectSuccess'));
+              setSignOutOpen(false);
+              void cloudStatus.refetch();
+            })
+            .catch((error) => toast.error(error instanceof Error ? error.message : t('desktop.cloud.connectError')))
+            .finally(() => setSignOutPending(false));
+        }}
+      />
 
       {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>

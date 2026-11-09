@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Icon, type IconName } from './ui/icon';
 import { placeMenu, type MenuPlacement } from './ui/select';
 import { UserAvatar } from './user-avatar';
+import { LoadingImage } from './ui/loading-image';
 import type { AvatarUser } from '@/lib/avatar';
 import { useSiteConfig } from '@/features/site/use-site-config';
 
@@ -38,7 +39,7 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
    * 未连接时传 undefined：那时菜单顶部不需要多一行「本地用户」——头像旁边
    * 已经写着这个名字了。
    */
-  account?: { name: string; detail?: string };
+  account?: { name: string; detail?: string; avatarSrc?: string };
   /** 已登录云端：首项变成「退出登录」，点击直接登出。 */
   onSignOut?: () => void;
   /** 强制头像（本地用户用品牌 logo）。 */
@@ -88,7 +89,9 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
       if (!rect) return;
       setPlacement(placeMenu({ top: rect.top, bottom: rect.bottom, left: Math.max(8, rect.right - 208), width: 208 },
         menuHeight,
-        { width: window.innerWidth, height: window.innerHeight }, { minWidth: 208 }));
+        // 上限给到 480：六项加账号信息块约 320，用默认的 320 会刚好溢出出现
+        // 滚动条（只有真正放不下时才该滚）。
+        { width: window.innerWidth, height: window.innerHeight }, { minWidth: 208, maxHeight: 480 }));
     };
     const outside = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -128,8 +131,10 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
       <Icon name="chevron-down" className={`size-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
     {open && placement ? createPortal(<div id={id} ref={attachMenu} role="menu" aria-label={t('nav.userMenu')}
-      className="z-50 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
+      className="z-50 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
       style={{ position: 'fixed', top: placement.top, left: placement.left, width: placement.width, maxHeight: placement.maxHeight }}
+      // 滚轮在菜单里滚动时不能穿透到画布：否则菜单滚到底后画布跟着缩放/平移。
+      onWheel={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         const items = [...(menu.current?.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]') ?? [])];
         const index = items.indexOf(document.activeElement as HTMLAnchorElement);
@@ -143,9 +148,14 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
         <div role="none" className="border-b border-border">
           <button type="button" role="menuitem" tabIndex={-1}
             onClick={() => { close(false); onOpenAccount?.(); }}
-            className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
-            <span className="w-full truncate text-sm font-medium">{account.name}</span>
-            {account.detail ? <span className="w-full truncate text-xs text-muted-foreground">{account.detail}</span> : null}
+            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
+            {account.avatarSrc
+              ? <LoadingImage src={account.avatarSrc} alt="" containerClassName="size-7 shrink-0 overflow-hidden rounded-full" className="size-full object-cover" />
+              : <UserAvatar user={user} src={avatarSrc} className="size-7" />}
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium">{account.name}</span>
+              {account.detail ? <span className="truncate text-xs text-muted-foreground">{account.detail}</span> : null}
+            </span>
           </button>
         </div>
       ) : null}

@@ -610,7 +610,10 @@
     "content.hint.image": "Add or edit local image",
     "content.hint.equation": "Add or edit equation",
     "annotation.summaryTitle": "Summary text",
-    "branchTopic": "Branch topic"
+    "branchTopic": "Branch topic",
+    "panel.canvas.removeConfirmTitle": "Delete this theme?",
+    "panel.canvas.removeConfirmBody": "“{{name}}” is removed from your themes. Maps already using it keep their colours.",
+    "panel.canvas.removeConfirmConfirm": "Delete"
   },
   "import": {
     "title": "Import",
@@ -1527,7 +1530,7 @@
     "localUser": "Local user",
     "systemSettings": "System settings",
     "account": {
-      "title": "Account",
+      "title": "Sign out?",
       "hint": "Sign in to your self-hosted server to upload local maps and sync them across devices.",
       "signIn": "Sign in",
       "signOut": "Sign out",
@@ -1536,7 +1539,12 @@
       "twoFactorCode": "Code or recovery code",
       "verify": "Verify",
       "verifying": "Verifying…",
-      "twoFactorFailed": "Verification failed"
+      "twoFactorFailed": "Verification failed",
+      "body": "You go back to the local user; local maps stay untouched. Your server and account are remembered for next time.",
+      "confirm": "Sign out",
+      "signOutConfirm.title": "Sign out?",
+      "signOutConfirm.body": "You go back to the local user; local maps stay untouched. Your server and account are remembered for next time.",
+      "signOutConfirm.confirm": "Sign out"
     },
     "menu": {
       "siteSettings": "Site settings",

@@ -18,6 +18,7 @@ import { mapKeys } from '@/features/maps/queries';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TextField } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { formatRelative } from '@/lib/format';
@@ -37,6 +38,8 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
   const [password, setPassword] = useState('');
   // 两步验证：密码通过后进入这一步，提交动态码或恢复码。
   const [twoFactor, setTwoFactor] = useState(false);
+  // 退出登录的二次确认。
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [code, setCode] = useState('');
 
   const status = useQuery({
@@ -147,6 +150,7 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
   }, [open, connected, cloud?.lastServerUrl, cloud?.lastIdentifier, serverUrl, identifier]);
 
   return (
+    <>
     <Modal
       open={open}
       title={t('desktop.account.title')}
@@ -157,7 +161,7 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
             <Button variant="outline" loading={sync.isPending} onClick={() => sync.mutate()}>
               {t('desktop.sync.now')}
             </Button>
-            <Button variant="outline" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
+            <Button variant="outline" onClick={() => setConfirmSignOut(true)}>
               {t('desktop.account.signOut')}
             </Button>
           </>
@@ -263,5 +267,17 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
         </form>
       )}
     </Modal>
+    <ConfirmDialog
+      open={confirmSignOut}
+      title={t('desktop.account.signOutConfirm.title')}
+      description={t('desktop.account.signOutConfirm.body')}
+      confirmLabel={t('desktop.account.signOutConfirm.confirm')}
+      cancelLabel={t('common.cancel')}
+      destructive
+      pending={disconnect.isPending}
+      onClose={() => setConfirmSignOut(false)}
+      onConfirm={() => disconnect.mutate(undefined, { onSuccess: () => setConfirmSignOut(false) })}
+    />
+    </>
   );
 }

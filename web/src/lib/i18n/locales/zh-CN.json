@@ -610,7 +610,10 @@
     "content.hint.image": "添加或编辑本地图片",
     "content.hint.equation": "添加或编辑公式",
     "annotation.summaryTitle": "概要文字",
-    "branchTopic": "分支主题"
+    "branchTopic": "分支主题",
+    "panel.canvas.removeConfirmTitle": "删除配色主题？",
+    "panel.canvas.removeConfirmBody": "「{{name}}」会从我的主题里移除，已套用它的导图不受影响。",
+    "panel.canvas.removeConfirmConfirm": "删除"
   },
   "import": {
     "title": "导入",
@@ -1527,7 +1530,7 @@
     "localUser": "本地用户",
     "systemSettings": "系统设置",
     "account": {
-      "title": "账户",
+      "title": "退出登录？",
       "hint": "登录你的自托管服务器，本地导图就能上传到云端并在多台设备间同步。",
       "signIn": "登录",
       "signOut": "退出登录",
@@ -1536,7 +1539,12 @@
       "twoFactorCode": "动态码或恢复码",
       "verify": "验证",
       "verifying": "验证中…",
-      "twoFactorFailed": "验证失败"
+      "twoFactorFailed": "验证失败",
+      "body": "退出后回到本地用户，本地导图不受影响。下次登录会记住服务器和账号。",
+      "confirm": "退出登录",
+      "signOutConfirm.title": "退出登录？",
+      "signOutConfirm.body": "退出后回到本地用户，本地导图不受影响。下次登录会记住服务器和账号。",
+      "signOutConfirm.confirm": "退出登录"
     },
     "menu": {
       "siteSettings": "网站设置",

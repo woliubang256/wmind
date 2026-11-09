@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingMark } from '@/components/ui/loading-mark';
 import { LoadingState } from '@/components/ui/loading-state';
 import type { Theme, ThemeLayout } from '@/editor/model/types';
@@ -38,6 +39,8 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
   const { t } = useTranslation();
   const custom = useCustomThemes(canPersist);
   const [themeName, setThemeName] = useState('');
+  // 删除自定义主题前二次确认：配色是用户调出来的，误点一次就没了。
+  const [pendingRemove, setPendingRemove] = useState<{ uid: string; name: string } | null>(null);
 
   const setLayout = (key: keyof ThemeLayout, value: boolean) => {
     onChange({ ...theme, layout: { ...theme.layout, [key]: value } });
@@ -55,6 +58,23 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
     // 成功后清空输入框：留着上次的名字，用户再点一次会存出两条同名主题。
     if (await custom.save(name, theme)) setThemeName('');
   };
+
+  const removeDialog = (
+    <ConfirmDialog
+      open={pendingRemove !== null}
+      title={t('editor.panel.canvas.removeConfirmTitle')}
+      description={t('editor.panel.canvas.removeConfirmBody', { name: pendingRemove?.name ?? '' })}
+      confirmLabel={t('editor.panel.canvas.removeConfirmConfirm')}
+      cancelLabel={t('common.cancel')}
+      destructive
+      pending={custom.removing}
+      onClose={() => setPendingRemove(null)}
+      onConfirm={() => {
+        if (!pendingRemove) return;
+        void custom.remove(pendingRemove.uid).then(() => setPendingRemove(null));
+      }}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -140,7 +160,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
                         aria-label={t('editor.panel.canvas.customRemove', { name: entry.name })}
                         title={t('editor.panel.canvas.customRemove', { name: entry.name })}
                         disabled={custom.removing}
-                        onClick={() => void custom.remove(entry.uid)}
+                        onClick={() => setPendingRemove(entry)}
                         className="grid w-6 shrink-0 place-items-center border-l border-border/60 text-[13px] leading-none text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                       >
                         ×
@@ -234,6 +254,7 @@ export function PaletteTab({ theme, onChange, canPersist }: PaletteTabProps) {
           />
         ))}
       </Section>
+      {removeDialog}
     </div>
   );
 }
