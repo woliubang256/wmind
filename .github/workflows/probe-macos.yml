@@ -5,7 +5,11 @@ on:
     paths: ['.github/workflows/probe-macos.yml']
 jobs:
   probe:
-    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-13, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 5
     steps:
-      - run: echo "macos runner ok" && sw_vers && uname -m
+      - run: echo "ok ${{ matrix.os }}" && uname -a
