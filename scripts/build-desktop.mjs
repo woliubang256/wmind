@@ -13,7 +13,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { basename, dirname, join, resolve } from 'node:path';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -377,6 +377,34 @@ function packageApps(platforms, version) {
 }
 
 /**
+ * 把刚打好的安装包同步到 release/。
+ *
+ * 之前这一步是手工 cp：一旦忘了，release/ 里留着旧包，而「presented」的正是
+ * 这个目录——于是出现「代码改了、新包也打了，装上去却是旧版本」。现在打包
+ * 结束自动同步，不再依赖记性。
+ */
+function publishToReleaseDir(version) {
+  const releaseDir = join(ROOT, 'release');
+  if (!existsSync(releaseDir)) mkdirSync(releaseDir, { recursive: true });
+  const copied = [];
+  for (const name of readdirSync(OUT_DIR)) {
+    const dir = join(OUT_DIR, name);
+    if (!statSync(dir).isDirectory()) continue; // build/ 下还有 SHA256SUMS 这类文件
+    for (const file of readdirSync(dir)) {
+      // 只同步用户会下载的安装包（dmg / zip / setup.exe），更新清单与归档留在 build/。
+      const downloadable = file.endsWith('.dmg') || file.endsWith('.zip') || /setup.*\.exe$/.test(file);
+      if (!downloadable) continue;
+      cpSync(join(dir, file), join(releaseDir, file));
+      copied.push(file);
+    }
+  }
+  if (copied.length > 0) {
+    console.log(`已同步到 release/（${version}）：`);
+    for (const name of copied) console.log(`  release/${name}`);
+  }
+}
+
+/**
  * 校验 mygo.json 的版本与 VERSION 一致。
  *
  * 两处版本号各有用途：VERSION 是发布元数据的唯一来源（标签、镜像、changelog
@@ -435,6 +463,7 @@ function main() {
 
   if (args.package) {
     packageApps(platforms, version);
+    publishToReleaseDir(version);
   }
 }
 
