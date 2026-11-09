@@ -95,6 +95,9 @@ export function MapCard({ map, actions, busy = false, meta, href, badge }: MapCa
           // 还没有缩略图：给一个淡图标而不是空白。空白会让人以为加载失败。
           <Icon name="waypoints" className="size-10 text-muted-foreground/40" strokeWidth={1.2} />
         ) : (
+          // object-cover 让缩略图**充满**卡片：缩略图按内容包围盒生成，横竖比例
+          // 千差万别，用 contain 的话扁图上下留两大块空，卡片看起来像没加载完。
+          // 裁切只影响预览观感，中心主题永远在画面中间，不会裁丢。
           <LoadingImage
             src={map.thumbnailUrl}
             alt={t('maps.thumbnailAlt', { title: map.title })}
@@ -102,7 +105,7 @@ export function MapCard({ map, actions, busy = false, meta, href, badge }: MapCa
             loading="lazy"
             decoding="async"
             containerClassName="size-full"
-            className="size-full object-contain"
+            className="size-full object-cover"
           />
         )}
       </div>
