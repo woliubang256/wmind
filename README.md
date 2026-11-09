@@ -1,8 +1,20 @@
-# wmind
+# Wmind
 
-可自托管的在线思维导图工具，用于整理知识、梳理项目和分享想法。支持 Docker Compose 部署，数据由自己掌握。
+可自托管的思维导图，带**桌面客户端**：断网也能完整编辑，数据留在自己机器上；需要多端协同时连接你自己的服务器，导图与图片在本地和云端之间双向同步。
 
-[快速部署](#部署) · [使用手册](./docs/10-用户使用手册.md) · [部署指南](./docs/07-部署与运维.md) · [开发文档](./docs/README.md)
+[下载桌面版](#下载桌面版) · [快速部署](#部署) · [使用手册](./docs/10-用户使用手册.md) · [部署指南](./docs/07-部署与运维.md) · [开发文档](./docs/README.md)
+
+## 两种形态
+
+| | Web 版 | 桌面版 |
+| --- | --- | --- |
+| 运行方式 | 浏览器访问自托管站点 | 独立应用，内置本地后端 |
+| 数据 | 服务器数据库 | 本机（`~/Library/Application Support/wmind`） |
+| 断网 | 不可用 | **完整可用**：编辑、导入导出、主题模板、AI 与备份配置 |
+| 多端同步 | 天然共享 | 连接自托管服务器后同步，导图带「本地 / 云端」标识 |
+| 账号 | 站点账号 | 默认单本地用户；登录云端后可用分享与网站设置 |
+
+桌面端本地优先：先写本地，再按需同步。两端都改过同一张图时给出三种处理——保留我的 / 放弃我的 / 另存副本，任选其一都不丢数据。
 
 ## 主要功能
 
@@ -10,33 +22,49 @@
 - **布局与外观**：9 种布局结构、19 套内置配色和自定义主题，支持浅色 / 深色模式与中英文切换。
 - **多画布与大纲**：一份文档管理多个画布，随时切换大纲视图，支持 ZEN 专注模式与模板复用。
 - **导入与导出**：导入 XMind / Markdown / OPML，导出 JPEG / PNG / SVG / PDF / XMind / Markdown / OPML，也可保存为 `.wmind` 文档。
-- **AI 生成**：组合文字、TXT/Markdown 等文本文件、Word、Excel、PDF 和图片生成可编辑导图，支持多文件拖拽上传。
-- **链接分享**：设置有效期、访问密码、下载与备注权限，访客可缩放画布、折叠和展开节点。
-- **私有部署与管理**：支持 SQLite / PostgreSQL、用户管理与双因素认证，提供 S3 / WebDAV 备份恢复、定时备份、保留份数和可选去重。
+- **AI 生成**：组合文字、TXT/Markdown 等文本文件、Word、Excel、PDF 和图片生成可编辑导图，支持多文件拖拽上传；桌面端可离线配置本机 Provider。
+- **链接分享**：设置有效期、访问密码、下载与备注权限，访客可缩放画布、折叠和展开节点。桌面端登录云端后同样管理服务器上的分享。
+- **桌面端**：跟随系统语言、无系统标题栏、启动自动检查更新、快捷键速查；登录支持两步验证（动态码或恢复码），登录后「网站设置」直接读写服务器配置。
+- **私有部署与管理**：支持 SQLite / PostgreSQL、用户管理与双因素认证，提供本地目录 / S3 / WebDAV 备份恢复、定时备份、保留份数和可选去重。
 
 PDF 导出为单页图片，文字不可选中。
 
 AI 功能默认关闭，在「网站设置 → AI」配置 OpenAI 兼容 Provider 的 Base URL、API Key、Model 并启用；思考等级可选，默认不传。支持常见文本文件、`.docx`、`.xlsx`，图片与扫描 PDF 需要视觉模型；素材会发送给所配置的 Provider。详细说明见[使用手册](./docs/10-用户使用手册.md#ai-生成)。
 
+## 下载桌面版
+
+在 [Releases](https://github.com/woliubang256/wmind/releases) 下载对应安装包：
+
+| 平台 | 安装包 |
+| --- | --- |
+| macOS（Apple Silicon） | `Wmind-<版本>-arm64.dmg` |
+| macOS（Intel） | `Wmind-<版本>-amd64.dmg` |
+| Windows（x64 / ARM64） | `Wmind-<版本>-windows-*.zip` |
+
+桌面端启动后自动检查更新，有新版本会弹窗提示并下载安装。首次打开若被系统拦截（未签名分发），在「系统设置 → 隐私与安全性」里允许一次即可。
+
 ## 界面预览
 
 ### 导图编辑
 
-![wmind 编辑器：产品规划导图、配色面板与多画布](./docs/screenshots/editor.png)
+![Wmind 编辑器：产品规划导图、配色面板与多画布](./docs/screenshots/editor.png)
 
 ### 链接分享
 
-![wmind 分享页：只读导图、画布切换与缩放控件](./docs/screenshots/share.png)
+![Wmind 分享页：只读导图、画布切换与缩放控件](./docs/screenshots/share.png)
 
 ## 技术栈
 
 | 模块 | 技术 |
 | --- | --- |
 | 后端 | Go 1.26 + Gin，模块化单体 |
+| 桌面端 | Go 1.27 + [mygo](https://github.com/egoist/mygo)（系统 WebView 壳），内嵌同一套后端 |
 | 前端 | React + TypeScript + Vite + Tailwind CSS v4，纯 SPA |
 | 编辑器 | 自研 SVG 渲染与布局引擎 |
 | 数据库 | SQLite（默认）/ PostgreSQL |
 | 部署 | Docker Compose，支持 amd64 / arm64 |
+
+目录结构：`backend/`（服务端）、`desktop/`（桌面客户端，嵌套 Go 模块）、`web/`（前端）。
 
 ## 快速开始
 
@@ -76,6 +104,16 @@ pnpm dev            # http://127.0.0.1:5173
 ```
 
 Vite 开发服务器把 `/api` 代理到 `http://127.0.0.1:8080`，浏览器里是同源请求，不受 CORS 限制。
+
+### 桌面端（本地开发）
+
+```bash
+node scripts/build-desktop.mjs                       # 构建本机平台的安装包
+node scripts/build-desktop.mjs --package             # 打 macOS/Windows 四个平台的包
+node scripts/build-desktop.mjs --skip-frontend       # 只重新编译 Go 侧
+```
+
+产物在 `desktop/build/`，用户下载的安装包会自动同步到 `release/`。桌面端需要 Go 1.27（mygo 的要求），与后端的 1.26 基线互不影响。
 
 ### 首次登录
 
