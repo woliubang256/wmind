@@ -145,7 +145,7 @@ func start() error {
 	// 隐藏系统标题栏但保留红绿灯（hiddenInset）：页面自己画顶栏，红绿灯叠在
 	// 左上角。前端负责留出红绿灯区域并把顶栏声明为可拖拽（--app-region），
 	// 见 frontend/src/app/layouts.tsx 与 styles.css 的 .wmind-desktop。
-	mygo.NewWindow(mygo.WindowOptions{
+	evalWindow = mygo.NewWindow(mygo.WindowOptions{
 		Title:         "Wmind",
 		URL:           url,
 		Width:         1280,
@@ -267,6 +267,7 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 			OpenExternal:       mygo.Shell.OpenExternal,
 			Logger:             logger,
 			LastConnectionPath: filepath.Join(paths.Root, "last-connection.json"),
+			Eval:               debugEval,
 		}),
 	})
 	if err != nil {
@@ -281,6 +282,23 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		Engine:      engine,
 		Close:       app.Close,
 	}, nil
+}
+
+// evalWindow 是主窗口，调试构建里用来在页面中执行 JS 量性能。
+var evalWindow *mygo.Window
+
+// debugEval 在页面里执行 JS，仅当 WMIND_DEBUG_EVAL=1 时可用。
+//
+// 用来在**真实 WebView** 里量性能（弹层打开耗时、节点数、字体状态等）：
+// 浏览器和 WKWebView 的差异光看代码看不出来，得拿到页面里的数字。
+func debugEval(code string) (any, error) {
+	if os.Getenv("WMIND_DEBUG_EVAL") != "1" {
+		return nil, fmt.Errorf("debug eval is disabled")
+	}
+	if evalWindow == nil {
+		return nil, fmt.Errorf("window is not ready")
+	}
+	return evalWindow.Page().Eval(code)
 }
 
 // restoreCloud 用上次保存的凭据恢复云端连接。

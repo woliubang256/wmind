@@ -140,6 +140,9 @@ type Deps struct {
 	Logger *slog.Logger
 	// LastConnectionPath 是「上次登录的服务器与账号」的文件路径（非机密）。
 	LastConnectionPath string
+	// Eval 在页面里执行一段 JS 并返回结果；只在调试构建里接上（见 main.go 的
+	// WMIND_DEBUG_EVAL）。用于在真实 WebView 里量性能，别在生产里开放。
+	Eval func(code string) (any, error)
 }
 
 // New 构造 /desktop/ 的 Handler。
@@ -152,6 +155,9 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("GET /desktop/status", a.status)
 	mux.HandleFunc("POST /desktop/cloud/connect", a.connect)
 	mux.HandleFunc("POST /desktop/cloud/disconnect", a.disconnect)
+	if deps.Eval != nil {
+		mux.HandleFunc("POST /desktop/debug/eval", a.evalJS)
+	}
 	mux.Handle(remoteproxy.Prefix, a.remoteHandler())
 	mux.HandleFunc("POST /desktop/about/open-project", a.openProject)
 	mux.HandleFunc("POST /desktop/about/open-docs", a.openDocs)
@@ -354,6 +360,23 @@ func (a *api) disconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"connected": false}})
+}
+
+// evalJS 在页面里执行一段 JS（仅调试构建）。响应是 {"data": {"result": ...}}。
+func (a *api) evalJS(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, "请求格式不正确")
+		return
+	}
+	result, err := a.deps.Eval(req.Code)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"result": result}})
 }
 
 // remoteHandler 把 /desktop/remote-api/* 转发到云端同名接口。

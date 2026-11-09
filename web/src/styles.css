@@ -2,7 +2,19 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  /*
+   * 界面文字**优先系统字体**，Noto Sans SC 只作为最后兜底（没有中文系统字体的
+   * Linux 环境）。
+   *
+   * 原因：Noto Sans SC 按 unicode-range 切成 505 个 @font-face 子集，WebKit
+   * 每次重排都要在这些面里做字体匹配与整形——实测同样一页（1600 节点）的整页
+   * 重排从 22ms 涨到 375ms，表现就是「打开弹窗要等一秒」。系统字体只有几个面，
+   * 匹配几乎零成本，中文渲染也更贴平台。
+   *
+   * 画布与导出**不受影响**：它们用主题里的 `fontStack()` 内联指定字体，那里仍然
+   * 是 Noto Sans SC（导出要跨平台一致）。
+   */
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", ui-sans-serif, "Noto Sans SC", system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
