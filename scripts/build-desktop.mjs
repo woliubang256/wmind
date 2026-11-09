@@ -470,12 +470,12 @@ function main() {
   for (const output of outputs) console.log(`  ${output}`);
   if (readdirSync(EMBED_DIR).length === 0) console.log('（提示：嵌入目录为空，窗口会显示占位页）');
 
+  if (args.package) packageApps(platforms, version);
+
+  // 必须在 packageApps **之后**：mygo 会清空目标目录再重新产出，先打的 zip 会被删掉。
   createWindowsZips(platforms, version);
 
-  if (args.package) {
-    packageApps(platforms, version);
-    publishToReleaseDir(version);
-  }
+  if (args.package) publishToReleaseDir(version);
 }
 
 main();
