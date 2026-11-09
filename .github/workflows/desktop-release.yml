@@ -175,12 +175,34 @@ jobs:
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
           version="${tag#desktop-v}"
-          mapfile -t assets < <(find artifacts -type f | sort)
-          if [ ${#assets[@]} -eq 0 ]; then
+
+          # 只发布用户要下载的东西：dmg / zip / NSIS 安装包 / 更新归档 / 更新清单。
+          # install.sh、SHA256SUMS 之类在归档里已经有了，而且各平台同名，
+          # 合并上传会撞名（ReleaseAsset.name already exists）。
+          mapfile -t raw < <(find artifacts -type f \( \
+            -name '*.dmg' -o -name '*.zip' -o -name '*setup*.exe' -o \
+            -name '*.tar.gz' -o -name 'update-*.json' \) | sort)
+          if [ ${#raw[@]} -eq 0 ]; then
             echo "没有可发布的产物" >&2
             exit 1
           fi
-          # 这个作业不 checkout（只下产物），gh 无法从工作目录推断仓库，必须显式给 --repo。
+
+          # 同名只留第一个（同一份产物被两个作业都带上时）。
+          declare -A seen=()
+          assets=()
+          for file in "${raw[@]}"; do
+            name="$(basename "$file")"
+            if [ -n "${seen[$name]:-}" ]; then
+              echo "跳过重名产物：$name（${file}）"
+              continue
+            fi
+            seen[$name]=1
+            assets+=("$file")
+          done
+
+          # 重跑同一个标签时先清掉旧发布，否则 gh 会报 422（同名资产已存在）。
+          # 这个作业不 checkout（只下产物），gh 无法推断仓库，必须显式给 --repo。
+          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
           gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --title "Wmind 桌面版 $version" "${assets[@]}"
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
           printf '%s\n' "${assets[@]}"
