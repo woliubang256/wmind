@@ -22,6 +22,10 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	// mygo 自己的界面文案（右键菜单、标准菜单项等）的中文目录：
+	// 声明了 SetLanguages("zh-Hans", ...) 却不导入它，mygo 会在启动时警告
+	// 「应用写的是 zh-Hans，但 MyGo 自己的字符串是英文」。
+	_ "github.com/egoist/mygo/locales/zh-Hans"
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
 	"github.com/woliubang256/wmind/backend/desktop/internal/deskapi"
@@ -75,6 +79,11 @@ func start() error {
 	userData, err := mygo.App.Path(mygo.PathUserData)
 	if err != nil {
 		return fmt.Errorf("resolve user data directory: %w", err)
+	}
+	// WMIND_DESKTOP_DATA_DIR 覆盖数据目录：本地冒烟/截图测试用它指向临时目录，
+	// 免得像之前那样 `rm -rf` 真实目录把用户数据（含登录信息）一起清掉。
+	if override := strings.TrimSpace(os.Getenv("WMIND_DESKTOP_DATA_DIR")); override != "" {
+		userData = override
 	}
 	paths, err := localmode.ResolvePaths(userData)
 	if err != nil {
@@ -215,7 +224,17 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	}
 
 	engine := syncengine.New(app.Maps, syncStore, user.ID, logger)
-	creds := &deskapi.CredentialStore{Path: filepath.Join(paths.Root, "cloud.json"), Secret: secrets.JWTSecret}
+	creds := &deskapi.CredentialStore{
+		Path:     filepath.Join(paths.Root, "cloud.json"),
+		Secret:   secrets.JWTSecret,
+		Keychain: keychainSecrets{},
+	}
+
+	// 系统凭据存储不可用时（Linux 没有 libsecret）提前说清楚：登录信息会退回
+	// 应用数据目录里的加密文件，两者在「重装后是否还在」上的行为不同。
+	if _, err := mygo.Secrets.Get("startup-probe"); err != nil && !errors.Is(err, mygo.ErrSecretNotFound) {
+		logger.Warn("system credential store unavailable; cloud credentials fall back to an encrypted file", "err", err)
+	}
 
 	// 上次连接过就试着接上：失败只记日志，不阻塞启动——离线优先。
 	restoreCloud(ctx, engine, creds, logger)
@@ -251,6 +270,16 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		Close:       app.Close,
 	}, nil
 }
+
+// keychainSecrets 把 mygo 的系统凭据存储接到 deskapi 的接口上。
+//
+// macOS 是登录钥匙串、Windows 是凭据管理器、Linux 是 Secret Service；
+// 不可用时（Linux 没有 libsecret）返回错误，凭据会退回加密文件。
+type keychainSecrets struct{}
+
+func (keychainSecrets) Set(key string, value []byte) error { return mygo.Secrets.Set(key, value) }
+func (keychainSecrets) Get(key string) ([]byte, error)     { return mygo.Secrets.Get(key) }
+func (keychainSecrets) Delete(key string) error            { return mygo.Secrets.Delete(key) }
 
 // restoreCloud 用上次保存的凭据恢复云端连接。
 //

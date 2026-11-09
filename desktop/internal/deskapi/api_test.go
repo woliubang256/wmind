@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -688,5 +689,105 @@ func TestVerifyTwoFactorWithoutPending(t *testing.T) {
 	resp := f.do(t, http.MethodPost, "/desktop/cloud/verify-2fa", map[string]any{"code": "123456"})
 	if resp.status != http.StatusConflict {
 		t.Fatalf("没有待验证登录期望 409，实际 %d", resp.status)
+	}
+}
+
+// ── 凭据存储 ────────────────────────────────────────────────────────────────
+
+type fakeSecrets struct {
+	data map[string][]byte
+	err  error
+}
+
+func (f *fakeSecrets) Set(key string, value []byte) error {
+	if f.err != nil {
+		return f.err
+	}
+	if f.data == nil {
+		f.data = map[string][]byte{}
+	}
+	f.data[key] = value
+	return nil
+}
+
+func (f *fakeSecrets) Get(key string) ([]byte, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	value, ok := f.data[key]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return value, nil
+}
+
+func (f *fakeSecrets) Delete(key string) error {
+	if f.data != nil {
+		delete(f.data, key)
+	}
+	return nil
+}
+
+// 有系统凭据存储时优先用它：重装应用、清掉数据目录之后登录信息仍然在。
+func TestCredentialsPreferKeychain(t *testing.T) {
+	dir := t.TempDir()
+	keychain := &fakeSecrets{}
+	store := &CredentialStore{Path: filepath.Join(dir, "cloud.json"), Secret: strings.Repeat("ab", 32), Keychain: keychain}
+
+	creds := cloudcreds.Credentials{ServerURL: "https://cloud.example", Identifier: "a@example.test", Email: "a@example.test", Role: "admin"}
+	if err := store.Save(creds, "pw"); err != nil {
+		t.Fatalf("保存失败: %v", err)
+	}
+	if len(keychain.data[credentialKey]) == 0 {
+		t.Fatal("凭据应当写进系统存储")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "cloud.json")); err == nil {
+		t.Fatal("系统存储成功时不该再写文件（两份真源会漂移）")
+	}
+
+	loaded, err := store.Load()
+	if err != nil || loaded == nil {
+		t.Fatalf("读取失败: %v", err)
+	}
+	if loaded.ServerURL != creds.ServerURL || loaded.Email != creds.Email || loaded.Role != "admin" {
+		t.Fatalf("读回内容不对: %+v", loaded)
+	}
+	if loaded.Password != "pw" {
+		t.Fatalf("系统存储里应当有密码（由系统加密）: %q", loaded.Password)
+	}
+
+	// 清掉数据目录里的文件不影响读取：这正是「重装后登录还在」的场景。
+	if err := store.Clear(); err != nil {
+		t.Fatalf("清除失败: %v", err)
+	}
+	if loaded, err := store.Load(); err != nil || loaded != nil {
+		t.Fatalf("清除后应当没有凭据: %+v %v", loaded, err)
+	}
+}
+
+// 系统存储不可用（Linux 没有 libsecret）时退回加密文件。
+func TestCredentialsFallbackToEncryptedFile(t *testing.T) {
+	dir := t.TempDir()
+	store := &CredentialStore{
+		Path: filepath.Join(dir, "cloud.json"), Secret: strings.Repeat("ab", 32),
+		Keychain: &fakeSecrets{err: errors.New("no secret service")},
+	}
+	creds := cloudcreds.Credentials{ServerURL: "https://cloud.example", Identifier: "a@example.test"}
+	if err := store.Save(creds, "pw"); err != nil {
+		t.Fatalf("保存失败: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "cloud.json"))
+	if err != nil {
+		t.Fatalf("应当退回写文件: %v", err)
+	}
+	if strings.Contains(string(raw), `"pw"`) {
+		t.Fatal("回退文件里的密码必须是加密的")
+	}
+	loaded, err := store.Load()
+	if err != nil || loaded == nil || loaded.ServerURL != creds.ServerURL {
+		t.Fatalf("回退读取失败: %+v %v", loaded, err)
+	}
+	if password, err := loaded.Decrypt(store.Secret); err != nil || password != "pw" {
+		t.Fatalf("回退密码解不开: %q %v", password, err)
 	}
 }

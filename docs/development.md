@@ -53,6 +53,13 @@ node scripts/build-desktop.mjs --package         # 额外产出安装包（.app/
 npm run test:desktop                            # 桌面模块测试（本地库 + 令牌 + 内层服务）
 ```
 
+冒烟测试请把数据目录指到临时路径，别碰真实数据：
+
+```bash
+WMIND_DESKTOP_DATA_DIR=/tmp/wmind-smoke WMIND_DESKTOP_ROUTE=/maps/<uid> \
+  desktop/build/darwin-arm64/wmind.app/Contents/MacOS/wmind
+```
+
 桌面模块是嵌套 Go 模块 `desktop`（要求 Go 1.27.3，mygo 的约束），
 后端服务仍是 Go 1.26.10，两者互不影响。`desktop/frontend-dist/`
 不进版本库：默认构建嵌的是占位页，只有带 `-tags desktopfrontend` 的正式

@@ -20,24 +20,65 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 )
 
-// CredentialStore 读写云端连接凭据。
-type CredentialStore struct {
-	Path   string
-	Secret string
+// SecretStore 是系统的凭据存储（macOS 钥匙串 / Windows 凭据管理器 /
+// Linux Secret Service）。由桌面入口注入，测试里用假实现。
+type SecretStore interface {
+	Set(key string, value []byte) error
+	Get(key string) ([]byte, error)
+	Delete(key string) error
 }
 
-// Load 读取凭据；没有连接时返回 nil。
+// credentialKey 是凭据在系统存储里的键。
+const credentialKey = "cloud-connection"
+
+// CredentialStore 读写云端连接凭据。
+//
+// 优先放**系统凭据存储**：它由系统按用户加密，比应用数据目录里的文件更安全，
+// 也不会因为重装应用、清理数据目录而丢（Keychain 里的条目独立存在）。
+// 没有可用凭据存储时（如 Linux 没有 libsecret）退回加密文件。
+type CredentialStore struct {
+	Path     string
+	Secret   string
+	Keychain SecretStore
+}
+
+// Load 读取凭据：先问系统存储，再退回文件；都没有时返回 nil。
 func (c *CredentialStore) Load() (*cloudcreds.Credentials, error) {
+	if c.Keychain != nil {
+		if raw, err := c.Keychain.Get(credentialKey); err == nil && len(raw) > 0 {
+			var creds cloudcreds.Credentials
+			if err := json.Unmarshal(raw, &creds); err == nil && creds.ServerURL != "" {
+				return &creds, nil
+			}
+		}
+	}
 	return cloudcreds.Load(c.Path, c.Secret)
 }
 
-// Save 保存凭据。
+// Save 保存凭据：系统存储可用时写它（含密码，由系统加密），否则写加密文件。
 func (c *CredentialStore) Save(creds cloudcreds.Credentials, password string) error {
+	if password != "" {
+		creds.Password = password
+	}
+	if c.Keychain != nil {
+		if raw, err := json.Marshal(creds); err == nil && len(raw) <= 2560 {
+			if err := c.Keychain.Set(credentialKey, raw); err == nil {
+				// 系统存储成功就不再写文件：两份真源会漂移。
+				_ = cloudcreds.Clear(c.Path)
+				return nil
+			}
+		}
+	}
 	return cloudcreds.Save(c.Path, c.Secret, creds, password)
 }
 
-// Clear 删除凭据。
-func (c *CredentialStore) Clear() error { return cloudcreds.Clear(c.Path) }
+// Clear 删除凭据（两处都清）。
+func (c *CredentialStore) Clear() error {
+	if c.Keychain != nil {
+		_ = c.Keychain.Delete(credentialKey)
+	}
+	return cloudcreds.Clear(c.Path)
+}
 
 // UpdateInfo 是检查更新的结果。
 type UpdateInfo struct {
