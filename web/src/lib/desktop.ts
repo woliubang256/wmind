@@ -79,6 +79,15 @@ export const desktopCapabilities = {
   registration: !isDesktop(),
 };
 
+/**
+ * 需要打到**服务器**的接口前缀（桌面端已连接云端时）。
+ *
+ * 分享、网站设置这些功能的数据在服务器上：本地后端把它们转发到远端并注入
+ * 登录令牌，前端只要换个 base 就行。Web 端与未连接时返回 undefined（用默认
+ * 的 `/api/v1`）。
+ */
+export const REMOTE_API_BASE = '/desktop/remote-api';
+
 // ── 桌面接口 ────────────────────────────────────────────────────────────────
 
 export interface CloudStatus {

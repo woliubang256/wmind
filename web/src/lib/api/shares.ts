@@ -82,21 +82,28 @@ export interface ShareListQuery {
 
 const enc = encodeURIComponent;
 
+/**
+ * 分享链接接口。
+ *
+ * `base` 用于桌面端：登录云端后分享归**服务器**管，请求要打到
+ * `/desktop/remote-api`（本机后端转发），而不是客户端自己的本地库。
+ */
 export const shareApi = {
-  create: (mapUid: string, input: CreateShareInput = {}): Promise<ShareLink> =>
-    api.post<ShareLink>(`/maps/${enc(mapUid)}/shares`, input),
+  create: (mapUid: string, input: CreateShareInput = {}, base?: string): Promise<ShareLink> =>
+    api.post<ShareLink>(`/maps/${enc(mapUid)}/shares`, input, base ? { base } : undefined),
 
   /** 某张导图的全部链接（含已撤销的）。上限由站点设置约束，因此不分页。 */
-  listByMap: (mapUid: string): Promise<ShareLink[]> =>
-    api.get<ShareLink[]>(`/maps/${enc(mapUid)}/shares`),
+  listByMap: (mapUid: string, base?: string): Promise<ShareLink[]> =>
+    api.get<ShareLink[]>(`/maps/${enc(mapUid)}/shares`, base ? { base } : undefined),
 
-  listMine: ({ page, pageSize, mapUid }: ShareListQuery = {}): Promise<Paged<ShareLink>> =>
-    api.list<ShareLink>(`/shares${query({ page, page_size: pageSize, map_uid: mapUid })}`),
+  listMine: ({ page, pageSize, mapUid }: ShareListQuery = {}, base?: string): Promise<Paged<ShareLink>> =>
+    api.list<ShareLink>(`/shares${query({ page, page_size: pageSize, map_uid: mapUid })}`, base ? { base } : undefined),
 
-  update: (uid: string, input: UpdateShareInput): Promise<ShareLink> =>
-    api.patch<ShareLink>(`/shares/${enc(uid)}`, input),
+  update: (uid: string, input: UpdateShareInput, base?: string): Promise<ShareLink> =>
+    api.patch<ShareLink>(`/shares/${enc(uid)}`, input, base ? { base } : undefined),
 
-  revoke: (uid: string): Promise<void> => api.delete<void>(`/shares/${enc(uid)}`),
+  revoke: (uid: string, base?: string): Promise<void> =>
+    api.delete<void>(`/shares/${enc(uid)}`, base ? { base } : undefined),
 
   /**
    * 公开读取。

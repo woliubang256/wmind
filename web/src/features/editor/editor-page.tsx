@@ -114,6 +114,8 @@ import { SaveIndicator } from './persistence/save-indicator';
 import { useFontsReady } from './use-fonts-ready';
 import { useThumbnailUpload } from './use-thumbnail-upload';
 import { ShareDialog } from '@/features/share/share-dialog';
+import { useSharesEnabled } from '@/features/site/use-remote-base';
+import { isDesktop } from '@/lib/desktop';
 import { SaveTemplateDialog } from '@/features/templates/save-template-dialog';
 import { useSiteConfig } from '@/features/site/use-site-config';
 
@@ -316,6 +318,10 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
   const [insertState, setInsertState] = useState<{ action: InsertAction; ids: string[]; sheetId: string } | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // 分享：Web 端看站点开关；桌面端登录云端后分享归服务器管（开关在服务器上，
+  // 这里不再用本机的 site config 判断，否则登录后按钮永远不出现）。
+  const sharesEnabled = useSharesEnabled();
+  const canShare = sharesEnabled && (isDesktop() ? true : config.shareEnabled);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   /** 快捷键监听挂在这里：包含画布与面板，但排除侧栏与页头之外的一切。 */
@@ -1043,7 +1049,7 @@ function Workspace({ uid, enabled, initialDraft, initialThumbnailUrl }: Workspac
                 全在浏览器里做、服务端拦不住，但把一个管理员明确关掉的能力继续摆在
                 工具栏上，等于让设置项看起来没生效。
               */}
-              {config.shareEnabled ? (
+              {canShare ? (
                 <ToolbarButton aria-label={t('share.action')} variant="ghost" size="icon" onClick={() => setShareOpen(true)}>
                   <Icon name="link" className="size-4" />
                 </ToolbarButton>

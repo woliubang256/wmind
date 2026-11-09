@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { useRemoteBase } from '@/features/site/use-remote-base';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -31,6 +32,8 @@ const PAGE_SIZE = 20;
 
 export function SharesPage() {
   const { t } = useTranslation();
+  // 桌面端登录云端后，分享归服务器管：请求打到本机转发前缀。
+  const base = useRemoteBase();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
@@ -39,11 +42,11 @@ export function SharesPage() {
 
   const query = useQuery({
     queryKey: [...shareKeys.mine(), page],
-    queryFn: () => shareApi.listMine({ page, pageSize: PAGE_SIZE }),
+    queryFn: () => shareApi.listMine({ page, pageSize: PAGE_SIZE }, base),
   });
 
   const revoke = useMutation({
-    mutationFn: (uid: string) => shareApi.revoke(uid),
+    mutationFn: (uid: string) => shareApi.revoke(uid, base),
     onSuccess: () => {
       setRevoking(null);
       toast.success(t('share.revoked'));

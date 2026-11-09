@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useRemoteBase } from '@/features/site/use-remote-base';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -42,6 +43,8 @@ const EXPIRY_CHOICES = [0, 1, 7, 30, 90, 365] as const;
 
 export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProps) {
   const { t } = useTranslation();
+  // 桌面端登录云端后，分享归服务器管。
+  const base = useRemoteBase();
   const queryClient = useQueryClient();
   const { config } = useSiteConfig();
 
@@ -79,7 +82,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
 
   const links = useQuery({
     queryKey: shareKeys.byMap(mapUid),
-    queryFn: () => shareApi.listByMap(mapUid),
+    queryFn: () => shareApi.listByMap(mapUid, base),
     enabled: open,
   });
 
@@ -94,7 +97,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
         expiresInDays: Number(expiresInDays),
         allowDownload,
         showNotes,
-      }),
+      }, base),
     onSuccess: (link) => {
       setCreated(link);
       setPassword('');
@@ -107,7 +110,7 @@ export function ShareDialog({ open, mapUid, mapTitle, onClose }: ShareDialogProp
   });
 
   const revoke = useMutation({
-    mutationFn: (uid: string) => shareApi.revoke(uid),
+    mutationFn: (uid: string) => shareApi.revoke(uid, base),
     onSuccess: () => {
       setRevoking(null);
       toast.success(t('share.revoked'));

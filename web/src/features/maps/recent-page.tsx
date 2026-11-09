@@ -30,8 +30,8 @@ import { IMPORT_LIMITS } from '@/editor/import/limits';
 import { createStarterDocument } from '@/features/editor/demo-document';
 import { useSiteConfig } from '@/features/site/use-site-config';
 import { useQuery } from '@tanstack/react-query';
+import { useSharesEnabled } from '@/features/site/use-remote-base';
 import {
-  desktopCapabilities,
   fetchMapSources,
   isDesktop,
   sourceLabelKey,
@@ -82,6 +82,8 @@ export function RecentPage() {
   const [deleting, setDeleting] = useState<MapSummary | null>(null);
   // 桌面端才有「来源」概念：Web 形态下 sources 恒为空，筛选器也不渲染。
   const desktop = isDesktop();
+  // 分享：Web 端一直可用；桌面端登录云端后可用（分享归服务器管）。
+  const sharesEnabled = useSharesEnabled();
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'cloud'>('all');
   const sources = useQuery({
     queryKey: ['desktop', 'map-sources'],
@@ -369,7 +371,7 @@ export function RecentPage() {
                     icon: 'copy',
                     onClick: () => duplicate.mutate(map.uid),
                   },
-                  ...(desktopCapabilities.shareLinks
+                  ...(sharesEnabled
                     ? [{
                         label: t('maps.actions.share'),
                         icon: 'link' as const,

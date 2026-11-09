@@ -198,7 +198,8 @@ export function AppLayout() {
   const links = [
     { to: '/', label: t('nav.recent'), icon: 'files' as const },
     { to: '/templates', label: t('nav.templates'), icon: 'waypoints' as const },
-    ...(desktopCapabilities.shareLinks
+    // 分享：Web 端一直有；桌面端登录云端后才有（分享归服务器管）。
+    ...(!localDesktop || cloudStatus.data?.cloud.connected
       ? [{ to: '/shares', label: t('nav.shares'), icon: 'link' as const }]
       : []),
     { to: '/trash', label: t('nav.trash'), icon: 'trash' as const },
