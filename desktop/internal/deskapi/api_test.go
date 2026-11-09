@@ -162,6 +162,8 @@ type fakeCloudServer struct {
 	// 两步验证：requireTwoFactor 为真时登录只给挑战令牌。
 	requireTwoFactor bool
 	twoFactorCode    string
+	// invalidToken 为真时所有需要鉴权的接口都回 401（模拟云端会话过期）。
+	invalidToken bool
 }
 
 func newFakeCloudServer(t *testing.T) *fakeCloudServer {
@@ -216,7 +218,10 @@ func newFakeCloudServer(t *testing.T) *fakeCloudServer {
 		}})
 	})
 	mux.HandleFunc("/api/v1/admin/settings", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer access-1" {
+		f.mu.Lock()
+		invalid := f.invalidToken
+		f.mu.Unlock()
+		if invalid || r.Header.Get("Authorization") != "Bearer access-1" {
 			writeCloudJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": "AUTH_TOKEN_INVALID"}})
 			return
 		}
@@ -768,5 +773,21 @@ func TestRemoteApiProxiesSettings(t *testing.T) {
 	f.do(t, http.MethodPost, "/desktop/cloud/disconnect", nil)
 	if refused := f.do(t, http.MethodGet, "/desktop/remote-api/admin/settings", nil); refused.status != http.StatusConflict {
 		t.Fatalf("未连接时应当 409，实际 %d", refused.status)
+	}
+}
+
+// 远端令牌失效时不能把本机会话一起踢掉：401 要改写成 403 交给界面提示。
+func TestRemoteApiMapsUnauthorizedToForbidden(t *testing.T) {
+	f := newFixture(t)
+	if resp := f.do(t, http.MethodPost, "/desktop/cloud/connect", map[string]any{
+		"serverUrl": f.cloud.server.URL, "identifier": "a@example.test", "password": "pw",
+	}); resp.status != http.StatusOK {
+		t.Fatalf("连接 = %d %s", resp.status, string(resp.Data))
+	}
+	// 让假云端认为令牌无效（模拟云端会话过期）。
+	f.cloud.invalidToken = true
+	resp := f.do(t, http.MethodGet, "/desktop/remote-api/admin/settings", nil)
+	if resp.status != http.StatusForbidden {
+		t.Fatalf("远端 401 应改写成 403，实际 %d %s", resp.status, string(resp.Data))
 	}
 }

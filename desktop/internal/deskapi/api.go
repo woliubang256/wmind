@@ -175,8 +175,6 @@ type api struct {
 	// pending 是等待两步验证码的登录（内存里，5 分钟后作废）。
 	mu      sync.Mutex
 	pending *pendingTwoFactor
-	// remoteAPI 是远端 API 的本机转发处理器（懒启动）。
-	remoteAPI http.Handler
 }
 
 type pendingTwoFactor struct {
@@ -360,31 +358,20 @@ func (a *api) disconnect(w http.ResponseWriter, r *http.Request) {
 
 // remoteHandler 把 /desktop/remote-api/* 转发到云端同名接口。
 //
-// 懒启动：没连接云端时返回 409，前端据此显示「未连接」而不是空白页。
+// 每次都按**当前**客户端现建转发器：登录、退出、重连都会换一个客户端实例，
+// 缓存下来的处理器会一直拿着旧令牌，表现为「明明登录了却提示要登录」。
 func (a *api) remoteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		client := a.deps.Engine.Client()
 		if client == nil {
-			a.mu.Lock()
-			a.remoteAPI = nil
-			a.mu.Unlock()
 			fail(w, http.StatusConflict, "尚未连接云端")
 			return
 		}
-		a.mu.Lock()
-		handler := a.remoteAPI
-		if handler == nil {
-			serverURL := a.deps.Engine.ServerURL()
-			built, err := remoteproxy.Handler(client, serverURL, a.deps.Logger)
-			if err != nil {
-				a.mu.Unlock()
-				fail(w, http.StatusBadGateway, "服务器地址无效")
-				return
-			}
-			a.remoteAPI = built
-			handler = built
+		handler, err := remoteproxy.Handler(client, a.deps.Engine.ServerURL(), a.deps.Logger)
+		if err != nil {
+			fail(w, http.StatusBadGateway, "服务器地址无效")
+			return
 		}
-		a.mu.Unlock()
 		handler.ServeHTTP(w, r)
 	})
 }

@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
@@ -57,6 +58,22 @@ func Handler(client *cloud.Client, serverURL string, log *slog.Logger) (http.Han
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		resp.Header.Set("Cache-Control", "no-store")
+		// 上游报错时留一条日志：前端只会显示一句话，排查时得知道服务器到底回了什么。
+		if resp.StatusCode >= 400 {
+			log.Warn("remote api: upstream error", "path", resp.Request.URL.Path, "status", resp.StatusCode)
+		}
+		// 远端说「未授权」时改写成 403：401 在前端是「本机会话过期」的信号，
+		// 会触发本地令牌刷新并把人踢回登录页——远程令牌失效不该影响本地会话。
+		if resp.StatusCode == http.StatusUnauthorized {
+			// 与 deskapi 的错误信封一致（{"error": "..."}），前端直接显示这句话。
+			body := []byte(`{"error":"云端登录已失效，请在账户里重新登录"}`)
+			resp.StatusCode = http.StatusForbidden
+			resp.Status = "403 Forbidden"
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+			resp.ContentLength = int64(len(body))
+			resp.Header.Set("Content-Type", "application/json; charset=utf-8")
+			resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+		}
 		return nil
 	}
 	proxy.Transport = &authTransport{base: http.DefaultTransport, client: client, log: log}
