@@ -10,7 +10,7 @@
 `tiffutil -cathidpicheck` 合成一个多分辨率 TIFF，Finder 自动挑清晰的那份。
 
 坐标约定（与 build-desktop.mjs 的 AppleScript 一致）：
-  wmind.app     (200, 300) pt
+  Wmind.app     (200, 300) pt
   Applications  (460, 300) pt
 
 用法：python3 scripts/build-dmg-background.py
@@ -23,7 +23,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
-RESOURCES = ROOT / "backend" / "desktop" / "resources"
+RESOURCES = ROOT / "desktop" / "resources"
 
 W, H = 660, 400
 # 内容整体偏上：底部留白比顶部多，视觉重心在窗口中上部。
@@ -119,7 +119,7 @@ def render_raw(scale):
 
     # 品牌：只有一行文字（不再放图标，避免与下面真正的应用图标重复）。
     title_font = load_font(96 * scale)
-    text = "wmind"
+    text = "Wmind"
     text_w = draw.textlength(text, font=title_font)
     ascent, descent = title_font.getmetrics()
     baseline_y = 150 * scale - (ascent + descent) / 2

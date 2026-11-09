@@ -147,7 +147,7 @@ function buildUniversal(goos, dir, output, version) {
  */
 function createDmg(appPath, version, dir, label) {
   const stage = mkdtempSync(join(tmpdir(), 'wmind-dmg-'));
-  const rwImage = join(stage, '..', `wmind-${version}-${label}-rw.dmg`);
+  const rwImage = join(stage, '..', `Wmind-${version}-${label}-rw.dmg`);
   try {
     cpSync(appPath, join(stage, appBundleName()), { recursive: true, dereference: false });
     symlinkSync('/Applications', join(stage, 'Applications'));
@@ -167,20 +167,20 @@ function createDmg(appPath, version, dir, label) {
       backgroundFile = 'background.png';
       cpSync(background1x, join(stage, '.background', backgroundFile));
     }
-    const icns = existsSync(icon) ? makeIcns(icon, join(stage, '..', `wmind-${version}-${label}.icns`)) : undefined;
+    const icns = existsSync(icon) ? makeIcns(icon, join(stage, '..', `Wmind-${version}-${label}.icns`)) : undefined;
 
-    const dmg = join(dir, `wmind-${version}-${label}.dmg`);
+    const dmg = join(dir, `Wmind-${version}-${label}.dmg`);
     const styled = backgroundFile !== undefined;
 
     try {
-      // 卷名固定为 "wmind <版本>"：如果用户 Finder 里还挂着旧的（同名）卷，
+      // 卷名固定为 "Wmind <版本>"：如果用户 Finder 里还挂着旧的（同名）卷，
       // 新盘会被改名成 "wmind <版本> 1"，AppleScript 按 `disk "wmind <版本>"`
       // 就会找到旧卷，美化打到别人身上、自己回退朴素。所以先弹掉同名旧卷。
-      detachVolume(`wmind ${version}`);
-      run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDRW', '-fs', 'HFS+', rwImage]);
+      detachVolume(`Wmind ${version}`);
+      run('hdiutil', ['create', '-volname', `Wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDRW', '-fs', 'HFS+', rwImage]);
       const mount = attachImage(rwImage);
-      if (basename(mount) !== `wmind ${version}`) {
-        throw new Error(`mount point is ${mount}, expected "/Volumes/wmind ${version}"`);
+      if (basename(mount) !== `Wmind ${version}`) {
+        throw new Error(`mount point is ${mount}, expected "/Volumes/Wmind ${version}"`);
       }
       try {
         if (icns) {
@@ -196,13 +196,13 @@ function createDmg(appPath, version, dir, label) {
       run('hdiutil', ['convert', rwImage, '-format', 'UDZO', '-o', dmg]);
     } catch (error) {
       console.warn(`警告：定制 dmg 外观失败（${error.message}），回退朴素窗口。`);
-      run('hdiutil', ['create', '-volname', `wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDZO', '-fs', 'HFS+', dmg]);
+      run('hdiutil', ['create', '-volname', `Wmind ${version}`, '-srcfolder', stage, '-ov', '-format', 'UDZO', '-fs', 'HFS+', dmg]);
     }
     return dmg;
   } finally {
     rmSync(stage, { recursive: true, force: true });
     rmSync(rwImage, { force: true });
-    rmSync(join(stage, '..', `wmind-${version}-${label}.icns`), { force: true });
+    rmSync(join(stage, '..', `Wmind-${version}-${label}.icns`), { force: true });
   }
 }
 
@@ -353,7 +353,7 @@ function packageApps(platforms, version) {
     const dir = join(OUT_DIR, platform.replace('/', '-'));
     const archive = readdirSync(dir).find((name) => name.endsWith('.tar.gz'));
     if (!archive) continue;
-    const zipName = archive.replace(/\.tar\.gz$/, '.zip');
+    const zipName = archive.replace(/^wmind-/, 'Wmind-').replace(/\.tar\.gz$/, '.zip');
     const zip = join(dir, zipName);
     rmSync(zip, { force: true });
     // 打整个应用目录（exe + 资源 + .mygo-files），只排除归档、更新清单和 zip 自己。
