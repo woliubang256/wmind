@@ -52,13 +52,30 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
     if (restoreFocus) trigger.current?.focus();
   }, []);
   useEffect(() => close(false), [location.pathname, close]);
+  /**
+   * 菜单的实际项数与高度。
+   *
+   * 之前只按 `links` 估算：桌面端还额外有「账户」「关于」「部署说明」「网站设置」
+   * 四个动作项，估算高度小于真实高度，菜单就出现了滚动条，最后两项被藏在
+   * 滚动区外面（表现为「装了新版却没看到关于」）。这里按真实项数算。
+   */
+  const actionCount = (onOpenAccount ? 1 : 0) + (onAbout ? 1 : 0) + (onDeployGuide ? 1 : 0) + (siteSettings ? 1 : 0);
+  // 分隔线：账户之后、链接之间（仅当没有账户项时）、关于组之前、网站设置之前。
+  const separatorCount =
+    (onOpenAccount ? 1 : 0) +
+    (!onOpenAccount && links.length > 1 ? 1 : 0) +
+    (onAbout || onDeployGuide ? 1 : 0) +
+    (siteSettings ? 1 : 0);
+  const itemCount = links.length + actionCount;
+  const menuHeight = itemCount * 36 + 10 + separatorCount * 9;
+
   useLayoutEffect(() => {
     if (!open) return;
     const update = () => {
       const rect = trigger.current?.getBoundingClientRect();
       if (!rect) return;
       setPlacement(placeMenu({ top: rect.top, bottom: rect.bottom, left: Math.max(8, rect.right - 208), width: 208 },
-        links.length * 36 + 10 + (links.length > 1 ? 9 : 0),
+        menuHeight,
         { width: window.innerWidth, height: window.innerHeight }, { minWidth: 208 }));
     };
     const outside = (event: PointerEvent) => {
@@ -74,7 +91,7 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
     };
-  }, [open, links.length, close]);
+  }, [open, menuHeight, close]);
   const attachMenu = useCallback((node: HTMLDivElement | null) => {
     menu.current = node;
     node?.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]')[openAt ?? 0]?.focus();
