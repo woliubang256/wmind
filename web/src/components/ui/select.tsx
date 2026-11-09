@@ -31,6 +31,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -167,6 +168,28 @@ export function placeMenu(
   return { top, left, width, maxHeight: height, above };
 }
 
+/**
+ * 量出最宽选项的文字宽度。
+ *
+ * 用 Canvas 按触发器的实际字体量（`getComputedStyle` 拿到的字体栈与渲染一致），
+ * 加上选项自身的左右内边距与图标位。量不到（字体还没就绪等）退回 0，让
+ * `minWidth` 落回触发器宽度——宁可截断也不能撑破布局。
+ */
+function widestOptionWidthTriggeredBy(trigger: HTMLElement, labels: readonly string[]): number {
+  const style = getComputedStyle(trigger);
+  const context = measureContext ??= document.createElement('canvas').getContext('2d');
+  if (context === null) return 0;
+  context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  let widest = 0;
+  for (const label of labels) {
+    widest = Math.max(widest, context.measureText(label).width);
+  }
+  // px-2.5（20）+ 图标 16 + gap 10 + 右侧勾选位 20 + 边框 2。
+  return Math.ceil(widest) + 68;
+}
+
+let measureContext: CanvasRenderingContext2D | null = null;
+
 // ------------------------------------------------------------------ 组件
 
 const ITEM_HEIGHT = { sm: 28, md: 34 } as const;
@@ -254,7 +277,10 @@ export function Select<T extends string | number = string>({
   }, [disabled, close]);
 
   // 落点：打开时算一次，滚动与窗口变化时重算。
-  useEffect(() => {
+  //
+  // 用 useLayoutEffect 而不是 useEffect：弹层挂载与定位在**同一帧**完成，
+  // 不会先画一帧「没有弹层」再补画——慢机器上那就是可感知的延迟。
+  useLayoutEffect(() => {
     if (!open) return;
     const update = () => {
       const trigger = triggerRef.current;
@@ -265,7 +291,9 @@ export function Select<T extends string | number = string>({
           rect,
           Math.max(options.length, searchable ? 1 : 0) * ITEM_HEIGHT[size] + MENU_VERTICAL_CHROME + (searchable ? SEARCH_HEIGHT : 0),
           { width: window.innerWidth, height: window.innerHeight },
-          { minWidth: Math.max(menuMinWidth, rect.width), maxHeight: 320 },
+          // 弹层至少要装得下**最宽的选项**：触发器写着「全部」时，「仅云端」
+          // 被截成「仅…」的菜单没法用。
+          { minWidth: Math.max(menuMinWidth, rect.width, widestOptionWidthTriggeredBy(trigger, allOptions.map((option) => option.label))), maxHeight: 320 },
         ),
       );
     };
