@@ -112,6 +112,16 @@ async function desktopRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return body.data as T;
 }
 
+/** 用系统浏览器打开项目主页。 */
+export function openProjectPage(): Promise<{ opened: boolean }> {
+  return desktopRequest('/desktop/about/open-project', { method: 'POST' });
+}
+
+/** 用系统浏览器打开部署说明。 */
+export function openDeployGuide(): Promise<{ opened: boolean }> {
+  return desktopRequest('/desktop/about/open-docs', { method: 'POST' });
+}
+
 /** 用系统浏览器打开远程服务器的管理后台（与 Web 端同一个页面）。 */
 export function openSiteSettings(): Promise<{ opened: boolean }> {
   return desktopRequest('/desktop/cloud/open-site', { method: 'POST' });

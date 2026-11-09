@@ -31,6 +31,15 @@ type SecretStore interface {
 // credentialKey 是凭据在系统存储里的键。
 const credentialKey = "cloud-connection"
 
+// 关于页用到的固定链接。
+//
+// 刻意不接受前端传 URL：`Shell.OpenExternal` 能打开任意 scheme，一旦可以传参
+// 就等于把「打开浏览器」做成开放跳转。这里只暴露两个写死的地址。
+const (
+	projectURL = "https://github.com/woliubang256/wmind"
+	docsURL    = "https://github.com/woliubang256/wmind/blob/main/docs/07-%E9%83%A8%E7%BD%B2%E4%B8%8E%E8%BF%90%E7%BB%B4.md"
+)
+
 // CredentialStore 读写云端连接凭据。
 //
 // 优先放**系统凭据存储**：它由系统按用户加密，比应用数据目录里的文件更安全，
@@ -132,6 +141,8 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("POST /desktop/cloud/connect", a.connect)
 	mux.HandleFunc("POST /desktop/cloud/disconnect", a.disconnect)
 	mux.HandleFunc("POST /desktop/cloud/open-site", a.openSite)
+	mux.HandleFunc("POST /desktop/about/open-project", a.openProject)
+	mux.HandleFunc("POST /desktop/about/open-docs", a.openDocs)
 	mux.HandleFunc("POST /desktop/cloud/verify-2fa", a.verifyTwoFactor)
 	mux.HandleFunc("POST /desktop/sync", a.sync)
 	mux.HandleFunc("GET /desktop/maps/sources", a.sources)
@@ -502,6 +513,24 @@ func (a *api) openSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.deps.OpenExternal(creds.ServerURL + "/admin/settings"); err != nil {
+		fail(w, http.StatusInternalServerError, "打开浏览器失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"opened": true}})
+}
+
+// openProject 在浏览器里打开项目主页。
+func (a *api) openProject(w http.ResponseWriter, r *http.Request) {
+	a.openFixed(w, projectURL)
+}
+
+// openDocs 在浏览器里打开部署说明。
+func (a *api) openDocs(w http.ResponseWriter, r *http.Request) {
+	a.openFixed(w, docsURL)
+}
+
+func (a *api) openFixed(w http.ResponseWriter, url string) {
+	if err := a.deps.OpenExternal(url); err != nil {
 		fail(w, http.StatusInternalServerError, "打开浏览器失败")
 		return
 	}

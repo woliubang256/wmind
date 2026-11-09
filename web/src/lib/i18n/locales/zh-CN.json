@@ -1540,7 +1540,19 @@
     },
     "menu": {
       "siteSettings": "网站设置",
-      "siteSettingsFailed": "打开网站设置失败"
+      "siteSettingsFailed": "打开网站设置失败",
+      "about": "关于",
+      "deployGuide": "部署说明"
+    },
+    "about": {
+      "title": "关于",
+      "tagline": "可自托管的思维导图",
+      "description": "Wmind 是一套可私有化部署的思维导图系统：本地优先，断网也能完整编辑；连接自托管服务器后可在多台设备间同步。数据始终保存在你自己的机器上。",
+      "version": "版本",
+      "license": "许可",
+      "project": "项目地址",
+      "deployGuide": "部署说明",
+      "openFailed": "打开链接失败"
     }
   }
 }

@@ -1540,7 +1540,19 @@
     },
     "menu": {
       "siteSettings": "Site settings",
-      "siteSettingsFailed": "Could not open site settings"
+      "siteSettingsFailed": "Could not open site settings",
+      "about": "About",
+      "deployGuide": "Deployment guide"
+    },
+    "about": {
+      "title": "About",
+      "tagline": "Self-hosted mind mapping",
+      "description": "Wmind is a self-hostable mind mapping system: local-first, fully usable offline, and syncing across devices once you connect your own server. Your data stays on your machines.",
+      "version": "Version",
+      "license": "License",
+      "project": "Project page",
+      "deployGuide": "Deployment guide",
+      "openFailed": "Could not open the link"
     }
   }
 }

@@ -8,7 +8,7 @@ import { UserAvatar } from './user-avatar';
 import type { AvatarUser } from '@/lib/avatar';
 import { useSiteConfig } from '@/features/site/use-site-config';
 
-export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, displayName, siteSettings }: {
+export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, displayName, siteSettings, onAbout, onDeployGuide }: {
   user: AvatarUser;
   links: readonly { to: string; label: string; icon: IconName }[];
   isActive: (to: string) => boolean;
@@ -26,6 +26,10 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
    * 用系统浏览器打开。
    */
   siteSettings?: { label: string; onClick: () => void };
+  /** 「关于」：打开关于弹窗（项目介绍、版本、检查更新、项目地址）。 */
+  onAbout?: () => void;
+  /** 「部署说明」：用系统浏览器打开部署文档。 */
+  onDeployGuide?: () => void;
   /** 强制头像（本地用户用品牌 logo）。 */
   avatarSrc?: string;
   /** 强制显示名（本地用户的名字要跟随界面语言）。 */
@@ -127,6 +131,27 @@ export function UserMenu({ user, links, isActive, onOpenAccount, avatarSrc, disp
           {to === '/account' ? <span data-app-version className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{displayVersion}</span> : null}
         </Link>
       </div>)}
+      {onAbout || onDeployGuide ? (
+        <div role="none">
+          <div role="separator" className="my-1 border-t border-border" />
+          {onAbout ? (
+            <button type="button" role="menuitem" tabIndex={-1}
+              onClick={() => { close(false); onAbout(); }}
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
+              <Icon name="flag" className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">{t('desktop.menu.about')}</span>
+            </button>
+          ) : null}
+          {onDeployGuide ? (
+            <button type="button" role="menuitem" tabIndex={-1}
+              onClick={() => { close(false); onDeployGuide(); }}
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent">
+              <Icon name="file" className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">{t('desktop.menu.deployGuide')}</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {siteSettings ? (
         <div role="none">
           <div role="separator" className="my-1 border-t border-border" />

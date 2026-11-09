@@ -17,7 +17,8 @@ import { authKeys, useCurrentUser } from './auth';
 import { desktopCapabilities, isDesktop } from '@/lib/desktop';
 import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dialog';
 import { AccountDialog } from '@/features/account/account-dialog';
-import { fetchDesktopStatus, openSiteSettings } from '@/lib/desktop';
+import { AboutDialog } from '@/features/about/about-dialog';
+import { fetchDesktopStatus, openDeployGuide, openSiteSettings } from '@/lib/desktop';
 import { useQuery } from '@tanstack/react-query';
 
 function LoadingPage() {
@@ -241,6 +242,8 @@ export function AppLayout() {
   const autoUpdate = useAutoUpdateCheck();
   // 桌面端菜单第一项「账户」打开弹窗（登录云端 / 退出登录）。
   const [accountOpen, setAccountOpen] = useState(false);
+  // 「关于」弹窗：项目介绍、版本、检查更新、项目地址。
+  const [aboutOpen, setAboutOpen] = useState(false);
   // 「网站设置」只在登录且远程账号是管理员时出现。
   const cloudStatus = useQuery({
     queryKey: ['desktop', 'status'],
@@ -315,6 +318,12 @@ export function AppLayout() {
                 isActive={isActive}
                 onOpenAccount={localDesktop ? () => setAccountOpen(true) : undefined}
                 siteSettings={siteSettings}
+                onAbout={localDesktop ? () => setAboutOpen(true) : undefined}
+                onDeployGuide={localDesktop ? () => {
+                  void openDeployGuide().catch((error) => {
+                    toast.error(error instanceof Error ? error.message : t('desktop.about.openFailed'));
+                  });
+                } : undefined}
                 avatarSrc={localDesktop ? publicAssetUrl('/wmind-logo.jpg') : undefined}
                 displayName={localDesktop ? t('desktop.localUser') : undefined}
               />
@@ -351,6 +360,7 @@ export function AppLayout() {
 
       <UpdateDialog update={autoUpdate.update} open={autoUpdate.open} onClose={autoUpdate.close} />
       <AccountDialog open={accountOpen} onClose={() => setAccountOpen(false)} />
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
 
       {fullBleed ? (
         <main className="min-w-0"><Outlet /></main>
