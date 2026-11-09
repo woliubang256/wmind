@@ -98,13 +98,17 @@ export function MapCard({ map, actions, busy = false, meta, href, badge }: MapCa
           // object-cover 让缩略图**充满**卡片：缩略图按内容包围盒生成，横竖比例
           // 千差万别，用 contain 的话扁图上下留两大块空，卡片看起来像没加载完。
           // 裁切只影响预览观感，中心主题永远在画面中间，不会裁丢。
+          //
+          // 用 absolute 铺满而不是 `size-full`：外层是 `place-items-center` 的
+          // grid，行高由内容决定，`h-full` 解析出来是图片自己的高度——object-cover
+          // 就失效了，扁图下面会留一大块空。绝对定位直接贴满容器。
           <LoadingImage
             src={map.thumbnailUrl}
             alt={t('maps.thumbnailAlt', { title: map.title })}
             errorText={t('maps.thumbnailError')}
             loading="lazy"
             decoding="async"
-            containerClassName="size-full"
+            containerClassName="absolute inset-0"
             className="size-full object-cover"
           />
         )}
