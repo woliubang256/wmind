@@ -310,6 +310,30 @@ function updaterPrivateKey() {
 //
 // 前端嵌入靠 GOFLAGS 的构建标签，版本靠 MYGO_LDFLAGS——CLI 自己不接受
 // 这两个参数，但会把它们透传给 go build。
+/**
+ * 给 Windows 产物补一份 zip。
+ *
+ * mygo 只写 tar.gz（那是**更新**用的归档），而 Windows 用户更习惯 zip，也方便
+ * 没装 NSIS 的场景手工分发。这一步与 `--package` 无关：CI 不带 `--package`
+ * 也必须有 zip，否则发布作业上传产物时找不到文件（1.1.0 就是这么红的）。
+ */
+function createWindowsZips(platforms, version) {
+  for (const platform of platforms) {
+    if (!platform.startsWith('windows/')) continue;
+    const dir = join(OUT_DIR, platform.replace('/', '-'));
+    if (!existsSync(dir)) continue;
+    const arch = platform.split('/')[1];
+    // 名字直接由版本推出来，不依赖 mygo 有没有产出 tar.gz：更新归档需要签名私钥，
+    // 没有私钥的构建（本地、或没配 secret 的仓库）同样要能分发 zip。
+    const zipName = `Wmind-${version}-windows-${arch}.zip`;
+    const zip = join(dir, zipName);
+    rmSync(zip, { force: true });
+    // 打整个应用目录（exe + 资源 + .mygo-files），只排除更新归档、更新清单和 zip 自己。
+    run('zip', ['-qry', zipName, '.', '-x', '*.tar.gz', '-x', 'update-*.json', '-x', zipName], { cwd: dir });
+    console.log(`  ${zip}`);
+  }
+}
+
 function packageApps(platforms, version) {
   const ldflags = [
     `-X ${DESKTOP_VERSION_SYMBOL}=${version}`,
@@ -345,21 +369,6 @@ function packageApps(platforms, version) {
       ...(privateKey ? { MYGO_UPDATER_PRIVATE_KEY: privateKey } : {}),
     },
   });
-
-  // Windows 用户更习惯 zip：mygo 只写 tar.gz（那是更新用的归档），这里再补一份
-  // 同名 zip，方便没装 NSIS 安装包的场景下手工分发。
-  for (const platform of platforms) {
-    if (!platform.startsWith('windows/')) continue;
-    const dir = join(OUT_DIR, platform.replace('/', '-'));
-    const archive = readdirSync(dir).find((name) => name.endsWith('.tar.gz'));
-    if (!archive) continue;
-    const zipName = archive.replace(/^wmind-/, 'Wmind-').replace(/\.tar\.gz$/, '.zip');
-    const zip = join(dir, zipName);
-    rmSync(zip, { force: true });
-    // 打整个应用目录（exe + 资源 + .mygo-files），只排除归档、更新清单和 zip 自己。
-    run('zip', ['-qry', zipName, '.', '-x', archive, '-x', 'update-*.json', '-x', zipName], { cwd: dir });
-    console.log(`  ${zip}`);
-  }
 
   if (process.platform !== 'darwin') return;
   for (const platform of platforms) {
@@ -460,6 +469,8 @@ function main() {
   console.log(`wmind 桌面版 ${version} 构建完成：`);
   for (const output of outputs) console.log(`  ${output}`);
   if (readdirSync(EMBED_DIR).length === 0) console.log('（提示：嵌入目录为空，窗口会显示占位页）');
+
+  createWindowsZips(platforms, version);
 
   if (args.package) {
     packageApps(platforms, version);

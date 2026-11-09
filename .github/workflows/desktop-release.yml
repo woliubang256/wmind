@@ -105,8 +105,8 @@ jobs:
         with:
           name: wmind-apps
           path: |
-            desktop/build/darwin-arm64/wmind.app/**
-            desktop/build/darwin-amd64/wmind.app/**
+            desktop/build/darwin-arm64/Wmind.app/**
+            desktop/build/darwin-amd64/Wmind.app/**
           if-no-files-found: error
 
   dmg:
@@ -135,8 +135,8 @@ jobs:
       - name: Sign app bundles (ad-hoc)
         run: |
           for arch in arm64 amd64; do
-            codesign --force --deep --sign - "desktop/build/darwin-${arch}/wmind.app"
-            codesign --verify --verbose=2 "desktop/build/darwin-${arch}/wmind.app"
+            codesign --force --deep --sign - "desktop/build/darwin-${arch}/Wmind.app"
+            codesign --verify --verbose=2 "desktop/build/darwin-${arch}/Wmind.app"
           done
 
       - name: Build DMGs
@@ -178,6 +178,6 @@ jobs:
             echo "没有可发布的产物" >&2
             exit 1
           fi
-          gh release create "$tag" --draft --title "wmind 桌面版 $version" "${assets[@]}"
+          gh release create "$tag" --draft --title "Wmind 桌面版 $version" "${assets[@]}"
           gh release edit "$tag" --draft=false --latest=false
           printf '%s\n' "${assets[@]}"
