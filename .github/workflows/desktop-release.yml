@@ -4,13 +4,16 @@ name: Desktop release
 #
 # 成本考量（macOS / Windows runner 按分钟计费，比 ubuntu 贵一个数量级）：
 #
-#   packages  ubuntu-24.04  前端构建 + go test + 四平台打包（含 NSIS 安装包）
-#   dmg       macos-14      只把已有的 .app 打成 .dmg（hdiutil 是 macOS 独有的）
+#   packages  ubuntu-24.04  go test + Windows 两个包（zip、NSIS 安装包）
+#   dmg       macos-14      构建 darwin/arm64 与 darwin/amd64 的 .app，再出 .dmg
 #   publish   ubuntu-24.04  汇总产物、建 Release
 #
-# 交叉编译不需要目标平台工具链（CGO_ENABLED=0），Windows 安装包用 ubuntu 的
-# apt nsis 就能出，所以只有「.dmg 打包」这一段必须上 macOS——它现在只做
-# 「下载 .app → hdiutil 出盘 → 上传」，通常 3–5 分钟，而不是原来的十几分钟。
+# 为什么 darwin 必须在 macOS 上构建：mygo 只在 macOS 上产出 `.app` 包
+# （Info.plist、Resources、图标、签名都是 macOS 独有的），在 Linux 上交叉编译
+# darwin 只得到一个裸可执行文件。1.1.0 第一次跑发布时就是卡在这里。
+#
+# 代价是 macOS runner 要多跑一次前端构建与两次 Go 编译（约 5–7 分钟）；相比
+# 让发布直接失败，这个成本值得。Windows 安装包仍然在 ubuntu 上用 apt nsis 出。
 #
 # 为什么 macOS 的美化可能不生效：DMG 窗口的图标位置靠 Finder 自动化摆，runner
 # 上可能没有自动化授权；驱动不了会打警告并回退朴素窗口（不影响安装与更新）。
@@ -79,11 +82,11 @@ jobs:
       - name: Install NSIS
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis
 
-      # 四平台一起出；macOS 的 .dmg 由下一个作业在 macOS 上补。
+      # 只出 Windows：darwin 的 .app 必须在 macOS 上构建（见文件头说明）。
       - name: Build packages
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64,windows/amd64,windows/arm64
+        run: node scripts/build-desktop.mjs --platform windows/amd64,windows/arm64
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
@@ -99,45 +102,41 @@ jobs:
             desktop/build/**/SHA256SUMS
           if-no-files-found: error
 
-      # .app 单独传：下一个作业要拿它打 dmg。
-      - name: Upload macOS app bundles
-        uses: actions/upload-artifact@v4
-        with:
-          name: wmind-apps
-          path: |
-            desktop/build/darwin-arm64/Wmind.app/**
-            desktop/build/darwin-amd64/Wmind.app/**
-          if-no-files-found: error
-
   dmg:
-    name: Package DMGs (macOS)
-    needs: packages
+    name: Build DMGs (macOS)
     runs-on: macos-14
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: desktop/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.8
+          run_install: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22.23.4
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
 
-      - name: Download app bundles
-        uses: actions/download-artifact@v4
-        with:
-          name: wmind-apps
-          path: desktop/build
+      - name: Install frontend dependencies
+        run: pnpm --dir web install --frozen-lockfile
 
-      # Linux 上打出来的 .app 是**未签名**的（codesign 只有 macOS 有），而 Apple
-      # Silicon 上未签名的可执行文件会被直接 kill。这里补一次 ad-hoc 签名，
-      # 与 mygo 在 macOS 上默认的 `-` 身份一致，然后再出盘。
-      - name: Sign app bundles (ad-hoc)
-        run: |
-          for arch in arm64 amd64; do
-            codesign --force --deep --sign - "desktop/build/darwin-${arch}/Wmind.app"
-            codesign --verify --verbose=2 "desktop/build/darwin-${arch}/Wmind.app"
-          done
+      # 只编 darwin：Windows 的包在 ubuntu 作业里出过了。
+      - name: Build macOS apps
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64
 
       - name: Build DMGs
         run: |
@@ -149,7 +148,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wmind-dmg
-          path: desktop/build/darwin-*/*.dmg
+          path: |
+            desktop/build/darwin-*/*.dmg
+            desktop/build/darwin-*/*.tar.gz
+            desktop/build/darwin-*/update-*.json
+            desktop/build/darwin-*/install.sh
           if-no-files-found: error
 
   publish:
