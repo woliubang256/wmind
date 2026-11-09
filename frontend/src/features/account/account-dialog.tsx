@@ -25,6 +25,7 @@ import {
   disconnectCloud,
   fetchDesktopStatus,
   syncNow,
+  verifyCloudTwoFactor,
 } from '@/lib/desktop';
 
 export function AccountDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -33,6 +34,9 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
   const [serverUrl, setServerUrl] = useState('');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  // 两步验证：密码通过后进入这一步，提交动态码或恢复码。
+  const [twoFactor, setTwoFactor] = useState(false);
+  const [code, setCode] = useState('');
 
   const status = useQuery({
     queryKey: ['desktop', 'status'],
@@ -41,9 +45,12 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
     staleTime: 2_000,
   });
 
-  // 打开时清掉上一次的密码：弹窗反复开关不该留着明文。
+  // 关闭时清掉密码与动态码：弹窗反复开关不该留着明文。
   useEffect(() => {
-    if (!open) setPassword('');
+    if (open) return;
+    setPassword('');
+    setCode('');
+    setTwoFactor(false);
   }, [open]);
 
   const refresh = () => {
@@ -53,6 +60,12 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
   const connect = useMutation({
     mutationFn: () => connectCloud({ serverUrl: serverUrl.trim(), identifier: identifier.trim(), password }),
     onSuccess: (result) => {
+      if (result.twoFactorRequired) {
+        // 密码对了，但账号开了两步验证：切到动态码步骤，密码先留着用于
+        // 验证通过后保存凭据（关掉弹窗会清掉）。
+        setTwoFactor(true);
+        return;
+      }
       toast.success(t('desktop.cloud.connectSuccess'));
       if (result.syncError) toast.error(result.syncError);
       setPassword('');
@@ -68,6 +81,19 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
       refresh();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('desktop.cloud.connectError')),
+  });
+
+  const verify = useMutation({
+    mutationFn: () => verifyCloudTwoFactor(code.trim()),
+    onSuccess: (result) => {
+      toast.success(t('desktop.cloud.connectSuccess'));
+      if (result.syncError) toast.error(result.syncError);
+      setCode('');
+      setPassword('');
+      setTwoFactor(false);
+      refresh();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('desktop.account.twoFactorFailed')),
   });
 
   const sync = useMutation({
@@ -102,14 +128,25 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
             <Button variant="outline" onClick={onClose}>
               {t('common.cancel')}
             </Button>
-            <Button
-              type="submit"
-              form="account-connect-form"
-              loading={connect.isPending}
-              disabled={serverUrl.trim() === '' || identifier.trim() === '' || password === ''}
-            >
-              {connect.isPending ? t('desktop.cloud.connecting') : t('desktop.account.signIn')}
-            </Button>
+            {twoFactor ? (
+              <Button
+                type="submit"
+                form="account-two-factor-form"
+                loading={verify.isPending}
+                disabled={code.trim() === ''}
+              >
+                {verify.isPending ? t('desktop.account.verifying') : t('desktop.account.verify')}
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                form="account-connect-form"
+                loading={connect.isPending}
+                disabled={serverUrl.trim() === '' || identifier.trim() === '' || password === ''}
+              >
+                {connect.isPending ? t('desktop.cloud.connecting') : t('desktop.account.signIn')}
+              </Button>
+            )}
           </>
         )
       }
@@ -130,6 +167,27 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">{t('desktop.account.signedInHint')}</p>
         </dl>
+      ) : twoFactor ? (
+        <form
+          id="account-two-factor-form"
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            verify.mutate();
+          }}
+        >
+          <p className="text-sm text-muted-foreground">{t('desktop.account.twoFactorHint')}</p>
+          <TextField
+            label={t('desktop.account.twoFactorCode')}
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            placeholder="123456"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            required
+          />
+        </form>
       ) : (
         <form
           id="account-connect-form"

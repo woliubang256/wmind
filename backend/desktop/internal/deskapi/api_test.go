@@ -147,6 +147,9 @@ type fakeCloudServer struct {
 	maps  map[string]map[string]any
 	docs  map[string][]byte
 	login int
+	// 两步验证：requireTwoFactor 为真时登录只给挑战令牌。
+	requireTwoFactor bool
+	twoFactorCode    string
 }
 
 func newFakeCloudServer(t *testing.T) *fakeCloudServer {
@@ -185,10 +188,37 @@ func newFakeCloudServer(t *testing.T) *fakeCloudServer {
 		}
 		f.mu.Lock()
 		f.login++
+		requireTwoFactor := f.requireTwoFactor
+		code := f.twoFactorCode
 		f.mu.Unlock()
+		if requireTwoFactor {
+			writeCloudJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+				"twoFactorRequired": true, "challengeToken": "challenge-token", "expiresIn": 300,
+			}})
+			return
+		}
+		_ = code
 		writeCloudJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
 			"accessToken": "access-1", "refreshToken": "refresh-1",
 			"user": map[string]any{"uid": "remote-user", "email": "a@example.test"},
+		}})
+	})
+	mux.HandleFunc("/api/v1/auth/2fa/verify", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ChallengeToken string `json:"challengeToken"`
+			Code           string `json:"code"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		f.mu.Lock()
+		want := f.twoFactorCode
+		f.mu.Unlock()
+		if req.ChallengeToken != "challenge-token" || req.Code != want {
+			writeCloudJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": "AUTH_2FA_INVALID"}})
+			return
+		}
+		writeCloudJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"accessToken": "access-1", "refreshToken": "refresh-1",
+			"user": map[string]any{"uid": "remote-user", "email": "a@example.test", "role": "admin"},
 		}})
 	})
 	mux.HandleFunc("/api/v1/maps", func(w http.ResponseWriter, r *http.Request) {
@@ -605,5 +635,58 @@ func TestOpenSiteRequiresAdminAndConnection(t *testing.T) {
 	}
 	if opened != "https://cloud.example/admin/settings" {
 		t.Fatalf("打开的地址不对: %q", opened)
+	}
+}
+
+// 两步验证：密码通过后先要动态码，验证成功才真正连上并保存凭据。
+func TestConnectWithTwoFactor(t *testing.T) {
+	f := newFixture(t)
+	// 让假云端的登录返回「需要两步验证」。
+	f.cloud.requireTwoFactor = true
+	f.cloud.twoFactorCode = "123456"
+
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/connect", map[string]any{
+		"serverUrl": f.cloud.server.URL, "identifier": "a@example.test", "password": "pw",
+	})
+	if resp.status != http.StatusOK {
+		t.Fatalf("连接 = %d %s", resp.status, string(resp.Data))
+	}
+	data := dataOf(t, resp)
+	if data["twoFactorRequired"] != true {
+		t.Fatalf("应当提示需要两步验证: %#v", data)
+	}
+	if f.engine.Connected() {
+		t.Fatal("还没验证动态码就不该连上云端")
+	}
+	if stored, _ := f.creds.Load(); stored != nil {
+		t.Fatal("还没验证动态码就不该保存凭据")
+	}
+
+	// 动态码错误：401，且可以重试。
+	resp = f.do(t, http.MethodPost, "/desktop/cloud/verify-2fa", map[string]any{"code": "000000"})
+	if resp.status != http.StatusUnauthorized {
+		t.Fatalf("错误动态码期望 401，实际 %d %s / err=%s", resp.status, string(resp.Data), resp.Error)
+	}
+
+	// 正确动态码：连上并保存凭据。
+	resp = f.do(t, http.MethodPost, "/desktop/cloud/verify-2fa", map[string]any{"code": f.cloud.twoFactorCode})
+	if resp.status != http.StatusOK {
+		t.Fatalf("验证 = %d %s", resp.status, string(resp.Data))
+	}
+	if !f.engine.Connected() {
+		t.Fatal("验证通过后应当连上云端")
+	}
+	stored, err := f.creds.Load()
+	if err != nil || stored == nil || stored.Email != "a@example.test" {
+		t.Fatalf("验证通过后应保存凭据: %+v %v", stored, err)
+	}
+}
+
+// 没有待验证的登录时，直接提交动态码应当明确报错，而不是静默成功。
+func TestVerifyTwoFactorWithoutPending(t *testing.T) {
+	f := newFixture(t)
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/verify-2fa", map[string]any{"code": "123456"})
+	if resp.status != http.StatusConflict {
+		t.Fatalf("没有待验证登录期望 409，实际 %d", resp.status)
 	}
 }

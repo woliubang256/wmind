@@ -1530,7 +1530,12 @@
       "hint": "Sign in to your self-hosted server to upload local maps and sync them across devices.",
       "signIn": "Sign in",
       "signOut": "Sign out",
-      "signedInHint": "Signing out only disconnects the cloud. Your local maps stay untouched."
+      "signedInHint": "Signing out only disconnects the cloud. Your local maps stay untouched.",
+      "twoFactorHint": "This account uses two-factor authentication. Enter the 6-digit code from your authenticator app, or a recovery code.",
+      "twoFactorCode": "Code or recovery code",
+      "verify": "Verify",
+      "verifying": "Verifying…",
+      "twoFactorFailed": "Verification failed"
     },
     "menu": {
       "siteSettings": "Site settings",

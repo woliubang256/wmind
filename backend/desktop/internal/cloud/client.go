@@ -71,6 +71,9 @@ type Session struct {
 	// Role 是云端账号的角色（admin/user）。桌面端菜单用「网站设置」入口的
 	// 显隐就靠它：只有远程管理员才看得到。
 	Role string
+	// TwoFactorChallenge 非空表示账号开了两步验证：密码已通过，还差一次
+	// 动态码。此时没有任何令牌，调用方要拿它去 CompleteTwoFactor。
+	TwoFactorChallenge string
 }
 
 // Client 访问一个云端服务器。
@@ -173,6 +176,12 @@ func Login(ctx context.Context, serverURL, identifier, password string) (*Client
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("cloud: login failed with status %d", status)
 	}
+	if result.TwoFactorRequired || result.ChallengeToken != "" {
+		client.mu.Lock()
+		client.session.TwoFactorChallenge = result.ChallengeToken
+		client.mu.Unlock()
+		return client, nil
+	}
 	client.SetTokens(result.AccessToken, result.RefreshToken)
 	if result.User.UID != "" {
 		client.mu.Lock()
@@ -193,7 +202,11 @@ type loginChallenge struct {
 type loginResult struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
-	User         struct {
+	// 开了两步验证时服务端只给挑战令牌，不发会话。
+	TwoFactorRequired bool   `json:"twoFactorRequired"`
+	ChallengeToken    string `json:"challengeToken"`
+	ExpiresIn         int    `json:"expiresIn"`
+	User              struct {
 		UID   string `json:"uid"`
 		Email string `json:"email"`
 		Role  string `json:"role"`
@@ -249,6 +262,38 @@ func encryptPassword(challenge *loginChallenge, password string) (string, error)
 		return "", fmt.Errorf("cloud: encrypt password: %w", err)
 	}
 	return base64.StdEncoding.EncodeToString(cipher), nil
+}
+
+// CompleteTwoFactor 用动态码（或恢复码）完成两步验证登录。
+func (c *Client) CompleteTwoFactor(ctx context.Context, code string) error {
+	session := c.Session()
+	if session.TwoFactorChallenge == "" {
+		return errors.New("cloud: no two-factor challenge in progress")
+	}
+	var result loginResult
+	status, details, err := c.do(ctx, http.MethodPost, "/api/v1/auth/2fa/verify", map[string]string{
+		"challengeToken": session.TwoFactorChallenge,
+		"code":           code,
+	}, &result, false)
+	if err != nil {
+		return err
+	}
+	switch status {
+	case http.StatusOK:
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return ErrUnauthorized
+	default:
+		return fmt.Errorf("cloud: two-factor verification failed with status %d (%s)", status, details.Code)
+	}
+	c.mu.Lock()
+	c.session.TwoFactorChallenge = ""
+	c.session.AccessToken = result.AccessToken
+	c.session.RefreshToken = result.RefreshToken
+	c.session.UserUID = result.User.UID
+	c.session.UserEmail = result.User.Email
+	c.session.Role = result.User.Role
+	c.mu.Unlock()
+	return nil
 }
 
 // Refresh 用 refresh cookie 换一个新的访问令牌。

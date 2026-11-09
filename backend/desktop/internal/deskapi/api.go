@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
@@ -90,6 +91,7 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("POST /desktop/cloud/connect", a.connect)
 	mux.HandleFunc("POST /desktop/cloud/disconnect", a.disconnect)
 	mux.HandleFunc("POST /desktop/cloud/open-site", a.openSite)
+	mux.HandleFunc("POST /desktop/cloud/verify-2fa", a.verifyTwoFactor)
 	mux.HandleFunc("POST /desktop/sync", a.sync)
 	mux.HandleFunc("GET /desktop/maps/sources", a.sources)
 	mux.HandleFunc("POST /desktop/maps/{uid}/upload", a.upload)
@@ -106,6 +108,16 @@ func New(deps Deps) http.Handler {
 
 type api struct {
 	deps Deps
+	// pending 是等待两步验证码的登录（内存里，5 分钟后作废）。
+	mu      sync.Mutex
+	pending *pendingTwoFactor
+}
+
+type pendingTwoFactor struct {
+	client     *cloud.Client
+	password   string
+	identifier string
+	expires    time.Time
 }
 
 type envelope struct {
@@ -223,6 +235,20 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session := client.Session()
+	// 账号开了两步验证：服务端只给了挑战令牌。把这次登录挂在内存里，
+	// 等前端提交动态码后再完成（密码不用再传一遍，也不会留在前端）。
+	if session.TwoFactorChallenge != "" {
+		a.pending = &pendingTwoFactor{
+			client: client, password: req.Password, identifier: req.Identifier,
+			expires: time.Now().Add(5 * time.Minute),
+		}
+		writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
+			"twoFactorRequired": true,
+			"serverUrl":         session.ServerURL,
+		}})
+		return
+	}
+
 	a.deps.Engine.Connect(session.ServerURL, client)
 	if err := a.deps.Creds.Save(cloudcreds.Credentials{
 		ServerURL: session.ServerURL, Identifier: req.Identifier,
@@ -250,6 +276,63 @@ func (a *api) disconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"connected": false}})
+}
+
+// verifyTwoFactor 用动态码（或恢复码）完成登录。
+func (a *api) verifyTwoFactor(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<10)).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, "请求格式不正确")
+		return
+	}
+	code := strings.TrimSpace(req.Code)
+	if code == "" {
+		fail(w, http.StatusUnprocessableEntity, "请输入动态码")
+		return
+	}
+
+	a.mu.Lock()
+	pending := a.pending
+	if pending != nil && time.Now().After(pending.expires) {
+		pending = nil
+	}
+	a.pending = nil
+	a.mu.Unlock()
+	if pending == nil {
+		fail(w, http.StatusConflict, "登录已过期，请重新输入账号密码")
+		return
+	}
+
+	if err := pending.client.CompleteTwoFactor(r.Context(), code); err != nil {
+		// 码错时把这次登录放回去，允许重试（服务端另有 5 次上限）。
+		a.mu.Lock()
+		a.pending = pending
+		a.mu.Unlock()
+		if errors.Is(err, cloud.ErrUnauthorized) {
+			fail(w, http.StatusUnauthorized, "动态码不正确")
+			return
+		}
+		fail(w, http.StatusBadGateway, "验证失败："+errorText(err))
+		return
+	}
+
+	session := pending.client.Session()
+	a.deps.Engine.Connect(session.ServerURL, pending.client)
+	if err := a.deps.Creds.Save(cloudcreds.Credentials{
+		ServerURL: session.ServerURL, Identifier: pending.identifier,
+		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,
+		RefreshToken: session.RefreshToken,
+	}, pending.password); err != nil {
+		fail(w, http.StatusInternalServerError, "保存连接信息失败")
+		return
+	}
+	result, syncErr := a.deps.Engine.Sync(r.Context())
+	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
+		"serverUrl": session.ServerURL, "email": session.UserEmail,
+		"sync": result, "syncError": errorText(syncErr),
+	}})
 }
 
 // ── 同步 ────────────────────────────────────────────────────────────────────

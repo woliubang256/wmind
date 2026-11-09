@@ -121,13 +121,22 @@ export function fetchDesktopStatus(): Promise<DesktopStatus> {
   return desktopRequest<DesktopStatus>('/desktop/status');
 }
 
-export function connectCloud(input: { serverUrl: string; identifier: string; password: string }): Promise<{
+export interface CloudConnectResult {
   serverUrl: string;
   email?: string;
   sync?: SyncResult;
   syncError?: string;
-}> {
+  /** 账号开了两步验证：此时还没登录，需要接着提交动态码。 */
+  twoFactorRequired?: boolean;
+}
+
+export function connectCloud(input: { serverUrl: string; identifier: string; password: string }): Promise<CloudConnectResult> {
   return desktopRequest('/desktop/cloud/connect', { method: 'POST', body: JSON.stringify(input) });
+}
+
+/** 提交两步验证的动态码（或恢复码）完成登录。 */
+export function verifyCloudTwoFactor(code: string): Promise<CloudConnectResult> {
+  return desktopRequest('/desktop/cloud/verify-2fa', { method: 'POST', body: JSON.stringify({ code }) });
 }
 
 export function disconnectCloud(): Promise<{ connected: boolean }> {

@@ -1530,7 +1530,12 @@
       "hint": "登录你的自托管服务器，本地导图就能上传到云端并在多台设备间同步。",
       "signIn": "登录",
       "signOut": "退出登录",
-      "signedInHint": "退出登录只会断开云端连接，本地导图不受影响。"
+      "signedInHint": "退出登录只会断开云端连接，本地导图不受影响。",
+      "twoFactorHint": "该账号开启了两步验证，请输入验证器 App 里的 6 位动态码，或使用一张恢复码。",
+      "twoFactorCode": "动态码或恢复码",
+      "verify": "验证",
+      "verifying": "验证中…",
+      "twoFactorFailed": "验证失败"
     },
     "menu": {
       "siteSettings": "网站设置",
