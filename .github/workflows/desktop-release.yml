@@ -83,10 +83,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis
 
       # 只出 Windows：darwin 的 .app 必须在 macOS 上构建（见文件头说明）。
+      # 必须带 --package：只有 mygo 会产出 tar.gz、NSIS 安装包与更新清单；
+      # 不带的话脚本只做一次裸 `go build`，上传阶段就找不到产物。
       - name: Build packages
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: node scripts/build-desktop.mjs --platform windows/amd64,windows/arm64
+        run: node scripts/build-desktop.mjs --package --platform windows/amd64,windows/arm64
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
@@ -135,16 +137,11 @@ jobs:
         run: pnpm --dir web install --frozen-lockfile
 
       # 只编 darwin：Windows 的包在 ubuntu 作业里出过了。
-      - name: Build macOS apps
+      # --package 会先让 mygo 产出 .app / tar.gz / 更新清单，再用 hdiutil 出 dmg。
+      - name: Build macOS apps and DMGs
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: node scripts/build-desktop.mjs --platform darwin/arm64,darwin/amd64
-
-      - name: Build DMGs
-        run: |
-          for arch in arm64 amd64; do
-            node scripts/build-desktop.mjs --dmg-only "darwin/${arch}"
-          done
+        run: node scripts/build-desktop.mjs --package --platform darwin/arm64,darwin/amd64
 
       - name: Upload DMGs
         uses: actions/upload-artifact@v4
