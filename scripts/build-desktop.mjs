@@ -20,8 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { readVersion } from './release.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const DESKTOP = join(ROOT, 'backend', 'desktop');
-const FRONTEND_DIST = join(ROOT, 'frontend', 'dist');
+const DESKTOP = join(ROOT, 'desktop');
+const FRONTEND_DIST = join(ROOT, 'web', 'dist');
 const EMBED_DIR = join(DESKTOP, 'frontend-dist');
 const OUT_DIR = join(DESKTOP, 'build');
 
@@ -66,7 +66,7 @@ function run(command, args, options = {}) {
 
 // 前端产物必须存在且带 index.html：否则嵌进去的会是一个打不开的窗口。
 function buildFrontend() {
-  run('pnpm', ['--dir', 'frontend', 'build']);
+  run('pnpm', ['--dir', 'web', 'build']);
   if (!existsSync(join(FRONTEND_DIST, 'index.html'))) {
     throw new Error('前端构建产物缺少 index.html，请检查 pnpm build');
   }
@@ -376,7 +376,7 @@ function checkPackageVersion(version) {
   const config = JSON.parse(readFileSync(path, 'utf8'));
   if (config.version !== version) {
     throw new Error(
-      `backend/desktop/mygo.json 的 version（${config.version}）与 VERSION（${version}）不一致：请把 mygo.json 的 version 改成 ${version}`,
+      `desktop/mygo.json 的 version（${config.version}）与 VERSION（${version}）不一致：请把 mygo.json 的 version 改成 ${version}`,
     );
   }
 }
@@ -412,7 +412,7 @@ function main() {
 
   if (!args.skipFrontend) buildFrontend();
   if (!existsSync(join(EMBED_DIR, 'index.html'))) {
-    throw new Error('缺少 backend/desktop/frontend-dist/index.html：先构建前端，或去掉 --skip-frontend');
+    throw new Error('缺少 desktop/frontend-dist/index.html：先构建前端，或去掉 --skip-frontend');
   }
 
   const outputs = platforms.map((platform) => buildFor(platform, version));

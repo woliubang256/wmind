@@ -63,7 +63,7 @@ services:
   web:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.frontend
+      dockerfile: deploy/Dockerfile.web
     image: ghcr.io/woliubang256/wmind-web:${WMIND_VERSION:-latest}
     restart: unless-stopped
     depends_on: [api]

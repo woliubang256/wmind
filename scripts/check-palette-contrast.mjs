@@ -2,7 +2,7 @@
 /**
  * 配色对比度校验（docs/06 §5.4 第 3 步、docs/08 §5 验收标准 5）。
  *
- * 读取 `frontend/src/editor/theme/palettes.json`，对每套配色的分支色与
+ * 读取 `web/src/editor/theme/palettes.json`，对每套配色的分支色与
  * 中心主题填充色，按「深灰 / 白字二选一」的规则算出实际会用的文字色，
  * 要求对比度 ≥ 4.5:1（WCAG AA 正文）。不达标就退出码 1，CI 会拦下来。
  *
@@ -16,7 +16,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DATA = resolve(HERE, '../frontend/src/editor/theme/palettes.json');
+const DATA = resolve(HERE, '../web/src/editor/theme/palettes.json');
 
 const DARK_TEXT = '#1F1F1F';
 const LIGHT_TEXT = '#FFFFFF';

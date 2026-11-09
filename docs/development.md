@@ -53,15 +53,15 @@ node scripts/build-desktop.mjs --package         # 额外产出安装包（.app/
 npm run test:desktop                            # 桌面模块测试（本地库 + 令牌 + 内层服务）
 ```
 
-桌面模块是嵌套 Go 模块 `backend/desktop`（要求 Go 1.27.3，mygo 的约束），
-后端服务仍是 Go 1.26.10，两者互不影响。`backend/desktop/frontend-dist/`
+桌面模块是嵌套 Go 模块 `desktop`（要求 Go 1.27.3，mygo 的约束），
+后端服务仍是 Go 1.26.10，两者互不影响。`desktop/frontend-dist/`
 不进版本库：默认构建嵌的是占位页，只有带 `-tags desktopfrontend` 的正式
 构建才嵌入真实前端产物。
 
-界面验收（需要后端与前端都起着，见 [`frontend/e2e/README.md`](../frontend/e2e/README.md)）：
+界面验收（需要后端与前端都起着，见 [`web/e2e/README.md`](../web/e2e/README.md)）：
 
 ```bash
-cd frontend && npm run e2e
+cd web && npm run e2e
 ```
 
 ## 目录结构
@@ -81,7 +81,11 @@ wmind/
 │   │   ├── convert/          导入导出适配器
 │   │   └── pkg/              apperr / logger / id / reqid 等通用件
 │   └── db/                   两套迁移集、sqlc 配置与查询
-├── frontend/                 React 前端（Vite + TypeScript + Tailwind v4，自建 UI 组件）
+├── desktop/                  桌面客户端（嵌套 Go 模块，模块路径 .../backend/desktop）
+│   ├── main.go               入口：mygo 窗口 + 本机后端 + 内层 HTTP 服务
+│   ├── internal/             localserver / localmode / syncengine / syncstate / cloud / deskapi
+│   └── resources/            图标与 DMG 背景图
+├── web/                      React 前端（Vite + TypeScript + Tailwind v4，自建 UI 组件）
 │   └── e2e/                  界面验收脚本，见 e2e/README.md
 ├── deploy/                   Compose、Dockerfile、Nginx 配置
 ├── docs/                     需求、架构、接口、部署文档

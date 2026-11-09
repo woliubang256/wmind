@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VERSION_RE = /^(0|[1-9]\d*)\.([0-9])\.([0-9])$/;
-const PACKAGE_FILES = ['package.json', 'frontend/package.json'];
+const PACKAGE_FILES = ['package.json', 'web/package.json'];
 const VERSION_SYMBOL = 'github.com/woliubang256/wmind/backend/internal/config.Version';
 
 export function parseVersion(value) {
@@ -120,7 +120,7 @@ export function stagePackage(root, destination, tag, binary, notes) {
   checkTag(tag, root);
   const files = [
     ['VERSION', 'VERSION'], ['LICENSE', 'LICENSE'], ['backend/.env.example', 'backend/.env.example'],
-    ['frontend/dist', 'frontend/dist'], ['deploy/nginx.conf', 'deploy/nginx.conf'],
+    ['web/dist', 'web/dist'], ['deploy/nginx.conf', 'deploy/nginx.conf'],
     ['deploy/scripts/backup.sh', 'deploy/scripts/backup.sh'], ['deploy/scripts/restore.sh', 'deploy/scripts/restore.sh'],
   ];
   for (const [source, target] of files) copyRegular(join(root, source), join(destination, target));
@@ -142,13 +142,13 @@ export function stagePackage(root, destination, tag, binary, notes) {
     '```sh\ndocker compose pull\ndocker compose up -d\n```\n\n' +
     `PostgreSQL 使用 docker compose -f docker-compose.postgres.yml。默认固定 ${tag}；私有 GHCR 镜像需先 docker login ghcr.io。\n\n` +
     `## 二进制部署\n\n在 backend/ 中将 .env.example 复制为 .env，设置 WMIND_ENV=production、JWT 密钥和管理员密码，然后运行 ./wmind-server。\n\n` +
-    `将 frontend/dist 交由静态文件服务器托管，SPA 回退到 index.html，/api/ 和 /uploads/ 代理到服务的 8080 端口。deploy/nginx.conf 是容器网络示例，独立部署需修改 root 和 api 上游地址。\n\n` +
+    `将 web/dist 交由静态文件服务器托管，SPA 回退到 index.html，/api/ 和 /uploads/ 代理到服务的 8080 端口。deploy/nginx.conf 是容器网络示例，独立部署需修改 root 和 api 上游地址。\n\n` +
     `访问 /api/v1/health/ready 检查就绪；/api/v1/site/config 的 version 应为 ${tag}。升级前备份数据库、上传文件和稳定的加密密钥。\n`);
 }
 
 export function packageRelease(tag, output, root = ROOT) {
   checkTag(tag, root);
-  if (!existsSync(join(root, 'frontend/dist/index.html'))) throw new Error('请先构建 frontend/dist');
+  if (!existsSync(join(root, 'web/dist/index.html'))) throw new Error('请先构建 web/dist');
   const out = resolve(output);
   const notes = join(out, 'CHANGELOG.md');
   if (!existsSync(notes)) throw new Error('请先生成输出目录下的 CHANGELOG.md');

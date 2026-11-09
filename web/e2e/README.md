@@ -50,7 +50,7 @@ cd frontend && pnpm add -D playwright-core@1.63.0
 或者临时把已有的那份挂进来（不提交，`node_modules/` 在 `.gitignore` 里）：
 
 ```bash
-ln -s /path/to/playwright-core frontend/node_modules/playwright-core
+ln -s /path/to/playwright-core web/node_modules/playwright-core
 ```
 
 `playwright-core` 不自带浏览器。本机用的是缓存里的

@@ -43,7 +43,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
-          cache-dependency-path: backend/desktop/go.sum
+          cache-dependency-path: desktop/go.sum
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -56,7 +56,7 @@ jobs:
         with:
           node-version: 22.23.4
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: web/pnpm-lock.yaml
 
       # 标签必须与 VERSION 一致：否则安装包、更新清单和 tag 会各说各话。
       - name: Verify tag matches VERSION
@@ -70,10 +70,10 @@ jobs:
           node scripts/release.mjs check "v${tag_version}"
 
       - name: Install frontend dependencies
-        run: pnpm --dir frontend install --frozen-lockfile
+        run: pnpm --dir web install --frozen-lockfile
 
       - name: Test desktop module
-        run: cd backend/desktop && go vet ./... && go test ./...
+        run: cd desktop && go vet ./... && go test ./...
 
       # Windows 安装包（NSIS）在 ubuntu 上一条 apt 就有，比 macOS 上 brew 快得多。
       - name: Install NSIS
@@ -90,13 +90,13 @@ jobs:
         with:
           name: wmind-packages
           path: |
-            backend/desktop/build/**/*.zip
-            backend/desktop/build/**/*.tar.gz
-            backend/desktop/build/**/*setup*.exe
-            backend/desktop/build/**/update-*.json
-            backend/desktop/build/**/install.sh
-            backend/desktop/build/**/install.ps1
-            backend/desktop/build/**/SHA256SUMS
+            desktop/build/**/*.zip
+            desktop/build/**/*.tar.gz
+            desktop/build/**/*setup*.exe
+            desktop/build/**/update-*.json
+            desktop/build/**/install.sh
+            desktop/build/**/install.ps1
+            desktop/build/**/SHA256SUMS
           if-no-files-found: error
 
       # .app 单独传：下一个作业要拿它打 dmg。
@@ -105,8 +105,8 @@ jobs:
         with:
           name: wmind-apps
           path: |
-            backend/desktop/build/darwin-arm64/wmind.app/**
-            backend/desktop/build/darwin-amd64/wmind.app/**
+            desktop/build/darwin-arm64/wmind.app/**
+            desktop/build/darwin-amd64/wmind.app/**
           if-no-files-found: error
 
   dmg:
@@ -127,7 +127,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: wmind-apps
-          path: backend/desktop/build
+          path: desktop/build
 
       # Linux 上打出来的 .app 是**未签名**的（codesign 只有 macOS 有），而 Apple
       # Silicon 上未签名的可执行文件会被直接 kill。这里补一次 ad-hoc 签名，
@@ -135,8 +135,8 @@ jobs:
       - name: Sign app bundles (ad-hoc)
         run: |
           for arch in arm64 amd64; do
-            codesign --force --deep --sign - "backend/desktop/build/darwin-${arch}/wmind.app"
-            codesign --verify --verbose=2 "backend/desktop/build/darwin-${arch}/wmind.app"
+            codesign --force --deep --sign - "desktop/build/darwin-${arch}/wmind.app"
+            codesign --verify --verbose=2 "desktop/build/darwin-${arch}/wmind.app"
           done
 
       - name: Build DMGs
@@ -149,7 +149,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wmind-dmg
-          path: backend/desktop/build/darwin-*/*.dmg
+          path: desktop/build/darwin-*/*.dmg
           if-no-files-found: error
 
   publish:

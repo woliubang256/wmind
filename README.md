@@ -70,7 +70,7 @@ go run ./cmd/server
 ### 前端（本地开发）
 
 ```bash
-cd frontend
+cd web
 pnpm install
 pnpm dev            # http://127.0.0.1:5173
 ```

@@ -22,8 +22,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const MANIFEST_PATH = join(ROOT, 'frontend/public/fonts/manifest.json');
-const OUTPUT_PATH = join(ROOT, 'frontend/src/editor/theme/font-coverage.json');
+const MANIFEST_PATH = join(ROOT, 'web/public/fonts/manifest.json');
+const OUTPUT_PATH = join(ROOT, 'web/src/editor/theme/font-coverage.json');
 
 /**
  * 解析一条 CSS `unicode-range` 值。

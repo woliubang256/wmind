@@ -544,7 +544,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 ### 5.4 模板接口
 
 **内置的 8 个模板不经过这里**：它们编译进前端包
-（`frontend/src/features/templates/builtin.ts`）。三条理由：
+（`web/src/features/templates/builtin.ts`）。三条理由：
 
 1. 选择对话框要渲染**实时预览**，预览需要文档，所以文档必须在请求回来之前就存在；
 2. 模板名是 i18n 键，一个 TEXT 列存不下一份在 zh-CN 与 en-US 里都成立的文案；
@@ -607,7 +607,7 @@ router   := httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Map: mapSvc, ...})
 
 **内置的 10 套配色不走这个接口**（M3.5 的收敛，见 ADR-019）：
 
-- 它们是前端包内的静态资源 `frontend/src/editor/theme/palettes.json`。编辑器首帧就要
+- 它们是前端包内的静态资源 `web/src/editor/theme/palettes.json`。编辑器首帧就要
   用 `resolveStyle` 算出每个节点的填充与字色，不能等一个请求回来——否则打开导图
   会先白一帧再上色，离线打开则完全不可用。
 - 若同时往 `themes` 表里种一份，就出现两份「事实来源」：改配色要改两处，还要再

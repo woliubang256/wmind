@@ -3,15 +3,32 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { inflateSync } from 'node:zlib';
 
+/**
+ * 取某个作业的文本。
+ *
+ * ci.yml 里不止一个作业（还有桌面端的构建作业），而「先校验整理稿、再做耗时
+ * 安装」这条约束只针对**发布作业**——直接在整个文件里按步骤名查找会命中桌面
+ * 作业里的同名步骤，断言就失去意义了。
+ */
+function jobSection(workflow, job) {
+  const start = workflow.indexOf(`\n  ${job}:\n`);
+  if (start < 0) throw new Error(`找不到作业 ${job}`);
+  const next = workflow.indexOf('\n  ', start + 1);
+  const afterNextJob = /\n  [a-z][a-z0-9-]*:\n/.exec(workflow.slice(start + 1));
+  const end = afterNextJob ? start + 1 + afterNextJob.index : workflow.length;
+  return workflow.slice(start, end);
+}
+
 test('构建前校验整理稿，发布页与附件和部署包共用同一日志输出', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const steps = workflow.split('\n      - name: ').slice(1);
+  const releaseJob = jobSection(workflow, 'verify');
+  const steps = releaseJob.split('\n      - name: ').slice(1);
   const render = steps.findIndex(step => step.startsWith('Validate and render curated changelog\n'));
   const dependencies = steps.findIndex(step => step.startsWith('Install frontend dependencies\n'));
   const archives = steps.findIndex(step => step.includes('release.mjs package "$GITHUB_REF_NAME" release'));
   assert.ok(render >= 0 && render < dependencies && dependencies < archives, '缺稿须在耗时安装与构建之前失败');
   assert.match(steps[render], /release\.mjs changelog "\$GITHUB_REF_NAME" release\/CHANGELOG\.md/);
-  assert.equal((workflow.match(/release\.mjs changelog /g) ?? []).length, 1, '只生成一次经过校验的整理稿');
+  assert.equal((releaseJob.match(/release\.mjs changelog /g) ?? []).length, 1, '只生成一次经过校验的整理稿');
   const release = steps.find(step => step.includes('uses: softprops/action-gh-release@'));
   assert.match(release, /body_path: release\/CHANGELOG\.md/);
   assert.match(release, /files:\s*\|[\s\S]*\n\s+release\/CHANGELOG\.md\n/);

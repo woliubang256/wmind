@@ -6,7 +6,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 BACKEND  := backend
-FRONTEND := frontend
+WEB := web
 
 # 版本号注入到 config.Version，由 GET /site/config 返回。
 # VERSION 是发布元数据的唯一来源；可显式覆盖以构建测试版本。
@@ -27,11 +27,11 @@ dev-backend: ## 本地启动后端（SQLite，:8080）
 
 .PHONY: dev-frontend
 dev-frontend: ## 本地启动前端（Vite，:5173）
-	cd $(FRONTEND) && pnpm dev
+	cd $(WEB) && pnpm dev
 
 .PHONY: test-frontend
 test-frontend: ## 运行前端类型检查、单元测试与生产构建
-	cd $(FRONTEND) && pnpm typecheck && pnpm test && pnpm build
+	cd $(WEB) && pnpm typecheck && pnpm test && pnpm build
 
 # ── 构建与检查 ───────────────────────────────────────
 

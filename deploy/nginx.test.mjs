@@ -40,7 +40,7 @@ test('分享密码不进入内置访问日志或同源引用地址', () => {
   assert.match(config, /access_log\s+\/var\/log\/nginx\/access\.log\s+wmind_privacy\s*;/);
   assert.doesNotMatch(config, /strict-origin-when-cross-origin/);
   assert.match(config, /Referrer-Policy "strict-origin"/);
-  const html = readFileSync(join(root, 'frontend/index.html'), 'utf8');
+  const html = readFileSync(join(root, 'web/index.html'), 'utf8');
   assert.match(html, /<meta name="referrer" content="strict-origin"\s*\/?\s*>/);
 });
 
@@ -70,8 +70,8 @@ test('部署包保留与 Web 镜像相同的上传代理配置', t => {
   };
   put('VERSION', '1.0.0\n');
   put('package.json', '{"version":"1.0.0"}');
-  put('frontend/package.json', '{"version":"1.0.0"}');
-  for (const path of ['LICENSE', 'backend/.env.example', 'frontend/dist/index.html', 'deploy/scripts/backup.sh', 'deploy/scripts/restore.sh']) put(path, 'fixture');
+  put('web/package.json', '{"version":"1.0.0"}');
+  for (const path of ['LICENSE', 'backend/.env.example', 'web/dist/index.html', 'deploy/scripts/backup.sh', 'deploy/scripts/restore.sh']) put(path, 'fixture');
   put('deploy/nginx.conf', config);
   put('deploy/.env.example', 'WMIND_VERSION=latest\n');
   for (const path of ['deploy/docker-compose.yml', 'deploy/docker-compose.postgres.yml']) put(path, 'services:\n  api:\n    image: api:${WMIND_VERSION:-latest}\n');
@@ -83,6 +83,6 @@ test('部署包保留与 Web 镜像相同的上传代理配置', t => {
   assert.equal(packaged, config);
   uploadsContract(packaged);
   backupContract(packaged);
-  const dockerfile = readFileSync(join(root, 'deploy/Dockerfile.frontend'), 'utf8');
+  const dockerfile = readFileSync(join(root, 'deploy/Dockerfile.web'), 'utf8');
   assert.match(dockerfile, /COPY\s+deploy\/nginx\.conf\s+\/etc\/nginx\/conf\.d\/default\.conf/);
 });

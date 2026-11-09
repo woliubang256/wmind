@@ -15,7 +15,7 @@
  * 这是刻意的——字体是构建产物，不是手写源码。
  *
  * 用法：node scripts/fetch-fonts.mjs [--family sans] [--css-only]
- * 产物：frontend/public/fonts/{<family>.css,manifest.json,OFL-*.txt,<family>/*.woff2}
+ * 产物：web/public/fonts/{<family>.css,manifest.json,OFL-*.txt,<family>/*.woff2}
  *
  * **每个字体族一份 CSS**，不是一个总文件：`@font-face` 有 700 多条，合成一份是
  * 700 KB（gzip 218 KB）。而一张导图通常只用一族，合成一份等于让所有人替另外两族
@@ -29,7 +29,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT_DIR = join(ROOT, 'frontend/public/fonts');
+const OUT_DIR = join(ROOT, 'web/public/fonts');
 
 /**
  * 字体族清单。

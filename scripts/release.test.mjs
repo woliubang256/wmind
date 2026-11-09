@@ -15,7 +15,7 @@ function fixture(t, version = '1.0.0') {
   };
   put('VERSION', `${version}\n`);
   put('package.json', `${JSON.stringify({ name: 'fixture', version })}\n`);
-  put('frontend/package.json', `${JSON.stringify({ name: 'fixture-frontend', version })}\n`);
+  put('web/package.json', `${JSON.stringify({ name: 'fixture-frontend', version })}\n`);
   return { root, put };
 }
 
@@ -35,8 +35,8 @@ test('标签与三个版本来源一致，递增同步包元数据', t => {
   assert.throws(() => checkTag('v1.9.8', root), /不一致/);
   assert.equal(bumpVersion(root), '2.0.0');
   assert.equal(readVersion(root), '2.0.0');
-  put('frontend/package.json', '{"version":"1.9.9"}');
-  assert.throws(() => readVersion(root), /frontend\/package.json/);
+  put('web/package.json', '{"version":"1.9.9"}');
+  assert.throws(() => readVersion(root), /web\/package.json/);
   assert.throws(() => bumpVersion(root), /不一致/);
   assert.equal(readFileSync(join(root, 'VERSION'), 'utf8'), '2.0.0\n');
 });
@@ -129,7 +129,7 @@ test('CLI 输出与整理稿一致，缺稿不会覆盖已有输出', t => {
 
 test('部署包白名单排除配置、Git凭据与数据，并固定镜像版本', t => {
   const { root, put } = fixture(t);
-  for (const file of ['LICENSE', 'backend/.env.example', 'frontend/dist/index.html', 'frontend/dist/assets/app.js', 'deploy/nginx.conf', 'deploy/scripts/backup.sh', 'deploy/scripts/restore.sh']) put(file, 'safe');
+  for (const file of ['LICENSE', 'backend/.env.example', 'web/dist/index.html', 'web/dist/assets/app.js', 'deploy/nginx.conf', 'deploy/scripts/backup.sh', 'deploy/scripts/restore.sh']) put(file, 'safe');
   put('backend/wmind-server', 'binary');
   put('changelogs/v1.0.0.md', firstNotes);
   put('notes.md', firstNotes);
@@ -138,19 +138,19 @@ test('部署包白名单排除配置、Git凭据与数据，并固定镜像版�
   // Use the actual Compose shape (build args included) to exercise package filtering.
   put('deploy/docker-compose.yml', compose);
   put('deploy/docker-compose.postgres.yml', compose);
-  for (const file of ['.git/config', '.env', 'backend/.env', 'deploy/.env', 'backend/data/wmind.db', 'frontend/node_modules/secret.txt']) put(file, 'never-package');
+  for (const file of ['.git/config', '.env', 'backend/.env', 'deploy/.env', 'backend/data/wmind.db', 'web/node_modules/secret.txt']) put(file, 'never-package');
   const destination = join(root, 'staged');
   stagePackage(root, destination, 'v1.0.0', join(root, 'backend/wmind-server'), join(root, 'notes.md'));
   assert.equal(readFileSync(join(destination, 'backend/wmind-server'), 'utf8'), 'binary');
   assert.equal(readFileSync(join(destination, 'CHANGELOG.md'), 'utf8'), changelog('v1.0.0', root));
-  assert.equal(readFileSync(join(destination, 'frontend/dist/assets/app.js'), 'utf8'), 'safe');
-  for (const file of ['.git', '.env', 'backend/.env', 'deploy/.env', 'backend/data', 'frontend/node_modules']) assert.equal(existsSync(join(destination, file)), false, file);
+  assert.equal(readFileSync(join(destination, 'web/dist/assets/app.js'), 'utf8'), 'safe');
+  for (const file of ['.git', '.env', 'backend/.env', 'deploy/.env', 'backend/data', 'web/node_modules']) assert.equal(existsSync(join(destination, file)), false, file);
   assert.match(readFileSync(join(destination, 'deploy/.env.example'), 'utf8'), /^WMIND_VERSION=v1.0.0\n/);
   const packaged = readFileSync(join(destination, 'deploy/docker-compose.yml'), 'utf8');
   assert.doesNotMatch(packaged, /^\s+(?:build|context|dockerfile|VERSION|args):/m);
   assert.match(packaged, /WMIND_VERSION:-v1.0.0/);
   assert.match(packaged, /ports: \[8080\]/);
-  assert.deepEqual(readdirSync(destination).sort(), ['CHANGELOG.md', 'LICENSE', 'RELEASE.md', 'VERSION', 'backend', 'deploy', 'frontend']);
+  assert.deepEqual(readdirSync(destination).sort(), ['CHANGELOG.md', 'LICENSE', 'RELEASE.md', 'VERSION', 'backend', 'deploy', 'web']);
   put('release/CHANGELOG.md', 'stale');
   assert.throws(() => packageRelease('v1.0.0', join(root, 'release'), root), /日志.*不一致/, '须在运行 Go 编译前拒绝旧日志');
 });
@@ -159,10 +159,10 @@ test('部署包拒绝静态目录中的符号链接', t => {
   const { root, put } = fixture(t);
   put('LICENSE', 'safe');
   put('backend/.env.example', 'safe');
-  put('frontend/dist/index.html', 'safe');
+  put('web/dist/index.html', 'safe');
   put('changelogs/v1.0.0.md', firstNotes);
   put('notes.md', firstNotes);
   put('outside-secret', 'never-package');
-  symlinkSync(join(root, 'outside-secret'), join(root, 'frontend/dist/leak'));
+  symlinkSync(join(root, 'outside-secret'), join(root, 'web/dist/leak'));
   assert.throws(() => stagePackage(root, join(root, 'staged'), 'v1.0.0', 'unused', join(root, 'notes.md')), /符号链接/);
 });

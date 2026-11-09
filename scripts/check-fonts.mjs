@@ -34,10 +34,10 @@ import { fileURLToPath } from 'node:url';
 import { renderCoverage } from './gen-font-coverage.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const FONT_DIR = join(ROOT, 'frontend/public/fonts');
+const FONT_DIR = join(ROOT, 'web/public/fonts');
 const MANIFEST_PATH = join(FONT_DIR, 'manifest.json');
-const FONT_REGISTRY = join(ROOT, 'frontend/src/editor/theme/fonts.ts');
-const COVERAGE_PATH = join(ROOT, 'frontend/src/editor/theme/font-coverage.json');
+const FONT_REGISTRY = join(ROOT, 'web/src/editor/theme/fonts.ts');
+const COVERAGE_PATH = join(ROOT, 'web/src/editor/theme/font-coverage.json');
 
 const failures = [];
 const notes = [];
@@ -345,7 +345,7 @@ function main() {
   try {
     coverageOnDisk = readFileSync(COVERAGE_PATH, 'utf8');
   } catch {
-    fail('读不到 frontend/src/editor/theme/font-coverage.json（请跑 node scripts/gen-font-coverage.mjs）');
+    fail('读不到 web/src/editor/theme/font-coverage.json（请跑 node scripts/gen-font-coverage.mjs）');
   }
   if (coverageOnDisk !== '') {
     if (coverageOnDisk !== renderCoverage(manifest)) {

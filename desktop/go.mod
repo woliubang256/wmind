@@ -1,8 +1,13 @@
 module github.com/woliubang256/wmind/backend/desktop
 
-// mygo 要求 Go 1.27.3；后端服务仍是 1.26.10（安全基线）。模块路径落在
-// backend 之下，因此这里可以直接复用 backend/internal/*，而 Web 侧工具链
-// 不受影响。详见 .agents/notes/proposed/architecture/2026-11-08-wmind-desktop-client.md
+// mygo 要求 Go 1.27.3；后端服务仍是 1.26.10（安全基线），所以桌面端是独立模块。
+//
+// **模块路径必须落在 backend 之下**：Go 的 internal 规则按导入路径前缀判定，
+// 只有 `github.com/woliubang256/wmind/backend/...` 才能 import backend/internal/*。
+// 目录位置与模块路径无关，所以代码放在仓库根目录的 desktop/，模块路径仍是
+// .../backend/desktop——这样既得到「backend / desktop / web 同级」的布局，又不用
+// 把 backend 的内部包提升成公开 API。详见
+// .agents/notes/implemented/architecture/2026-11-08-wmind-desktop-client.md
 go 1.27.3
 
 require (
@@ -89,4 +94,4 @@ require (
 	modernc.org/sqlite v1.51.0 // indirect
 )
 
-replace github.com/woliubang256/wmind/backend => ../
+replace github.com/woliubang256/wmind/backend => ../backend

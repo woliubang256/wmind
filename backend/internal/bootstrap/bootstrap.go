@@ -1,7 +1,7 @@
 // Package bootstrap 装配 wmind 的运行时依赖。
 //
 // 它把「用哪个方言、开哪些后台任务、handler 怎么拼」集中在一处，让
-// `cmd/server`（Web 形态）与桌面端（`backend/desktop`）共用同一份装配，
+// `cmd/server`（Web 形态）与桌面端（`desktop`）共用同一份装配，
 // 差异只留在配置来源、数据目录与身份来源上——业务代码不必为端形态分叉。
 //
 // 依赖方向与 docs/02 §4 一致：bootstrap → handler/service/repository，
