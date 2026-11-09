@@ -1,0 +1,11 @@
+name: Probe macOS runner
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/probe-macos.yml']
+jobs:
+  probe:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - run: echo "macos runner ok" && sw_vers && uname -m
