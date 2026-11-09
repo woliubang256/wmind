@@ -19,7 +19,7 @@ import { UpdateDialog, useAutoUpdateCheck } from '@/features/updates/update-dial
 import { AccountDialog } from '@/features/account/account-dialog';
 import { AboutDialog } from '@/features/about/about-dialog';
 import { ShortcutsDialog } from '@/features/shortcuts/shortcuts-dialog';
-import { fetchDesktopStatus, openDeployGuide, openSiteSettings } from '@/lib/desktop';
+import { disconnectCloud, fetchDesktopStatus, openDeployGuide, openSiteSettings } from '@/lib/desktop';
 import { useQuery } from '@tanstack/react-query';
 
 function LoadingPage() {
@@ -324,6 +324,24 @@ export function AppLayout() {
                 links={userLinks}
                 isActive={isActive}
                 onOpenAccount={localDesktop ? () => setAccountOpen(true) : undefined}
+                account={localDesktop && cloudStatus.data?.cloud.connected
+                  ? {
+                      name: cloudStatus.data.cloud.nickname || cloudStatus.data.cloud.email || t('desktop.localUser'),
+                      detail: cloudStatus.data.cloud.email || cloudStatus.data.cloud.serverUrl,
+                    }
+                  : undefined}
+                onSignOut={localDesktop && cloudStatus.data?.cloud.connected
+                  ? () => {
+                      void disconnectCloud()
+                        .then(() => {
+                          toast.success(t('desktop.cloud.disconnectSuccess'));
+                          void cloudStatus.refetch();
+                        })
+                        .catch((error) => {
+                          toast.error(error instanceof Error ? error.message : t('desktop.cloud.connectError'));
+                        });
+                    }
+                  : undefined}
                 siteSettings={siteSettings}
                 onAbout={localDesktop ? () => setAboutOpen(true) : undefined}
                 onShortcuts={localDesktop ? () => setShortcutsOpen(true) : undefined}

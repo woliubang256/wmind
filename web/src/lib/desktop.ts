@@ -87,6 +87,10 @@ export interface CloudStatus {
   email?: string;
   /** 云端账号昵称（/auth/me），顶栏登录后显示它。 */
   nickname?: string;
+  /** 上次登录过的服务器（登出后仍在），用于预填登录表单。 */
+  lastServerUrl?: string;
+  /** 上次登录过的账号（登出后仍在）。 */
+  lastIdentifier?: string;
   /** 云端账号角色：只有 admin 才看得到「网站设置」。 */
   role?: 'admin' | 'user' | string;
   lastSyncedAt?: string;

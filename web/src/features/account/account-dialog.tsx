@@ -138,6 +138,14 @@ export function AccountDialog({ open, onClose }: { open: boolean; onClose: () =>
   const cloud = status.data?.cloud;
   const connected = cloud?.connected === true;
 
+  // 登出后仍记住上次的服务器与账号：打开表单就预填，省得重敲。
+  // 只在用户还没输入时填，避免覆盖正在编辑的内容。
+  useEffect(() => {
+    if (!open || connected) return;
+    if (serverUrl === '' && cloud?.lastServerUrl) setServerUrl(cloud.lastServerUrl);
+    if (identifier === '' && cloud?.lastIdentifier) setIdentifier(cloud.lastIdentifier);
+  }, [open, connected, cloud?.lastServerUrl, cloud?.lastIdentifier, serverUrl, identifier]);
+
   return (
     <Modal
       open={open}

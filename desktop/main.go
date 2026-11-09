@@ -267,7 +267,9 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		PreferredLanguages: locale.Preferred,
 		Desktop: deskapi.New(deskapi.Deps{
 			Engine: engine, Store: syncStore, Creds: creds, Version: appVersion, Updater: updates,
-			OpenExternal: mygo.Shell.OpenExternal,
+			OpenExternal:       mygo.Shell.OpenExternal,
+			Logger:             logger,
+			LastConnectionPath: filepath.Join(paths.Root, "last-connection.json"),
 		}),
 	})
 	if err != nil {

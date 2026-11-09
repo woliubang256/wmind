@@ -11,6 +11,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,41 @@ type SecretStore interface {
 	Set(key string, value []byte) error
 	Get(key string) ([]byte, error)
 	Delete(key string) error
+}
+
+// lastConnection 记住上次登录过的服务器与账号，**登出后不清**：下次登录时
+// 预填，省得用户重敲地址。只存这两项，不含任何凭据。
+type lastConnection struct {
+	ServerURL  string `json:"serverUrl"`
+	Identifier string `json:"identifier"`
+}
+
+func (a *api) saveLastConnection(serverURL, identifier string) {
+	if a.deps.LastConnectionPath == "" || serverURL == "" {
+		return
+	}
+	raw, err := json.Marshal(lastConnection{ServerURL: serverURL, Identifier: identifier})
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(a.deps.LastConnectionPath, raw, 0o600); err != nil && a.deps.Logger != nil {
+		a.deps.Logger.Warn("cloud: save last connection failed", "err", err)
+	}
+}
+
+func (a *api) loadLastConnection() lastConnection {
+	if a.deps.LastConnectionPath == "" {
+		return lastConnection{}
+	}
+	raw, err := os.ReadFile(a.deps.LastConnectionPath)
+	if err != nil {
+		return lastConnection{}
+	}
+	var last lastConnection
+	if err := json.Unmarshal(raw, &last); err != nil {
+		return lastConnection{}
+	}
+	return last
 }
 
 // credentialKey 是凭据在系统存储里的键。
@@ -131,6 +167,8 @@ type Deps struct {
 	OpenExternal func(url string) error
 	// Logger 记录非致命的降级（比如拉不到远端资料）。
 	Logger *slog.Logger
+	// LastConnectionPath 是「上次登录的服务器与账号」的文件路径（非机密）。
+	LastConnectionPath string
 }
 
 // New 构造 /desktop/ 的 Handler。
@@ -201,12 +239,16 @@ func (a *api) login(ctx context.Context, serverURL, identifier, password string)
 // ── 状态 ────────────────────────────────────────────────────────────────────
 
 type cloudStatus struct {
-	Connected    bool   `json:"connected"`
-	ServerURL    string `json:"serverUrl,omitempty"`
-	Email        string `json:"email,omitempty"`
-	Nickname     string `json:"nickname,omitempty"`
-	Role         string `json:"role,omitempty"`
-	LastSyncedAt string `json:"lastSyncedAt,omitempty"`
+	Connected bool   `json:"connected"`
+	ServerURL string `json:"serverUrl,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Nickname  string `json:"nickname,omitempty"`
+	// LastServerURL / LastIdentifier 是上次登录过的服务器与账号，登出后仍在，
+	// 供登录表单预填。
+	LastServerURL  string `json:"lastServerUrl,omitempty"`
+	LastIdentifier string `json:"lastIdentifier,omitempty"`
+	Role           string `json:"role,omitempty"`
+	LastSyncedAt   string `json:"lastSyncedAt,omitempty"`
 }
 
 type statusResponse struct {
@@ -229,6 +271,9 @@ func (a *api) status(w http.ResponseWriter, r *http.Request) {
 	resp.Cloud.Connected = a.deps.Engine.Connected()
 	resp.Cloud.ServerURL = a.deps.Engine.ServerURL()
 
+	last := a.loadLastConnection()
+	resp.Cloud.LastServerURL = last.ServerURL
+	resp.Cloud.LastIdentifier = last.Identifier
 	if creds, err := a.deps.Creds.Load(); err == nil && creds != nil {
 		resp.Cloud.Email = creds.Email
 		resp.Cloud.Role = creds.Role
@@ -310,6 +355,7 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.deps.Engine.Connect(session.ServerURL, client)
+	a.saveLastConnection(session.ServerURL, req.Identifier)
 	if err := a.deps.Creds.Save(cloudcreds.Credentials{
 		ServerURL: session.ServerURL, Identifier: req.Identifier,
 		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,
@@ -383,6 +429,7 @@ func (a *api) verifyTwoFactor(w http.ResponseWriter, r *http.Request) {
 	a.logProfileError(pending.client.Me(r.Context()))
 	session := pending.client.Session()
 	a.deps.Engine.Connect(session.ServerURL, pending.client)
+	a.saveLastConnection(session.ServerURL, pending.identifier)
 	if err := a.deps.Creds.Save(cloudcreds.Credentials{
 		ServerURL: session.ServerURL, Identifier: pending.identifier,
 		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,

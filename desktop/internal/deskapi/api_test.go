@@ -78,7 +78,11 @@ func newFixture(t *testing.T) *fixture {
 	creds := &CredentialStore{Path: filepath.Join(dir, "cloud.json"), Secret: strings.Repeat("ab", 32)}
 	cloud := newFakeCloudServer(t)
 
-	api := New(Deps{Engine: engine, Store: store, Creds: creds, Version: "1.0.0"})
+	api := New(Deps{
+		Engine: engine, Store: store, Creds: creds, Version: "1.0.0",
+		// 上次连接信息落到临时文件：登出后预填表单靠它。
+		LastConnectionPath: filepath.Join(t.TempDir(), "last-connection.json"),
+	})
 	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud, store: store}
 }
 
@@ -789,5 +793,30 @@ func TestCredentialsFallbackToEncryptedFile(t *testing.T) {
 	}
 	if password, err := loaded.Decrypt(store.Secret); err != nil || password != "pw" {
 		t.Fatalf("回退密码解不开: %q %v", password, err)
+	}
+}
+
+// 登出后仍记住服务器与账号：下次登录表单要预填，不用重敲。
+func TestDisconnectKeepsLastConnection(t *testing.T) {
+	f := newFixture(t)
+	resp := f.do(t, http.MethodPost, "/desktop/cloud/connect", map[string]any{
+		"serverUrl": f.cloud.server.URL, "identifier": "a@example.test", "password": "pw",
+	})
+	if resp.status != http.StatusOK {
+		t.Fatalf("连接 = %d %s", resp.status, string(resp.Data))
+	}
+
+	resp = f.do(t, http.MethodPost, "/desktop/cloud/disconnect", nil)
+	if resp.status != http.StatusOK {
+		t.Fatalf("断开 = %d", resp.status)
+	}
+
+	status := dataOf(t, f.do(t, http.MethodGet, "/desktop/status", nil))
+	cloudStatus := status["cloud"].(map[string]any)
+	if cloudStatus["connected"] != false {
+		t.Fatalf("断开后不应还是已连接: %#v", cloudStatus)
+	}
+	if cloudStatus["lastServerUrl"] != f.cloud.server.URL || cloudStatus["lastIdentifier"] != "a@example.test" {
+		t.Fatalf("应当记住上次的服务器与账号: %#v", cloudStatus)
 	}
 }
