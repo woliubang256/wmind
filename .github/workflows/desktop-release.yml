@@ -99,6 +99,7 @@ jobs:
             desktop/build/**/*.deb
             desktop/build/**/PKGBUILD
             desktop/build/**/*.tar.gz
+            desktop/build/**/*.delta
             desktop/build/**/*setup*.exe
             desktop/build/**/update-*.json
             desktop/build/**/install.sh
@@ -152,6 +153,7 @@ jobs:
           path: |
             desktop/build/darwin-*/*.dmg
             desktop/build/darwin-*/*.tar.gz
+            desktop/build/darwin-*/*.delta
             desktop/build/darwin-*/update-*.json
             desktop/build/darwin-*/install.sh
           if-no-files-found: error
