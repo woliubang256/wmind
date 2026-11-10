@@ -36,6 +36,21 @@ func (r *fakeMapRepo) clone(m *domain.Map) *domain.Map {
 	return &copied
 }
 
+// ListChangedSince 是增量同步用的查询：返回 since 之后变化的行（含回收站）。
+func (r *fakeMapRepo) ListChangedSince(_ context.Context, ownerID int64, since time.Time) ([]*domain.Map, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []*domain.Map
+	for _, row := range r.rows {
+		if row.OwnerID != ownerID || !row.UpdatedAt.After(since) {
+			continue
+		}
+		copied := *row
+		out = append(out, &copied)
+	}
+	return out, nil
+}
+
 func (r *fakeMapRepo) find(uid string, ownerID int64, includeDeleted bool) *domain.Map {
 	for _, row := range r.rows {
 		if row.UID != uid || row.OwnerID != ownerID {
@@ -484,5 +499,22 @@ func TestMapErrorMapping(t *testing.T) {
 	}
 	if code := apperr.From(mapMapError(errors.New("boom"))).Code; code != apperr.CodeInternalError {
 		t.Errorf("code = %s", code)
+	}
+}
+
+// 零值 since 表示「从头开始」，不是参数错误：新装客户端的第一次同步没有游标。
+// 早期这里返回 422，导致全新安装的第一次同步必定失败。
+func TestListChangedAcceptsZeroSince(t *testing.T) {
+	svc, _ := newMapService(t, nil)
+	created, err := svc.Create(context.Background(), 1, CreateMapInput{Title: "图", Document: validDoc(t, "图")})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	changed, err := svc.ListChanged(context.Background(), 1, time.Time{})
+	if err != nil {
+		t.Fatalf("零值起点应当被接受: %v", err)
+	}
+	if len(changed) != 1 || changed[0].UID != created.UID {
+		t.Fatalf("应当返回全部导图，实际 %d", len(changed))
 	}
 }

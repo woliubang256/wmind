@@ -234,6 +234,11 @@ func (e *Engine) pull(ctx context.Context, remote Remote, serverURL string, snap
 	if err != nil {
 		return err
 	}
+	// 游标为空（新装后第一次同步）时用纪元起点：服务端把零值当作「从头开始」，
+	// 但显式给一个真实时间戳更稳妥——早期服务端对零值直接回 422。
+	if since.IsZero() {
+		since = time.Unix(0, 0).UTC()
+	}
 	changed, err := remote.ListChanged(ctx, since)
 	if err != nil {
 		return err

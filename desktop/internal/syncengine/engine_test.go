@@ -108,6 +108,8 @@ func (f *fakeLocal) ListAllIncludingDeleted(_ context.Context, ownerID int64) ([
 // ── 假的云端 ────────────────────────────────────────────────────────────────
 
 type fakeRemote struct {
+	// lastSince 是最近一次增量拉取收到的时间起点。
+	lastSince   time.Time
 	maps        map[string]*cloud.Map
 	docs        map[string]json.RawMessage
 	unavailable bool
@@ -135,6 +137,7 @@ func hashOf(doc []byte) string {
 }
 
 func (f *fakeRemote) ListChanged(_ context.Context, since time.Time) ([]*cloud.Map, error) {
+	f.lastSince = since
 	if f.unavailable {
 		return nil, fmt.Errorf("%w: offline", cloud.ErrUnavailable)
 	}
@@ -628,5 +631,20 @@ func TestSyncRequiresConnection(t *testing.T) {
 	}
 	if _, err := engine.Upload(t.Context(), "map-1"); !errors.Is(err, ErrNotConnected) {
 		t.Fatalf("未连接上传应返回 ErrNotConnected，实际 %v", err)
+	}
+}
+
+// 首次同步（游标为空）必须能跑通：早期客户端把零值时间直接发给服务端，
+// 服务端回 422，表现是「全新安装第一次同步必定失败」。
+func TestFirstSyncUsesEpochCursor(t *testing.T) {
+	engine, _, remote, _ := newEngine(t)
+	remote.maps["remote-1"] = &cloud.Map{UID: "remote-1", Title: "云端图", Version: 1, DocumentHash: hashOf(doc("云端图")), UpdatedAt: remote.tick()}
+	remote.docs["remote-1"] = doc("云端图")
+
+	if _, err := engine.Sync(t.Context()); err != nil {
+		t.Fatalf("首次同步失败: %v", err)
+	}
+	if remote.lastSince.IsZero() {
+		t.Fatal("首次同步不应把零值时间发给服务端")
 	}
 }

@@ -87,6 +87,8 @@ type Client struct {
 
 	mu      sync.RWMutex
 	session Session
+	// refreshMu 串行化令牌刷新：并发请求同时 401 时只刷新一次。
+	refreshMu sync.Mutex
 }
 
 // New 构造客户端。serverURL 允许带尾部斜杠，也允许用户只填域名。
@@ -347,8 +349,13 @@ func (c *Client) Me(ctx context.Context) (*Profile, error) {
 
 // Refresh 用 refresh cookie 换一个新的访问令牌。
 func (c *Client) Refresh(ctx context.Context) error {
+	// 并发请求同时收到 401 时只刷新一次：用互斥锁串行化，后来者直接复用
+	// 已经换好的令牌（刷新令牌是一次性轮换的，重复刷新会互相作废）。
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
 	var result loginResult
-	status, _, err := c.do(ctx, http.MethodPost, "/api/v1/auth/refresh", nil, &result, true)
+	status, _, err := c.send(ctx, http.MethodPost, "/api/v1/auth/refresh", nil, &result, true)
 	if err != nil {
 		return err
 	}
@@ -481,7 +488,29 @@ type errorDetails struct {
 // do 发一次请求。withAuth 为 true 时带上 Bearer 令牌与 refresh cookie。
 //
 // 不自动重试：调用方（同步引擎）比这里更清楚「值不值得再试一次」。
+// do 发一次请求；带鉴权且收到 401 时刷新令牌并重试一次。
+//
+// 桌面端是长期运行的：访问令牌十几分钟就过期，服务端换 JWT 密钥也会让旧令牌
+// 立刻失效。没有这层重试，用户会在「用着用着同步失败」和「重启才好」之间反复，
+// 而实际上刷新令牌一直有效、续期是无感的。
 func (c *Client) do(ctx context.Context, method, path string, body, out any, withAuth bool) (int, errorDetails, error) {
+	status, details, err := c.send(ctx, method, path, body, out, withAuth)
+	// send 把 401 表示成 ErrUnauthorized，所以这里不能只看 err != nil。
+	if status != http.StatusUnauthorized || !withAuth {
+		return status, details, err
+	}
+	if err != nil && !errors.Is(err, ErrUnauthorized) {
+		return status, details, err
+	}
+	if refreshErr := c.Refresh(ctx); refreshErr != nil {
+		// 刷新也失败（刷新令牌过期/被撤销）：把原来的 401 交给上层，
+		// 由它提示用户重新登录。
+		return status, details, err
+	}
+	return c.send(ctx, method, path, body, out, withAuth)
+}
+
+func (c *Client) send(ctx context.Context, method, path string, body, out any, withAuth bool) (int, errorDetails, error) {
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -497,7 +526,6 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, wit
 	// 明确的 UA：默认的 `Go-http-client/1.1` 会被部分 WAF 直接拦掉（浏览器能开、
 	// 客户端打不开就是这类原因）。
 	req.Header.Set("User-Agent", "WmindDesktop")
-	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

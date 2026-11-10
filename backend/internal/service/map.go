@@ -313,11 +313,13 @@ func (s *MapService) resolveUploadUID(ctx context.Context, ownerID int64, reques
 const maxChangedMaps = 2000
 
 // ListChanged 返回 since 之后有变化的导图（含回收站里的）。
+//
+// 零值时间当作「从头开始」：新装的客户端第一次同步还没有游标，按零值传上来
+// 是**正常请求**，不是参数错误。早期这里返回 422，导致全新安装的第一次同步
+// 必定失败（客户端只看到「同步失败」）。
 func (s *MapService) ListChanged(ctx context.Context, ownerID int64, since time.Time) ([]*domain.Map, error) {
 	if since.IsZero() {
-		return nil, apperr.New(apperr.CodeValidationFailed, "").WithFieldErrors(map[string]string{
-			"updated_since": "缺少增量同步起点",
-		})
+		since = time.Unix(0, 0).UTC()
 	}
 	changed, err := s.maps.ListChangedSince(ctx, ownerID, since)
 	if err != nil {

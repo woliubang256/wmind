@@ -379,3 +379,41 @@ func TestNormalizeBaseURL(t *testing.T) {
 		}
 	}
 }
+
+// 访问令牌过期（或服务端换了 JWT 密钥）时，客户端应当自己刷新并重试，
+// 而不是把 401 抛给用户——刷新令牌一直是有效的。
+func TestRequestRefreshesExpiredAccessToken(t *testing.T) {
+	var refreshes int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/auth/refresh":
+			refreshes++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"accessToken":"fresh","refreshToken":"refresh-2"}}`))
+		case "/api/v1/maps":
+			if r.Header.Get("Authorization") != "Bearer fresh" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL, Session{AccessToken: "stale", RefreshToken: "refresh-1"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := client.ListChanged(t.Context(), time.Now()); err != nil {
+		t.Fatalf("应当自动刷新后成功: %v", err)
+	}
+	if refreshes != 1 {
+		t.Fatalf("应当只刷新一次，实际 %d", refreshes)
+	}
+	if got := client.Session().AccessToken; got != "fresh" {
+		t.Fatalf("访问令牌没有更新: %q", got)
+	}
+}
