@@ -1217,7 +1217,41 @@
     "audit.recordId": "记录编号",
     "settings.groupTrashTitle": "回收站",
     "settings.fieldTrashRetentionDays": "回收站保留天数",
-    "settings.hintTrashRetentionDays": "从移入回收站时计时，全局生效（1–3650 天）。修改影响已有内容，缩短期限可能在下一次清理时永久删除过期导图；系统启动及每小时清理一次。"
+    "settings.hintTrashRetentionDays": "从移入回收站时计时，全局生效（1–3650 天）。修改影响已有内容，缩短期限可能在下一次清理时永久删除过期导图；系统启动及每小时清理一次。",
+    "mcp": {
+      "title": "MCP 服务",
+      "description": "让 AI 客户端（Claude Desktop 等）通过 MCP 协议读写本机导图。",
+      "serverSection": "本地服务",
+      "enable": "启用 MCP 服务",
+      "enableHint": "开启后本机在指定端口提供 MCP 端点，数据不出本机。",
+      "port": "端口",
+      "portHint": "只监听 127.0.0.1，改端口会重启服务。",
+      "endpoint": "连接地址",
+      "token": "访问密钥",
+      "tokenEmpty": "尚未生成",
+      "tokenHint": "客户端用 Authorization: Bearer <密钥> 访问。密钥可随时重新生成，旧密钥立即失效。",
+      "show": "显示",
+      "hide": "隐藏",
+      "regenerate": "重新生成",
+      "copyConfig": "复制客户端配置",
+      "copied": "已复制",
+      "copyFailed": "复制失败",
+      "saved": "已保存",
+      "saveFailed": "保存失败",
+      "loadFailed": "读取 MCP 配置失败",
+      "toolsSection": "可用工具",
+      "tool": {
+        "list_maps": "列出导图（支持关键字搜索）",
+        "get_map": "读取导图结构",
+        "create_map": "新建导图（缩进大纲）",
+        "update_map_title": "修改导图标题",
+        "add_topic": "新增子主题",
+        "update_topic": "修改任意主题文字",
+        "delete_topic": "删除主题及其子主题"
+      },
+      "remoteEnableHint": "开启后服务器提供 /mcp 端点，AI 客户端只能操作你（开启者）自己的导图。",
+      "remoteTokenHint": "密钥存在站点设置里，可随时轮换；轮换后旧密钥立即失效。"
+    }
   },
   "validate": {
     "usernameRequired": "请填写用户名",

@@ -1217,7 +1217,41 @@
     "audit.recordId": "Entry number",
     "settings.groupTrashTitle": "Trash",
     "settings.fieldTrashRetentionDays": "Trash retention period",
-    "settings.hintTrashRetentionDays": "Applies to all maps from the time they enter Trash (1–3650 days). Changes affect existing items; shortening the period may permanently delete expired maps at the next cleanup. Cleanup runs on startup and hourly."
+    "settings.hintTrashRetentionDays": "Applies to all maps from the time they enter Trash (1–3650 days). Changes affect existing items; shortening the period may permanently delete expired maps at the next cleanup. Cleanup runs on startup and hourly.",
+    "mcp": {
+      "title": "MCP server",
+      "description": "Let AI clients (Claude Desktop and others) read and edit maps on this machine over MCP.",
+      "serverSection": "Local server",
+      "enable": "Enable MCP server",
+      "enableHint": "Serves an MCP endpoint on this machine; data never leaves it.",
+      "port": "Port",
+      "portHint": "Listens on 127.0.0.1 only. Changing the port restarts the server.",
+      "endpoint": "Endpoint",
+      "token": "Access token",
+      "tokenEmpty": "Not generated yet",
+      "tokenHint": "Clients authenticate with Authorization: Bearer <token>. Regenerating invalidates the old token immediately.",
+      "show": "Show",
+      "hide": "Hide",
+      "regenerate": "Regenerate",
+      "copyConfig": "Copy client config",
+      "copied": "Copied",
+      "copyFailed": "Copy failed",
+      "saved": "Saved",
+      "saveFailed": "Save failed",
+      "loadFailed": "Could not load MCP settings",
+      "toolsSection": "Available tools",
+      "tool": {
+        "list_maps": "List maps (keyword search)",
+        "get_map": "Read a map's structure",
+        "create_map": "Create a map from an indented outline",
+        "update_map_title": "Rename a map",
+        "add_topic": "Add a child topic",
+        "update_topic": "Edit any topic's text",
+        "delete_topic": "Delete a topic and its subtree"
+      },
+      "remoteEnableHint": "Serves /mcp on this server. AI clients can only reach the maps of the admin who enabled it.",
+      "remoteTokenHint": "The token lives in site settings and can be rotated any time; the old one stops working immediately."
+    }
   },
   "validate": {
     "usernameRequired": "Enter a username",

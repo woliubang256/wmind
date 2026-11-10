@@ -15,12 +15,15 @@ import type { SettingsMap, SettingsValue } from '@/lib/api/types';
 import { ApiError, fieldErrorsFrom } from '@/lib/api/errors';
 import { diffSettings, SETTING_GROUPS, type SettingField } from './settings-schema';
 import { adminKeys } from './queries';
+import { McpSettingsSection } from './mcp-settings-section';
+import { useServerOrigin } from '@/features/site/use-remote-base';
+import { isDesktop } from '@/lib/desktop';
 import { BackupPanel } from './backup-panel';
 import { AISettingsPanel } from './ai-panel';
 import { mapKeys } from '@/features/maps/queries';
 import { cn } from '@/lib/utils';
 
-const SETTINGS_TABS = ['general', 'backup', 'ai'] as const;
+const SETTINGS_TABS = ['general', 'backup', 'ai', 'mcp'] as const;
 
 /**
  * @param base 接口根路径覆盖：桌面端「网站设置」传 `/desktop/remote-api`，
@@ -30,6 +33,11 @@ const SETTINGS_TABS = ['general', 'backup', 'ai'] as const;
 export function AdminSettingsPage({ base, title }: { base?: string; title?: string } = {}) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<(typeof SETTINGS_TABS)[number]>('general');
+  // 桌面端的「系统设置」管的是本机配置，MCP 有独立的菜单与页面；其余情况
+  // （Web 后台、桌面端的「网站设置」）才显示站点级 MCP 页签。
+  const showMcp = base !== undefined || !isDesktop();
+  const tabs = showMcp ? SETTINGS_TABS : SETTINGS_TABS.filter((key) => key !== 'mcp');
+  const serverOrigin = useServerOrigin();
   const settings = useQuery({
     queryKey: [...adminKeys.settings, base ?? 'local'],
     queryFn: () => adminApi.getSettings(base),
@@ -39,12 +47,17 @@ export function AdminSettingsPage({ base, title }: { base?: string; title?: stri
     <div className="space-y-5">
       <PageHeader title={title ?? t('admin.settings.title')} />
       <div role="tablist" aria-label={t('backup.sections')} className="flex gap-1 border-b border-border">
-        {SETTINGS_TABS.map((key, index) => <button key={key} type="button" role="tab" id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} onKeyDown={(event) => {
-          const next = event.key === 'Home' ? SETTINGS_TABS[0] : event.key === 'End' ? SETTINGS_TABS.at(-1) : event.key === 'ArrowRight' || event.key === 'ArrowLeft' ? SETTINGS_TABS[(index + (event.key === 'ArrowRight' ? 1 : -1) + SETTINGS_TABS.length) % SETTINGS_TABS.length] : undefined;
+        {tabs.map((key, index) => <button key={key} type="button" role="tab" id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} onKeyDown={(event) => {
+          const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs.at(-1) : event.key === 'ArrowRight' || event.key === 'ArrowLeft' ? tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length] : undefined;
           if (next) { event.preventDefault(); setTab(next); document.getElementById(`settings-tab-${next}`)?.focus(); }
-        }} onClick={() => setTab(key)} className={`border-b-2 px-4 py-2.5 text-sm transition-colors ${tab === key ? 'border-primary font-medium text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{t(key === 'general' ? 'backup.generalTab' : key === 'backup' ? 'backup.tab' : 'ai.settingsTab')}</button>)}
+        }} onClick={() => setTab(key)} className={`border-b-2 px-4 py-2.5 text-sm transition-colors ${tab === key ? 'border-primary font-medium text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{t(key === 'general' ? 'backup.generalTab' : key === 'backup' ? 'backup.tab' : key === 'ai' ? 'ai.settingsTab' : 'admin.mcp.title')}</button>)}
       </div>
       <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}><BackupPanel base={base} /></div>
+      {showMcp ? (
+        <div role="tabpanel" id="settings-panel-mcp" aria-labelledby="settings-tab-mcp" hidden={tab !== 'mcp'}>
+          <McpSettingsSection base={base} serverOrigin={serverOrigin} />
+        </div>
+      ) : null}
       <div role="tabpanel" id="settings-panel-ai" aria-labelledby="settings-tab-ai" hidden={tab !== 'ai'}><AISettingsPanel active={tab === 'ai'} base={base} /></div>
       <div role="tabpanel" id="settings-panel-general" aria-labelledby="settings-tab-general" hidden={tab !== 'general'}>
       {settings.isError ? (

@@ -152,6 +152,23 @@ async function desktopRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return body.data as T;
 }
 
+export interface McpStatus {
+  enabled: boolean;
+  port: number;
+  token: string;
+  url?: string;
+}
+
+/** 读取本地 MCP 服务状态（开关、端口、令牌、当前地址）。 */
+export function fetchMcpStatus(): Promise<McpStatus> {
+  return desktopRequest('/desktop/mcp');
+}
+
+/** 保存本地 MCP 配置：开关、端口，或重新生成令牌。 */
+export function saveMcpSettings(input: { enabled?: boolean; port?: number; regenerate?: boolean }): Promise<McpStatus> {
+  return desktopRequest('/desktop/mcp', { method: 'PUT', body: JSON.stringify(input) });
+}
+
 /** 用系统浏览器打开项目主页。 */
 export function openProjectPage(): Promise<{ opened: boolean }> {
   return desktopRequest('/desktop/about/open-project', { method: 'POST' });

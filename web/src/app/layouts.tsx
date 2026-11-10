@@ -216,6 +216,10 @@ export function AppLayout() {
         ...(localDesktop && cloudStatus.data?.cloud.connected
           ? []
           : [{ to: '/admin/settings', label: localDesktop ? t('desktop.systemSettings') : t('nav.adminSettings'), icon: 'settings' as const }]),
+        // 本地 MCP：与登录状态无关（操作的是本机数据），所以不做连接判断。
+        ...(localDesktop
+          ? [{ to: '/admin/mcp', label: t('admin.mcp.title'), icon: 'sparkles' as const }]
+          : []),
         ...(desktopCapabilities.userManagement
           ? [{ to: '/admin/audit-logs', label: t('nav.adminAudit'), icon: 'clock' as const }]
           : []),

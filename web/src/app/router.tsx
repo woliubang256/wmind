@@ -38,6 +38,11 @@ const adminRoutes = [
     },
   },
   {
+    // 桌面端「MCP 服务」：本地 AI 客户端入口的开关、端口与密钥。
+    path: '/admin/mcp',
+    lazy: async () => ({ Component: (await import('@/features/admin/mcp-panel')).McpPanel }),
+  },
+  {
     // 桌面端「网站设置」：同一套设置表单，但读写的是**服务器**的配置
     // （`/desktop/remote-api` 由本机后端转发，已带登录令牌，无需再登录）。
     path: '/site-settings',

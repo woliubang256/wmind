@@ -23,6 +23,23 @@ export function useRemoteBase(): string | undefined {
   return desktop && status.data?.cloud.connected ? REMOTE_API_BASE : undefined;
 }
 
+/**
+ * 当前「站点」的原始地址：Web 端是页面自身，桌面端登录后是远端服务器地址。
+ *
+ * 用在需要展示「可粘贴给外部客户端的地址」的地方（MCP 端点）。
+ */
+export function useServerOrigin(): string {
+  const desktop = isDesktop();
+  const status = useQuery({
+    queryKey: ['desktop', 'status'],
+    queryFn: fetchDesktopStatus,
+    enabled: desktop,
+    staleTime: 10_000,
+  });
+  if (!desktop) return typeof window === 'undefined' ? '' : window.location.origin;
+  return status.data?.cloud.serverUrl ?? (typeof window === 'undefined' ? '' : window.location.origin);
+}
+
 /** 分享功能是否可用：Web 端一直可用，桌面端登录云端后可用（归服务器管）。 */
 export function useSharesEnabled(): boolean {
   const desktop = isDesktop();
