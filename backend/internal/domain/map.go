@@ -46,6 +46,9 @@ type CreateMapInput struct {
 	NodeCount int
 	SizeBytes int64
 	Now       time.Time
+	// ThumbnailURL 只在「从云端拉取」时带上：把服务器已有的缩略图一起落到本地，
+	// 这样刚同步下来的导图在列表里就有图，不用先打开一次。
+	ThumbnailURL string
 }
 
 // UpdateMapInput 是保存导图的入参。

@@ -516,6 +516,29 @@ function EditingOverlay({ box, style, textHeight, contentRect, viewport, initial
 
   const zoom = viewport.zoom;
   const lineHeight = Math.round(style.fontSize * 1.4);
+  const baseWidth = (contentRect ? contentRect.width + 4 : box.width) * zoom;
+  const baseHeight = contentRect ? (contentRect.height + 4) * zoom : Math.max(textHeight * zoom + 16, lineHeight * zoom + 16);
+
+  /**
+   * 输入时让输入框跟着内容长大。
+   *
+   * 编辑框初始尺寸就是文字区域本身，多打几个字就超出去了——之前内容会被裁掉，
+   * 用户看不到自己刚打的字（Web 端同样如此）。这里按内容重新量高宽，并按对齐
+   * 方式把左边界挪一下，让「居中/右对齐」的主题看起来仍然是对齐的。
+   */
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.width = 'auto';
+    const nextHeight = Math.max(baseHeight, el.scrollHeight);
+    const nextWidth = Math.max(baseWidth, el.scrollWidth + 2);
+    el.style.height = `${nextHeight}px`;
+    el.style.width = `${nextWidth}px`;
+    const delta = nextWidth - baseWidth;
+    const left = (contentRect ? contentRect.x - 2 : box.x) * zoom;
+    el.style.left = `${viewport.x + left - (style.textAlign === 'center' ? delta / 2 : style.textAlign === 'right' ? delta : 0)}px`;
+  }, [value, baseHeight, baseWidth, box.x, contentRect, style.textAlign, viewport.x, zoom]);
 
   return (
     <textarea

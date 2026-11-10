@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -346,6 +347,23 @@ func (e *Engine) applyRemoteChange(ctx context.Context, remote Remote, serverURL
 	return e.store.Put(ctx, record)
 }
 
+// remoteThumbnailURL 把云端的缩略图地址改写成本机可访问的形式。
+//
+// 远端返回的是站内相对路径（`/uploads/x.png`），直接存进本地记录会指向**本机**
+// 的上传目录，而那张图在服务器上——列表里就是一张破图。改写成
+// `/desktop/remote-uploads/x.png` 后由本机后端转发到远端（带令牌）。
+func remoteThumbnailURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if rest, ok := strings.CutPrefix(raw, "/uploads/"); ok {
+		return "/desktop/remote-uploads/" + rest
+	}
+	// 其他形式（外链或已改写过的）原样保留。
+	return raw
+}
+
 // remoteTime 解析云端时间戳；解析不了就退回本地时间（宁可显示同步时刻，
 // 也不能显示零值时间）。
 func remoteTime(value string, fallback time.Time) time.Time {
@@ -368,6 +386,9 @@ func (e *Engine) createLocalFromRemote(ctx context.Context, remote Remote, serve
 		UID: detail.UID, OwnerID: e.ownerID, Title: detail.Title,
 		Document: detail.Document, NodeCount: detail.NodeCount,
 		SizeBytes: int64(len(detail.Document)), Now: remoteTime(item.UpdatedAt, e.now()),
+		// 连缩略图一起落本地：列表里直接就有图，不用先打开一次才生成。
+		// 云端的 `/uploads/x.png` 改写成走本机转发的同源地址，图片才加载得出来。
+		ThumbnailURL: remoteThumbnailURL(detail.ThumbnailURL),
 	})
 	if err != nil {
 		return err

@@ -161,6 +161,7 @@ func New(deps Deps) http.Handler {
 		mux.HandleFunc("POST /desktop/debug/eval", a.evalJS)
 	}
 	mux.Handle(remoteproxy.Prefix, a.remoteHandler())
+	mux.Handle(remoteproxy.UploadsPrefix, a.remoteUploadsHandler())
 	mux.HandleFunc("POST /desktop/about/open-project", a.openProject)
 	mux.HandleFunc("POST /desktop/about/open-docs", a.openDocs)
 	mux.HandleFunc("POST /desktop/cloud/verify-2fa", a.verifyTwoFactor)
@@ -459,9 +460,31 @@ func (a *api) remoteHandler() http.Handler {
 			fail(w, http.StatusConflict, "尚未连接云端")
 			return
 		}
-		handler, err := remoteproxy.Handler(client, a.deps.Engine.ServerURL(), a.deps.Logger)
+		handler, err := remoteproxy.Handler(client, a.deps.Engine.ServerURL(),
+			remoteproxy.Prefix, "/api/v1", a.deps.Logger)
 		if err != nil {
 			fail(w, http.StatusBadGateway, "服务器地址无效")
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// remoteUploadsHandler 把 /desktop/remote-uploads/* 转发到远端的 /uploads/*。
+//
+// 云端导图的缩略图、图片都挂在远端上传目录下；桌面端把它们当作同源地址直接
+// 显示，离线时自然退化成占位图。
+func (a *api) remoteUploadsHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		client := a.deps.Engine.Client()
+		if client == nil {
+			http.NotFound(w, r)
+			return
+		}
+		handler, err := remoteproxy.Handler(client, a.deps.Engine.ServerURL(),
+			remoteproxy.UploadsPrefix, "/uploads", a.deps.Logger)
+		if err != nil {
+			http.Error(w, "服务器地址无效", http.StatusBadGateway)
 			return
 		}
 		handler.ServeHTTP(w, r)

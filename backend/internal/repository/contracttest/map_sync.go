@@ -116,3 +116,68 @@ func MapSync(t *testing.T, users domain.UserRepo, maps domain.MapRepo) {
 		t.Fatalf("跨用户读取应当返回 ErrNotFound，实际 %v", err)
 	}
 }
+
+// 写缩略图不改 updated_at：缩略图是内容的渲染结果，不是内容变更。
+//
+// 之前这里会更新 updated_at，导致「打开导图看一眼再关掉」在列表里显示成刚编辑过，
+// 也会让同步游标误判为有变化。
+func ThumbnailKeepsUpdatedAt(t *testing.T, users domain.UserRepo, maps domain.MapRepo) {
+	t.Helper()
+	ctx := t.Context()
+	prefix := ulid.Make().String()
+	base := time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC)
+
+	owner, err := users.Create(ctx, domain.CreateUserInput{
+		UID: prefix, Username: prefix, Email: prefix + "@example.test",
+		PasswordHash: "hash", Role: domain.RoleUser, Status: domain.UserStatusActive, Now: base,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := maps.Create(ctx, domain.CreateMapInput{
+		UID: prefix + "m", OwnerID: owner.ID, Title: "图", Document: []byte(`{}`),
+		NodeCount: 1, SizeBytes: 2, Now: base, ThumbnailURL: "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := maps.UpdateThumbnail(ctx, created.UID, owner.ID, "/uploads/x.png", base.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := maps.GetByUID(ctx, created.UID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.UpdatedAt.Equal(base) {
+		t.Fatalf("写缩略图不应改 updated_at：期望 %v，实际 %v", base, got.UpdatedAt)
+	}
+	if got.ThumbnailURL != "/uploads/x.png" {
+		t.Fatalf("缩略图没写进去: %q", got.ThumbnailURL)
+	}
+}
+
+// 从云端拉取时带上的缩略图地址要原样落库（列表里直接有图，不必先打开一次）。
+func CreateKeepsThumbnailURL(t *testing.T, users domain.UserRepo, maps domain.MapRepo) {
+	t.Helper()
+	ctx := t.Context()
+	prefix := ulid.Make().String()
+	base := time.Date(2026, 4, 2, 9, 0, 0, 0, time.UTC)
+
+	owner, err := users.Create(ctx, domain.CreateUserInput{
+		UID: prefix, Username: prefix, Email: prefix + "@example.test",
+		PasswordHash: "hash", Role: domain.RoleUser, Status: domain.UserStatusActive, Now: base,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := maps.Create(ctx, domain.CreateMapInput{
+		UID: prefix + "m", OwnerID: owner.ID, Title: "图", Document: []byte(`{}`),
+		NodeCount: 1, SizeBytes: 2, Now: base, ThumbnailURL: "/desktop/remote-uploads/x.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ThumbnailURL != "/desktop/remote-uploads/x.png" {
+		t.Fatalf("创建时应保留缩略图地址: %q", created.ThumbnailURL)
+	}
+}

@@ -419,9 +419,10 @@ func (r *MapRepository) UpdateMeta(ctx context.Context, uid string, ownerID int6
 	return mapPGMap(v), nil
 }
 
-func (r *MapRepository) UpdateThumbnail(ctx context.Context, uid string, ownerID int64, thumbnailURL string, now time.Time) error {
+func (r *MapRepository) UpdateThumbnail(ctx context.Context, uid string, ownerID int64, thumbnailURL string, _ time.Time) error {
+	// 缩略图是内容的渲染结果，不是内容变更：不碰 updated_at（见 maps.sql 的注释）。
 	affected, err := r.queries(ctx).UpdateMapThumbnail(ctx, pgdb.UpdateMapThumbnailParams{
-		ThumbnailUrl: thumbnailURL, UpdatedAt: pgTime(now), Uid: uid, OwnerID: ownerID,
+		ThumbnailUrl: thumbnailURL, Uid: uid, OwnerID: ownerID,
 	})
 	return mapPGRowsAffected(affected, err)
 }

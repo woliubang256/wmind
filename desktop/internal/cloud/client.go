@@ -49,8 +49,11 @@ func (e *ConflictError) Error() string {
 
 // Map 是云端导图。
 type Map struct {
-	UID          string          `json:"uid"`
-	Title        string          `json:"title"`
+	UID   string `json:"uid"`
+	Title string `json:"title"`
+	// ThumbnailURL 是服务器上的缩略图（站内相对路径）。拉取时一并落本地，
+	// 列表里才有图可显示。
+	ThumbnailURL string          `json:"thumbnailUrl"`
 	NodeCount    int             `json:"nodeCount"`
 	Version      int             `json:"version"`
 	DocumentHash string          `json:"documentHash"`

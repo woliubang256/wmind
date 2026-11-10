@@ -24,17 +24,28 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
 )
 
-// Prefix 是挂载路径；前端用 `/desktop/remote-api/<资源>` 访问远端同名接口。
+// Prefix 是接口挂载路径；前端用 `/desktop/remote-api/<资源>` 访问远端同名接口。
 const Prefix = "/desktop/remote-api/"
 
 // remotePathPrefix 是远端接口的真实前缀。
 const remotePathPrefix = "/api/v1"
 
+// UploadsPrefix 是**上传资源**的挂载路径（缩略图、图片）。
+//
+// 与接口分开：远端的 `/uploads/*` 不走 `/api/v1`，而且鉴权用的是媒体会话
+// （同样接受 Bearer 令牌）。云端导图的缩略图靠它显示，否则刚同步下来的图在
+// 列表里是一张破图。
+const UploadsPrefix = "/desktop/remote-uploads/"
+
+// uploadsPathPrefix 是远端上传资源的真实前缀。
+const uploadsPathPrefix = "/uploads"
+
 // maxBodyBytes 是重试时可缓冲的请求体上限：设置页都是小 JSON，4MB 足够。
 const maxBodyBytes = 4 << 20
 
-// Handler 返回转发到 serverURL 的处理器。
-func Handler(client *cloud.Client, serverURL string, log *slog.Logger) (http.Handler, error) {
+// Handler 返回转发到 serverURL 的处理器：本地 prefix 开头的请求转发到远端的
+// targetPrefix 之下（接口用 /api/v1，上传资源用 /uploads）。
+func Handler(client *cloud.Client, serverURL, prefix, targetPrefix string, log *slog.Logger) (http.Handler, error) {
 	target, err := url.Parse(serverURL)
 	if err != nil {
 		return nil, err
@@ -48,8 +59,8 @@ func Handler(client *cloud.Client, serverURL string, log *slog.Logger) (http.Han
 		original(req)
 		req.Host = target.Host
 		// /desktop/remote-api/settings → /api/v1/settings
-		rest := strings.TrimPrefix(req.URL.Path, Prefix)
-		req.URL.Path = remotePathPrefix + "/" + rest
+		rest := strings.TrimPrefix(req.URL.Path, prefix)
+		req.URL.Path = targetPrefix + "/" + rest
 		req.URL.RawPath = ""
 		req.Header.Del("Cookie")
 		if token := client.Session().AccessToken; token != "" {

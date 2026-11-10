@@ -307,7 +307,8 @@ func (r *UserRepository) IncrementMapCount(ctx context.Context, id int64, delta 
 func (r *MapRepository) Create(ctx context.Context, in domain.CreateMapInput) (*domain.Map, error) {
 	v, err := queries(ctx, r.db).CreateMap(ctx, sqlitedb.CreateMapParams{
 		Uid: in.UID, OwnerID: in.OwnerID, Title: in.Title, Document: string(in.Document),
-		NodeCount: int64(in.NodeCount), SizeBytes: in.SizeBytes,
+		ThumbnailUrl: in.ThumbnailURL,
+		NodeCount:    int64(in.NodeCount), SizeBytes: in.SizeBytes,
 		CreatedAt: sqliteTime(in.Now), UpdatedAt: sqliteTime(in.Now),
 	})
 	if err != nil {
@@ -454,9 +455,10 @@ func (r *MapRepository) UpdateMeta(ctx context.Context, uid string, ownerID int6
 	return mapSQLiteMap(v)
 }
 
-func (r *MapRepository) UpdateThumbnail(ctx context.Context, uid string, ownerID int64, thumbnailURL string, now time.Time) error {
+func (r *MapRepository) UpdateThumbnail(ctx context.Context, uid string, ownerID int64, thumbnailURL string, _ time.Time) error {
+	// 缩略图是内容的渲染结果，不是内容变更：不碰 updated_at（见 maps.sql 的注释）。
 	affected, err := queries(ctx, r.db).UpdateMapThumbnail(ctx, sqlitedb.UpdateMapThumbnailParams{
-		ThumbnailUrl: thumbnailURL, UpdatedAt: sqliteTime(now), Uid: uid, OwnerID: ownerID,
+		ThumbnailUrl: thumbnailURL, Uid: uid, OwnerID: ownerID,
 	})
 	return mapSQLiteRowsAffected(affected, err)
 }

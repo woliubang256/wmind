@@ -17,7 +17,7 @@ INSERT INTO maps (
   uid, owner_id, title, document, version, thumbnail_url,
   node_count, size_bytes, created_at, updated_at
 ) VALUES (
-  sqlc.arg(uid), sqlc.arg(owner_id), sqlc.arg(title), sqlc.arg(document), 1, '',
+  sqlc.arg(uid), sqlc.arg(owner_id), sqlc.arg(title), sqlc.arg(document), 1, sqlc.arg(thumbnail_url),
   sqlc.arg(node_count), sqlc.arg(size_bytes), sqlc.arg(created_at), sqlc.arg(updated_at)
 )
 RETURNING *;
@@ -93,10 +93,12 @@ SET title = sqlc.arg(title),
 WHERE uid = sqlc.arg(uid) AND owner_id = sqlc.arg(owner_id) AND deleted_at IS NULL
 RETURNING *;
 
+-- Thumbnail writes deliberately leave updated_at alone: a thumbnail is a
+-- rendering of the content, not a change to it. Bumping updated_at here made
+-- "open a map and close it" look like an edit in the list and in sync cursors.
 -- name: UpdateMapThumbnail :execrows
 UPDATE maps
-SET thumbnail_url = sqlc.arg(thumbnail_url),
-    updated_at = sqlc.arg(updated_at)
+SET thumbnail_url = sqlc.arg(thumbnail_url)
 WHERE uid = sqlc.arg(uid) AND owner_id = sqlc.arg(owner_id) AND deleted_at IS NULL;
 
 -- name: SoftDeleteMap :execrows

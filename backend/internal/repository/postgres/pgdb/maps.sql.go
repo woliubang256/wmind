@@ -60,21 +60,22 @@ INSERT INTO maps (
   uid, owner_id, title, document, version, thumbnail_url,
   node_count, size_bytes, created_at, updated_at
 ) VALUES (
-  $1, $2, $3, $4, 1, '',
-  $5, $6, $7, $8
+  $1, $2, $3, $4, 1, $5,
+  $6, $7, $8, $9
 )
 RETURNING id, uid, owner_id, title, document, version, thumbnail_url, node_count, size_bytes, deleted_at, created_at, updated_at
 `
 
 type CreateMapParams struct {
-	Uid       string
-	OwnerID   int64
-	Title     string
-	Document  []byte
-	NodeCount int32
-	SizeBytes int64
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	Uid          string
+	OwnerID      int64
+	Title        string
+	Document     []byte
+	ThumbnailUrl string
+	NodeCount    int32
+	SizeBytes    int64
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 // maps: queries shared by BOTH dialects.
@@ -96,6 +97,7 @@ func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, erro
 		arg.OwnerID,
 		arg.Title,
 		arg.Document,
+		arg.ThumbnailUrl,
 		arg.NodeCount,
 		arg.SizeBytes,
 		arg.CreatedAt,
@@ -824,25 +826,21 @@ func (q *Queries) UpdateMapMeta(ctx context.Context, arg UpdateMapMetaParams) (M
 
 const updateMapThumbnail = `-- name: UpdateMapThumbnail :execrows
 UPDATE maps
-SET thumbnail_url = $1,
-    updated_at = $2
-WHERE uid = $3 AND owner_id = $4 AND deleted_at IS NULL
+SET thumbnail_url = $1
+WHERE uid = $2 AND owner_id = $3 AND deleted_at IS NULL
 `
 
 type UpdateMapThumbnailParams struct {
 	ThumbnailUrl string
-	UpdatedAt    pgtype.Timestamptz
 	Uid          string
 	OwnerID      int64
 }
 
+// Thumbnail writes deliberately leave updated_at alone: a thumbnail is a
+// rendering of the content, not a change to it. Bumping updated_at here made
+// "open a map and close it" look like an edit in the list and in sync cursors.
 func (q *Queries) UpdateMapThumbnail(ctx context.Context, arg UpdateMapThumbnailParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateMapThumbnail,
-		arg.ThumbnailUrl,
-		arg.UpdatedAt,
-		arg.Uid,
-		arg.OwnerID,
-	)
+	result, err := q.db.Exec(ctx, updateMapThumbnail, arg.ThumbnailUrl, arg.Uid, arg.OwnerID)
 	if err != nil {
 		return 0, err
 	}
