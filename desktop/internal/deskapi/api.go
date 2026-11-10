@@ -306,9 +306,11 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, cloud.ErrUnauthorized):
 			fail(w, http.StatusUnauthorized, "账号或密码不正确")
 		case errors.Is(err, cloud.ErrUnavailable):
-			fail(w, http.StatusBadGateway, "连接服务器失败，请检查地址与网络")
+			// 带上底层原因（TLS 证书、DNS、超时、被防火墙拦），否则用户只看到
+			// 「连接失败」，我们这边也无从判断。
+			fail(w, http.StatusBadGateway, "连接服务器失败："+errorText(err))
 		default:
-			fail(w, http.StatusBadGateway, "连接服务器失败")
+			fail(w, http.StatusBadGateway, "登录失败："+errorText(err))
 		}
 		return
 	}
