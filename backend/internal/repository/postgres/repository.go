@@ -275,7 +275,8 @@ func (r *UserRepository) IncrementMapCount(ctx context.Context, id int64, delta 
 func (r *MapRepository) Create(ctx context.Context, in domain.CreateMapInput) (*domain.Map, error) {
 	v, err := r.queries(ctx).CreateMap(ctx, pgdb.CreateMapParams{
 		Uid: in.UID, OwnerID: in.OwnerID, Title: in.Title, Document: in.Document,
-		NodeCount: int32(in.NodeCount), SizeBytes: in.SizeBytes,
+		ThumbnailUrl: in.ThumbnailURL,
+		NodeCount:    int32(in.NodeCount), SizeBytes: in.SizeBytes,
 		CreatedAt: pgTime(in.Now), UpdatedAt: pgTime(in.Now),
 	})
 	if err != nil {
