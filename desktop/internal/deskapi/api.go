@@ -8,6 +8,8 @@ package deskapi
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -23,6 +25,7 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/remoteproxy"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
+	"github.com/woliubang256/wmind/backend/internal/settings"
 )
 
 // lastConnection 记住上次登录过的服务器与账号，**登出后不清**：下次登录时
@@ -145,6 +148,10 @@ type Deps struct {
 	// Eval 在页面里执行一段 JS 并返回结果；只在调试构建里接上（见 main.go 的
 	// WMIND_DEBUG_EVAL）。用于在真实 WebView 里量性能，别在生产里开放。
 	Eval func(code string) (any, error)
+	// Settings 是本地站点设置：MCP 的开关、端口与令牌都存在这里。
+	Settings SettingsStore
+	// MCP 管理本地 MCP 服务的启停。
+	MCP MCPManager
 }
 
 // New 构造 /desktop/ 的 Handler。
@@ -160,6 +167,7 @@ func New(deps Deps) http.Handler {
 	if deps.Eval != nil {
 		mux.HandleFunc("POST /desktop/debug/eval", a.evalJS)
 	}
+	mux.HandleFunc("/desktop/mcp", a.mcp)
 	mux.Handle(remoteproxy.Prefix, a.remoteHandler())
 	mux.Handle(remoteproxy.UploadsPrefix, a.remoteUploadsHandler())
 	mux.HandleFunc("POST /desktop/about/open-project", a.openProject)
@@ -489,6 +497,103 @@ func (a *api) remoteUploadsHandler() http.Handler {
 		}
 		handler.ServeHTTP(w, r)
 	})
+}
+
+// SettingsStore 是设置服务的只读+更新接口（见 backend/internal/settings）。
+type SettingsStore interface {
+	Snapshot() *settings.Snapshot
+	Update(ctx context.Context, patch map[string]any, actorID *int64) (*settings.Snapshot, error)
+}
+
+// MCPManager 管理本地 MCP 服务。
+type MCPManager interface {
+	Apply(ctx context.Context, enabled bool, port int, token string) error
+	URL() string
+}
+
+// mcpStatus 是 GET /desktop/mcp 的返回。
+type mcpStatus struct {
+	Enabled bool   `json:"enabled"`
+	Port    int    `json:"port"`
+	Token   string `json:"token"`
+	URL     string `json:"url,omitempty"`
+}
+
+// mcp 处理 GET/PUT /desktop/mcp。
+//
+// 本地 MCP 与登录状态无关：数据在本机，AI 操作的就是本机这一份。开关、端口
+// 与令牌存在本地站点设置里，改完立即重启监听。
+func (a *api) mcp(w http.ResponseWriter, r *http.Request) {
+	if a.deps.Settings == nil || a.deps.MCP == nil {
+		fail(w, http.StatusNotImplemented, "当前构建不支持 MCP")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		snapshot := a.deps.Settings.Snapshot()
+		writeJSON(w, http.StatusOK, envelope{Data: mcpStatus{
+			Enabled: snapshot.Bool("mcp.enabled"),
+			Port:    snapshot.Int("mcp.port"),
+			Token:   snapshot.String("mcp.token"),
+			URL:     a.deps.MCP.URL(),
+		}})
+	case http.MethodPut:
+		var req struct {
+			Enabled    *bool `json:"enabled"`
+			Port       *int  `json:"port"`
+			Regenerate bool  `json:"regenerate"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+			fail(w, http.StatusBadRequest, "请求格式不正确")
+			return
+		}
+		snapshot := a.deps.Settings.Snapshot()
+		patch := map[string]any{}
+		if req.Enabled != nil {
+			patch["mcp.enabled"] = *req.Enabled
+		}
+		if req.Port != nil {
+			patch["mcp.port"] = *req.Port
+		}
+		token := snapshot.String("mcp.token")
+		if req.Regenerate || token == "" {
+			generated, err := newMCPToken()
+			if err != nil {
+				fail(w, http.StatusInternalServerError, "生成密钥失败")
+				return
+			}
+			token = generated
+			patch["mcp.token"] = token
+		}
+		updated, err := a.deps.Settings.Update(r.Context(), patch, nil)
+		if err != nil {
+			fail(w, http.StatusUnprocessableEntity, errorText(err))
+			return
+		}
+		enabled := updated.Bool("mcp.enabled")
+		port := updated.Int("mcp.port")
+		if err := a.deps.MCP.Apply(r.Context(), enabled, port, updated.String("mcp.token")); err != nil {
+			// 端口被占用之类：把开关关回去，避免界面显示「已开启」但实际没起。
+			_, _ = a.deps.Settings.Update(r.Context(), map[string]any{"mcp.enabled": false}, nil)
+			fail(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, envelope{Data: mcpStatus{
+			Enabled: enabled, Port: port, Token: updated.String("mcp.token"), URL: a.deps.MCP.URL(),
+		}})
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		fail(w, http.StatusMethodNotAllowed, "不支持的方法")
+	}
+}
+
+// newMCPToken 生成 32 字节的随机令牌（十六进制 64 位）。
+func newMCPToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // verifyTwoFactor 用动态码（或恢复码）完成登录。

@@ -78,6 +78,8 @@ type App struct {
 	Users domain.UserRepo
 	// Maps 是导图仓储，桌面端的同步引擎用它读写本地副本。
 	Maps domain.MapRepo
+	// MapService 是导图服务，桌面端的本地 MCP 服务器用它读写导图。
+	MapService *service.MapService
 
 	closeOnce     sync.Once
 	prepare       func(ctx context.Context, db *sql.DB) error
@@ -442,12 +444,14 @@ func (a *App) assemble(ctx context.Context) error {
 		Maintenance:      backups.Gate(),
 		Admin:            handler.NewAdminHandler(adminSvc),
 		Maps:             handler.NewMapHandler(mapSvc),
+		MCP:              handler.NewMCPHandler(settingsSvc, mapSvc, userRepo, config.Version, log),
 		Themes:           handler.NewThemeHandler(themeSvc),
 		Templates:        handler.NewTemplateHandler(templateSvc),
 		Files:            handler.NewFileHandler(fileSvc),
 		Media:            handler.NewMediaHandler(fileSvc, authSvc, shareSvc, cfg.Storage.Dir),
 		Shares:           handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
+	a.MapService = mapSvc
 	a.Ready = ready
 	return nil
 }

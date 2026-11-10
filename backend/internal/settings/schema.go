@@ -69,6 +69,14 @@ var specs = []Spec{
 	{Key: "feature.export_enabled", Kind: KindBool, Default: `true`, Public: true},
 	{Key: "feature.user_template_enabled", Kind: KindBool, Default: `true`, Public: true},
 
+	// MCP 服务器：默认关闭。token 是唯一的访问凭据，owner_uid 记录「谁开启的」——
+	// 工具以这个管理员身份执行，只能看到他自己的导图。
+	{Key: "mcp.enabled", Kind: KindBool, Default: `false`},
+	{Key: "mcp.token", Kind: KindString, Default: `""`, MaxRunes: 128},
+	{Key: "mcp.owner_uid", Kind: KindString, Default: `""`, MaxRunes: 64},
+	// 仅桌面端使用：本地 MCP 服务监听的端口（服务端忽略，它用站点自己的端口）。
+	{Key: "mcp.port", Kind: KindInt, Default: `7777`, Min: 1024, Max: 65535},
+
 	{Key: "share.public_link_enabled", Kind: KindBool, Default: `true`, Public: true},
 	{Key: "share.default_expire_days", Kind: KindInt, Default: `7`, Min: 0, Max: 3650},
 	{Key: "share.default_allow_download", Kind: KindBool, Default: `false`},

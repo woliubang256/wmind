@@ -56,6 +56,8 @@ type Deps struct {
 	Admin *handler.AdminHandler
 	// Maps 处理导图的增删改查与回收站。
 	Maps *handler.MapHandler
+	// MCP 处理 /mcp（AI 客户端的 Model Context Protocol 端点）；为 nil 时不挂载。
+	MCP *handler.MCPHandler
 	// Themes 处理用户自定义主题的增删改查。
 	Themes *handler.ThemeHandler
 	// Templates 处理用户模板（从导图另存为、列表、改名、删除）。
@@ -120,6 +122,12 @@ func NewRouter(deps Deps) http.Handler {
 	if deps.AI != nil && deps.Sessions != nil {
 		v1.POST("/ai/generate", middleware.RequireAuth(deps.Sessions),
 			middleware.NewRateLimiter(5, time.Minute, 5).Middleware(middleware.UserKey), deps.AI.Generate)
+	}
+
+	// MCP：AI 客户端的入口，走自己的 Bearer 令牌（站点设置里开关与轮换），
+	// 不经过用户会话中间件。
+	if deps.MCP != nil {
+		r.POST("/mcp", deps.MCP.Handle)
 	}
 
 	// Native images use the read-only media session or current share grant.

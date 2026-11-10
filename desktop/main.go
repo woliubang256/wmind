@@ -33,6 +33,7 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localserver"
 	"github.com/woliubang256/wmind/backend/desktop/internal/logging"
+	"github.com/woliubang256/wmind/backend/desktop/internal/mcpserver"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 	"github.com/woliubang256/wmind/backend/internal/bootstrap"
@@ -225,6 +226,7 @@ func start() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
+		local.MCP.Stop()
 		local.Close()
 		closeLog()
 	})
@@ -259,6 +261,8 @@ type localInstance struct {
 	AccessToken string
 	// Engine 是同步引擎（未连接云端时也能查状态）。
 	Engine *syncengine.Engine
+	// MCP 是本地 MCP 服务（AI 客户端读写本机导图），退出时要停。
+	MCP *mcpserver.Manager
 	// Close 停止后台任务并关闭数据库，可重复调用。
 	Close func()
 }
@@ -333,6 +337,13 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	}
 
 	engine := syncengine.New(app.Maps, syncStore, user.ID, logger)
+	// 本地 MCP：与登录状态无关，数据在本机。启动时按设置决定是否监听。
+	mcpManager := mcpserver.New(app.MapService, user.ID, appVersion, logger)
+	if snapshot := app.Settings.Snapshot(); snapshot.Bool("mcp.enabled") {
+		if err := mcpManager.Apply(ctx, true, snapshot.Int("mcp.port"), snapshot.String("mcp.token")); err != nil {
+			logger.Warn("local mcp server failed to start", "err", err)
+		}
+	}
 	// 凭据存本地数据库（不用系统钥匙串：见 internal/credstore 的说明）。
 	creds := &deskapi.CredentialStore{Repo: credstore.New(localDB, secrets.JWTSecret)}
 
@@ -357,6 +368,8 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 			Engine: engine, Store: syncStore, Creds: creds, Version: appVersion, Updater: updates,
 			OpenExternal:       mygo.Shell.OpenExternal,
 			Logger:             logger,
+			Settings:           app.Settings,
+			MCP:                mcpManager,
 			LastConnectionPath: filepath.Join(paths.Root, "last-connection.json"),
 			Eval:               debugEval,
 		}),
@@ -371,6 +384,7 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		ShellToken:  shellToken,
 		AccessToken: accessToken,
 		Engine:      engine,
+		MCP:         mcpManager,
 		Close:       app.Close,
 	}, nil
 }

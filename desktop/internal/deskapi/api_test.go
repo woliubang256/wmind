@@ -31,6 +31,7 @@ import (
 	"github.com/woliubang256/wmind/backend/internal/domain"
 	"github.com/woliubang256/wmind/backend/internal/migrate"
 	sqliterepo "github.com/woliubang256/wmind/backend/internal/repository/sqlite"
+	"github.com/woliubang256/wmind/backend/internal/settings"
 )
 
 // ── 测试夹具 ────────────────────────────────────────────────────────────────
@@ -44,7 +45,28 @@ type fixture struct {
 	cloud   *fakeCloudServer
 	store   *syncstate.Store
 	// secret 是加密凭据用的测试主密钥。
-	secret string
+	secret   string
+	settings *settings.Service
+	mcp      *fakeMCP
+}
+
+// fakeMCP 记录本地 MCP 服务的启停请求，不真的占端口。
+type fakeMCP struct {
+	running bool
+	port    int
+	token   string
+}
+
+func (f *fakeMCP) Apply(_ context.Context, enabled bool, port int, token string) error {
+	f.running, f.port, f.token = enabled, port, token
+	return nil
+}
+
+func (f *fakeMCP) URL() string {
+	if !f.running {
+		return ""
+	}
+	return "http://127.0.0.1/mcp"
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -76,6 +98,11 @@ func newFixture(t *testing.T) *fixture {
 
 	mapRepo := sqliterepo.NewMapRepository(db)
 	store := syncstate.NewStore(db)
+	settingsSvc, err := settings.New(sqliterepo.NewSettingsRepository(db), settings.Config{})
+	if err != nil {
+		t.Fatalf("构建设置服务失败: %v", err)
+	}
+	mcp := &fakeMCP{}
 	engine := syncengine.New(mapRepo, store, owner.ID, logger)
 	// 凭据存数据库（与生产一致）；主密钥用一个固定的测试串。
 	secret := strings.Repeat("ab", 32)
@@ -89,8 +116,10 @@ func newFixture(t *testing.T) *fixture {
 		Engine: engine, Store: store, Creds: creds, Version: "1.0.0",
 		// 上次连接信息落到临时文件：登出后预填表单靠它。
 		LastConnectionPath: filepath.Join(t.TempDir(), "last-connection.json"),
+		Settings:           settingsSvc,
+		MCP:                mcp,
 	})
-	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud, store: store, secret: secret}
+	return &fixture{api: api, engine: engine, maps: mapRepo, ownerID: owner.ID, creds: creds, cloud: cloud, store: store, secret: secret, settings: settingsSvc, mcp: mcp}
 }
 
 func (f *fixture) createMap(t *testing.T, uid, title string) *domain.Map {
