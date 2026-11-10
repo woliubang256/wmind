@@ -12,7 +12,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"net/http"
@@ -33,6 +32,7 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/deskapi"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localserver"
+	"github.com/woliubang256/wmind/backend/desktop/internal/logging"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 	"github.com/woliubang256/wmind/backend/internal/bootstrap"
@@ -141,6 +141,9 @@ func start() error {
 		return err
 	}
 	slog.SetDefault(logger)
+	logger.Info("wmind desktop starting",
+		"version", appVersion(), "os", runtime.GOOS, "arch", runtime.GOARCH,
+		"data", paths.Root, "locale", mygo.App.Locale())
 
 	local, err := assembleLocal(context.Background(), paths, logger, appVersion(), localeInfo{
 		Locale:    mygo.App.Locale(),
@@ -409,15 +412,16 @@ func newToken() (string, error) {
 // 桌面端没有容器日志可看：用户报问题时能拿到文件才是关键。文件按启动
 // 追加，不做轮转（单个文件，量级很小）。
 func newLogger(root string) (*slog.Logger, func(), error) {
-	logDir := filepath.Join(root, "logs")
-	if err := os.MkdirAll(logDir, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("create log directory: %w", err)
-	}
-	file, err := os.OpenFile(filepath.Join(logDir, "wmind.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// 滚动日志：单文件 5 MiB、保留 5 份（见 internal/logging）。级别可用
+	// WMIND_DESKTOP_LOG_LEVEL=debug 临时调细，排查时不用改代码。
+	logger, closeLog, err := logging.New(logging.Options{
+		Root:   root,
+		Level:  os.Getenv("WMIND_DESKTOP_LOG_LEVEL"),
+		Stderr: true,
+	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("open log file: %w", err)
+		// 文件写不了（Windows 上被杀软占用、磁盘满）时仍然继续启动，只记一条警告。
+		logger.Warn("log file unavailable, logging to stderr only", "err", err)
 	}
-	w := io.MultiWriter(os.Stderr, file)
-	logger := slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	return logger, func() { _ = file.Close() }, nil
+	return logger, closeLog, nil
 }

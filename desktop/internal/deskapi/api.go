@@ -6,9 +6,11 @@
 package deskapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -173,7 +175,60 @@ func New(deps Deps) http.Handler {
 		mux.HandleFunc("GET /desktop/updates/progress", a.updateProgress)
 		mux.HandleFunc("POST /desktop/updates/relaunch", a.relaunch)
 	}
-	return mux
+	return a.withAccessLog(mux)
+}
+
+// withAccessLog 记录 /desktop/* 的每次调用。
+//
+// 这些接口是「客户端行为」的唯一入口：登录、同步、上传、更新都在这里。用户
+// 反馈「点了没反应」时，日志里有没有这一行、返回什么状态码，决定了下一步往
+// 哪里查——之前这里完全静默，等于把排查的起点丢了。
+func (a *api) withAccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if a.deps.Logger == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		started := time.Now()
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		elapsed := time.Since(started)
+		attrs := []any{
+			"method", r.Method, "path", r.URL.Path,
+			"status", recorder.status, "durationMs", elapsed.Milliseconds(),
+		}
+		if recorder.body.Len() > 0 {
+			attrs = append(attrs, "error", recorder.body.String())
+		}
+		if recorder.status >= 400 {
+			a.deps.Logger.Warn("desktop api", attrs...)
+			return
+		}
+		a.deps.Logger.Debug("desktop api", attrs...)
+	})
+}
+
+// statusRecorder 记下状态码与错误响应体（只留前 512 字节，避免把大响应写进日志）。
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	body   bytes.Buffer
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Write(p []byte) (int, error) {
+	if r.status >= 400 && r.body.Len() < 512 {
+		remaining := 512 - r.body.Len()
+		if len(p) < remaining {
+			remaining = len(p)
+		}
+		r.body.Write(p[:remaining])
+	}
+	return r.ResponseWriter.Write(p)
 }
 
 type api struct {
@@ -300,8 +355,10 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.log().Info("cloud: connecting", "server", req.ServerURL, "identifier", req.Identifier)
 	client, err := a.login(r.Context(), req.ServerURL, req.Identifier, req.Password)
 	if err != nil {
+		a.log().Warn("cloud: connect failed", "server", req.ServerURL, "err", err)
 		switch {
 		case errors.Is(err, cloud.ErrUnauthorized):
 			fail(w, http.StatusUnauthorized, "账号或密码不正确")
@@ -345,6 +402,8 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.log().Info("cloud: connected", "server", session.ServerURL, "email", session.UserEmail, "role", session.Role)
+
 	// 这里**不做同步**：首次同步要拉全部导图，几秒到几十秒，放在登录响应里
 	// 会让「登录」按钮一直转（两步验证时尤其明显）。前端登录成功后再异步
 	// 触发 /desktop/sync，失败也不影响已建立的连接。
@@ -353,6 +412,14 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 		"email":     session.UserEmail,
 		"nickname":  session.Nickname,
 	}})
+}
+
+// log 返回日志器；测试里没注入时用一个丢弃的实例。
+func (a *api) log() *slog.Logger {
+	if a.deps.Logger != nil {
+		return a.deps.Logger
+	}
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func (a *api) disconnect(w http.ResponseWriter, r *http.Request) {
