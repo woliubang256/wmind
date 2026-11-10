@@ -176,12 +176,12 @@ jobs:
           tag="$GITHUB_REF_NAME"
           version="${tag#desktop-v}"
 
-          # 只发布用户要下载的东西：dmg / zip / NSIS 安装包 / 更新归档 / 更新清单。
+          # 只发布用户要下载的东西：dmg / zip / NSIS 安装包 / 更新归档 / 增量补丁 / 更新清单。
           # install.sh、SHA256SUMS 之类在归档里已经有了，而且各平台同名，
           # 合并上传会撞名（ReleaseAsset.name already exists）。
           mapfile -t raw < <(find artifacts -type f \( \
             -name '*.dmg' -o -name '*.zip' -o -name '*setup*.exe' -o \
-            -name '*.tar.gz' -o -name 'update-*.json' \) | sort)
+            -name '*.tar.gz' -o -name '*.delta' -o -name 'update-*.json' \) | sort)
           if [ ${#raw[@]} -eq 0 ]; then
             echo "没有可发布的产物" >&2
             exit 1
