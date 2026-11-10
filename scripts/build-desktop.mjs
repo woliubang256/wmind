@@ -401,7 +401,8 @@ function publishToReleaseDir(version) {
     if (!statSync(dir).isDirectory()) continue; // build/ 下还有 SHA256SUMS 这类文件
     for (const file of readdirSync(dir)) {
       // 只同步用户会下载的安装包（dmg / zip / setup.exe），更新清单与归档留在 build/。
-      const downloadable = file.endsWith('.dmg') || file.endsWith('.zip') || /setup.*\.exe$/.test(file);
+      const downloadable = file.endsWith('.dmg') || file.endsWith('.zip') || file.endsWith('.deb')
+        || /setup.*\.exe$/.test(file);
       if (!downloadable) continue;
       cpSync(join(dir, file), join(releaseDir, file));
       copied.push(file);
@@ -453,11 +454,12 @@ function main() {
   }
 
   let platforms = args.platforms.length > 0 ? args.platforms : [hostPlatform()];
-  // 打安装包时的默认目标：macOS 与 Windows 都出 arm64 + amd64 两个包
+  // 打安装包时的默认目标：macOS、Windows、Linux 各出 arm64 + amd64 两个包
   // （Apple Silicon / Intel 各自原生运行，universal 单包会让所有人多下载一倍）。
-  // Linux 需要时用 --platform 显式给。
+  // Linux 产出 .deb（Debian/Ubuntu）与 tar.gz + install.sh（其他发行版），
+  // 另附 PKGBUILD 供 Arch 打包。
   if (args.package && args.platforms.length === 0) {
-    platforms = ['darwin/arm64', 'darwin/amd64', 'windows/amd64', 'windows/arm64'];
+    platforms = ['darwin/arm64', 'darwin/amd64', 'windows/amd64', 'windows/arm64', 'linux/amd64', 'linux/arm64'];
   }
 
   if (!args.skipFrontend) buildFrontend();

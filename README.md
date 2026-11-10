@@ -37,9 +37,11 @@ AI 功能默认关闭，在「网站设置 → AI」配置 OpenAI 兼容 Provide
 
 | 平台 | 安装包 |
 | --- | --- |
-| macOS（Apple Silicon） | `Wmind-<版本>-arm64.dmg` |
-| macOS（Intel） | `Wmind-<版本>-amd64.dmg` |
-| Windows（x64 / ARM64） | `Wmind-<版本>-windows-*.zip` |
+| macOS（Apple Silicon / Intel） | `Wmind-<版本>-arm64.dmg` / `-amd64.dmg` |
+| Windows（x64 / ARM64） | `Wmind-<版本>-windows-*.zip`（免安装）、`wmind-setup-<版本>-*.exe`（安装版） |
+| Linux（x64 / ARM64） | `wmind_<版本>_amd64.deb` / `_arm64.deb`（Debian / Ubuntu），或 `wmind-<版本>-linux-*.tar.gz` + `install.sh`（其他发行版），Arch 另附 `PKGBUILD` |
+
+Linux 版依赖系统 WebView：`sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0`（.deb 会自行声明依赖）。
 
 桌面端启动后自动检查更新，有新版本会弹窗提示并下载安装。首次打开若被系统拦截（未签名分发），在「系统设置 → 隐私与安全性」里允许一次即可。
 
