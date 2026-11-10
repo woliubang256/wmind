@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -44,8 +45,39 @@ var version = ""
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatalf("wmind desktop: %v", err)
+		// 打包后的应用没有控制台（Windows 上是 GUI 子系统），只写 stderr 等于
+		// 「双击没反应、也没有任何提示」。这里同时落盘并弹一个原生对话框。
+		reportStartupFailure(err)
+		os.Exit(1)
 	}
+}
+
+// crashLogPath 返回启动失败日志的落盘位置。
+//
+// 先试应用数据目录（正常情况），失败再退回系统临时目录：数据目录本身创建
+// 失败时（权限、磁盘满），至少还能在 %TEMP% / /tmp 里留下线索。
+func crashLogPath() string {
+	if dir, err := mygo.App.Path(mygo.PathUserData); err == nil && dir != "" {
+		return filepath.Join(dir, "startup-error.log")
+	}
+	return filepath.Join(os.TempDir(), "wmind-startup-error.log")
+}
+
+// reportStartupFailure 把启动失败写进日志并弹窗告诉用户，附带日志路径。
+func reportStartupFailure(err error) {
+	message := fmt.Sprintf("%v\n\n时间：%s\n版本：%s\n系统：%s/%s", err,
+		time.Now().Format(time.RFC3339), appVersion(), runtime.GOOS, runtime.GOARCH)
+	path := crashLogPath()
+	if writeErr := os.MkdirAll(filepath.Dir(path), 0o700); writeErr == nil {
+		if f, openErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); openErr == nil {
+			_, _ = fmt.Fprintf(f, "[%s] %s\n", time.Now().Format(time.RFC3339), message)
+			_ = f.Close()
+			message += "\n\n日志：" + path
+		}
+	}
+	log.Printf("wmind desktop: %v", err)
+	// 对话框失败也不能再抛：这时唯一能做的就是让用户看到日志路径。
+	mygo.Dialog.Error("Wmind 启动失败", message)
 }
 
 func run() error {
@@ -65,13 +97,26 @@ func run() error {
 	// 单实例：第二次启动不再开窗口，由第一个实例处理（后续接入深链接与
 	// 文件关联时，这里也是接收参数的地方）。
 	if !mygo.App.RequestSingleInstanceLock() {
+		// 正常情况：已有实例在跑，第二次启动不该开新窗口。但如果上一个实例
+		// 启动失败却还活着（窗口没建成），用户点图标就会「什么都没发生」——
+		// 这里至少留下一条记录，配合 startup-error.log 能看出是不是这个原因。
+		if dir, err := mygo.App.Path(mygo.PathUserData); err == nil {
+			if f, openErr := os.OpenFile(filepath.Join(dir, "startup-error.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); openErr == nil {
+				_, _ = fmt.Fprintf(f, "[%s] 已有实例持有单实例锁，本次启动退出（若看不到窗口，请结束残留的 Wmind 进程后重试）\n",
+					time.Now().Format(time.RFC3339))
+				_ = f.Close()
+			}
+		}
 		return nil
 	}
 
 	mygo.App.WhenReady(func() {
 		if err := start(); err != nil {
-			log.Printf("wmind desktop: %v", err)
+			// 只 log + Quit 的话：Windows 上没有控制台看不到，而且 Quit 若没
+			// 生效，进程会带着单实例锁活着——用户再点图标就「什么都没发生」。
+			reportStartupFailure(err)
 			mygo.App.Quit()
+			os.Exit(1)
 		}
 	})
 	return mygo.App.Run()
@@ -145,7 +190,7 @@ func start() error {
 	// 隐藏系统标题栏但保留红绿灯（hiddenInset）：页面自己画顶栏，红绿灯叠在
 	// 左上角。前端负责留出红绿灯区域并把顶栏声明为可拖拽（--app-region），
 	// 见 frontend/src/app/layouts.tsx 与 styles.css 的 .wmind-desktop。
-	evalWindow = mygo.NewWindow(mygo.WindowOptions{
+	window := mygo.NewWindow(mygo.WindowOptions{
 		Title:         "Wmind",
 		URL:           url,
 		Width:         1280,
@@ -154,6 +199,10 @@ func start() error {
 		MinHeight:     640,
 		TitleBarStyle: mygo.TitleBarHiddenInset,
 	})
+	if window == nil {
+		return fmt.Errorf("创建窗口失败：WebView 初始化未成功（Windows 需要 WebView2 运行时）")
+	}
+	evalWindow = window
 	ok = true
 	return nil
 }
