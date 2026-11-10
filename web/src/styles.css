@@ -259,3 +259,34 @@ body {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
+
+/* ------------------------------------------------------------------ */
+/* 桌面壳：滚动条                                                      */
+/* ------------------------------------------------------------------ */
+
+/*
+ * 浏览器式的常驻滚动条会让客户端看起来像网页。桌面端：
+ * - 窗口级滚动条（整页滚动）完全隐藏——滚轮、触控板和键盘照常滚；
+ * - 内部容器（样式面板、大纲、列表）保留细滚动条，只是变窄变淡。
+ */
+html.wmind-desktop {
+  scrollbar-width: none;
+}
+html.wmind-desktop::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.wmind-desktop ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.wmind-desktop ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 28%, transparent);
+  border-radius: 4px;
+}
+.wmind-desktop ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+}
+.wmind-desktop ::-webkit-scrollbar-track {
+  background: transparent;
+}
