@@ -286,12 +286,18 @@ export function AppLayout() {
     : undefined;
 
   const titlebarStyle = isDesktop() ? ({ '--app-region': 'drag' } as React.CSSProperties) : undefined;
+  /**
+   * 让出窗口控件的位置：macOS 红绿灯在左、Windows 三个按钮在右。
+   *
+   * 值由 mygo 在文档开始时写入 `--mygo-titlebar-inset-*`，随窗口缩放和按钮
+   * 增减更新；这里的兜底值只用于首帧（macOS 红绿灯约 78px，Windows 无控件时 0）。
+   */
   const titlebarInset = (side: 'left' | 'right') =>
     isDesktop() ? (
       <span
         aria-hidden
         className="h-full shrink-0"
-        style={{ width: `var(--mygo-titlebar-inset-${side}, 0px)` }}
+        style={{ width: `var(--mygo-titlebar-inset-${side}, ${side === 'left' ? 78 : 0}px)` }}
       />
     ) : null;
 
