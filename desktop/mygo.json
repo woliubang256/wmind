@@ -2,11 +2,11 @@
   "name": "Wmind",
   "slug": "wmind",
   "identifier": "app.wmind.desktop",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "copyright": "© 2026 Wmind",
   "publisher": "Wmind",
   "license": "MIT",
-  "icon": "resources/icon.png",
+  "icon": "resources/icon-windows.png",
   "out": "build",
   "fileAssociations": [
     {
@@ -32,6 +32,11 @@
   },
   "resourcesExclude": [
     "dmg-background.png",
-    "dmg-background@2x.png"
-  ]
+    "dmg-background@2x.png",
+    "icon-windows.png",
+    "icon.icns"
+  ],
+  "macos": {
+    "icon": "resources/icon.icns"
+  }
 }
