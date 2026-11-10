@@ -44,12 +44,51 @@ import (
 var version = ""
 
 func main() {
+	// 第一件事就写一行日志：如果应用在 WebView 初始化阶段就退出（Windows 上缺
+	// WebView2 运行时的典型表现），这是唯一能留下的证据。
+	earlyLog("process starting", map[string]string{
+		"version": appVersion(), "os": runtime.GOOS, "arch": runtime.GOARCH,
+	})
+	if hint := webviewRuntimeHint(); hint != "" {
+		earlyLog("webview runtime missing", map[string]string{"detail": hint})
+		mygo.Dialog.Error("Wmind 无法启动", hint)
+		os.Exit(1)
+	}
 	if err := run(); err != nil {
 		// 打包后的应用没有控制台（Windows 上是 GUI 子系统），只写 stderr 等于
 		// 「双击没反应、也没有任何提示」。这里同时落盘并弹一个原生对话框。
 		reportStartupFailure(err)
 		os.Exit(1)
 	}
+}
+
+// earlyLog 在 mygo 就绪之前也能写日志。
+//
+// 不能依赖 mygo.App.Path：应用未就绪时它可能拿不到路径。这里按各平台的约定
+// 拼出与正式日志相同的位置（macOS/Linux 用 os.UserConfigDir，Windows 是
+// %APPDATA%），失败再退回临时目录——目的是「无论如何留下痕迹」。
+func earlyLog(message string, fields map[string]string) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		dir = os.TempDir()
+	} else {
+		dir = filepath.Join(dir, "Wmind", "logs")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		dir = os.TempDir()
+	}
+	path := filepath.Join(dir, "wmind.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	parts := make([]string, 0, len(fields))
+	for key, value := range fields {
+		parts = append(parts, key+"="+value)
+	}
+	exe, _ := os.Executable()
+	_, _ = fmt.Fprintf(f, "[%s] %s %s exe=%s\n", time.Now().Format(time.RFC3339), message, strings.Join(parts, " "), exe)
 }
 
 // crashLogPath 返回启动失败日志的落盘位置。
