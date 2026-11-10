@@ -329,9 +329,10 @@ function createWindowsZips(platforms, version) {
     const zip = join(dir, zipName);
     rmSync(zip, { force: true });
     // 打整个应用目录（exe + 资源 + .mygo-files），只排除更新归档、更新清单和 zip 自己。
-    // 排除更新归档、清单与增量补丁：它们都是发布资产，塞进免安装包只会让包
-    // 从 32MB 涨到 56MB（1.1.3 实测）。
-    run('zip', ['-qry', zipName, '.', '-x', '*.tar.gz', '-x', 'update-*.json', '-x', '*.delta', '-x', zipName], { cwd: dir });
+    // 排除更新归档、清单、增量补丁与 NSIS 安装包：它们都是**发布资产**，塞进
+    // 免安装包只会让它翻倍（1.1.4 实测 52MB，其中 24MB 是嵌套的 setup.exe）。
+    run('zip', ['-qry', zipName, '.', '-x', '*.tar.gz', '-x', 'update-*.json', '-x', '*.delta',
+      '-x', '*setup*.exe', '-x', zipName], { cwd: dir });
     console.log(`  ${zip}`);
   }
 }
