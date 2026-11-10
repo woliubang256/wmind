@@ -164,7 +164,7 @@ func Login(ctx context.Context, serverURL, identifier, password string) (*Client
 		return nil, err
 	}
 	var result loginResult
-	status, _, err := client.do(ctx, http.MethodPost, "/api/v1/auth/login", map[string]string{
+	status, details, err := client.do(ctx, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"identifier":        identifier,
 		"challengeId":       challenge.ChallengeID,
 		"encryptedPassword": encrypted,
@@ -176,7 +176,13 @@ func Login(ctx context.Context, serverURL, identifier, password string) (*Client
 		return nil, ErrUnauthorized
 	}
 	if status != http.StatusOK {
-		return nil, fmt.Errorf("cloud: login failed with status %d", status)
+		// 带上地址、状态码与服务端错误码：404 多半是地址/路径不对，403 常见于
+		// WAF 拦截，5xx 是服务端问题——三种情况处理方式完全不同。
+		detail := ""
+		if details.Code != "" {
+			detail = "（" + details.Code + "）"
+		}
+		return nil, fmt.Errorf("登录失败：%s 返回 HTTP %d%s", client.baseURL+"/api/v1/auth/login", status, detail)
 	}
 	if result.TwoFactorRequired || result.ChallengeToken != "" {
 		client.mu.Lock()
@@ -217,14 +223,19 @@ type loginResult struct {
 
 func (c *Client) requestLoginChallenge(ctx context.Context, identifier string) (*loginChallenge, error) {
 	var challenge loginChallenge
-	status, _, err := c.do(ctx, http.MethodPost, "/api/v1/auth/login/challenge", map[string]string{
+	status, details, err := c.do(ctx, http.MethodPost, "/api/v1/auth/login/challenge", map[string]string{
 		"identifier": identifier,
 	}, &challenge, false)
 	if err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK {
-		return nil, fmt.Errorf("cloud: login challenge failed with status %d", status)
+		detail := ""
+		if details.Code != "" {
+			detail = "（" + details.Code + "）"
+		}
+		// 地址写错、反向代理没转发 /api、或服务端版本过老，都会停在这一步。
+		return nil, fmt.Errorf("连接服务器失败：%s 返回 HTTP %d%s", c.baseURL+"/api/v1/auth/login/challenge", status, detail)
 	}
 	if challenge.ChallengeID == "" || len(challenge.PublicKey) == 0 {
 		return nil, errors.New("cloud: server returned an unusable login challenge")
@@ -483,6 +494,10 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, wit
 	if err != nil {
 		return 0, errorDetails{}, err
 	}
+	// 明确的 UA：默认的 `Go-http-client/1.1` 会被部分 WAF 直接拦掉（浏览器能开、
+	// 客户端打不开就是这类原因）。
+	req.Header.Set("User-Agent", "WmindDesktop")
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
