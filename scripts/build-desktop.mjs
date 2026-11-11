@@ -337,32 +337,6 @@ function createWindowsZips(platforms, version) {
   }
 }
 
-/**
- * 编译 MCP 的 stdio 助手到 resources/<platform>/wmind_mcp[.exe]。
- *
- * 为什么单独编一个小二进制：MCP 客户端的配置里要写一条路径。指向主程序就得
- * 附带参数（`Wmind mcp-stdio`），而 `/Applications/Wmind.app/...` 这种路径本身
- * 带空格，粘到 JSON 配置里容易出错。一个小文件、不带参数、名字里没空格最省事。
- *
- * 放在 resources/<platform>/ 下由 mygo 负责拷进安装包（macOS 是
- * Contents/Resources，其他平台与主程序同目录），并保留可执行位与签名。
- */
-function buildMcpHelper(platforms, version) {
-  for (const platform of platforms) {
-    const [goos, goarch] = platform.split('/');
-    const dir = join(DESKTOP, 'resources', `${goos}-${goarch}`);
-    mkdirSync(dir, { recursive: true });
-    const name = goos === 'windows' ? 'wmind_mcp.exe' : 'wmind_mcp';
-    // -s -w 去掉符号表与 DWARF：这是个后台子进程，不需要调试信息，能省下
-    // 近三分之一体积（它和主程序一样要带整套后端）。
-    run('go', ['build', '-trimpath', '-ldflags', `-s -w -X main.version=${version}`, '-o', join(dir, name), './cmd/mcp'], {
-      cwd: DESKTOP,
-      env: { ...process.env, CGO_ENABLED: '0', GOOS: goos, GOARCH: goarch },
-    });
-    console.log(`  ${join(dir, name)}`);
-  }
-}
-
 function packageApps(platforms, version) {
   const ldflags = [
     `-X ${DESKTOP_VERSION_SYMBOL}=${version}`,
@@ -495,9 +469,6 @@ function main() {
   if (!existsSync(join(EMBED_DIR, 'index.html'))) {
     throw new Error('缺少 desktop/frontend-dist/index.html：先构建前端，或去掉 --skip-frontend');
   }
-
-  console.log('编译 MCP stdio 助手…');
-  buildMcpHelper(platforms, version);
 
   const outputs = platforms.map((platform) => buildFor(platform, version));
   console.log(`wmind 桌面版 ${version} 构建完成：`);
