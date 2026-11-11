@@ -1,4 +1,9 @@
-package main
+// Package mcpmode 是 MCP 的 **stdio 入口**：给 MCP 客户端拉起用的独立进程。
+//
+// 它被编成一个小可执行文件（macOS 在 `Wmind.app/Contents/Resources/wmind_mcp`，
+// Windows / Linux 与主程序同目录的 `wmind_mcp`），客户端配置里只需要一条不带
+// 空格的路径，不用传参数。
+package mcpmode
 
 import (
 	"context"
@@ -21,7 +26,8 @@ import (
 //
 // 数据直接读本机的 SQLite（与主程序同一份），所以主程序没开着也能用；
 // 反过来，用户没在设置里开启 MCP 时这里直接拒绝启动。
-func runMCPStdio() int {
+// Run 跑 stdio 循环，返回进程退出码。
+func Run(version string) int {
 	userData, err := os.UserConfigDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "wmind mcp-stdio: 找不到配置目录: %v\n", err)
@@ -73,7 +79,7 @@ func runMCPStdio() int {
 	logger.Info("mcp stdio started", "data", paths.Root)
 	if err := mcp.ServeStdio(ctx, mcp.Deps{
 		Maps:    app.MapService,
-		Version: appVersion(),
+		Version: version,
 		Logger:  logger,
 		Owner:   func(context.Context) (int64, error) { return user.ID, nil },
 	}, os.Stdin, os.Stdout, logger); err != nil {

@@ -33,6 +33,7 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localserver"
 	"github.com/woliubang256/wmind/backend/desktop/internal/logging"
+	"github.com/woliubang256/wmind/backend/desktop/internal/mcpmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/mcpserver"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
@@ -47,7 +48,8 @@ var version = ""
 func main() {
 	// 子命令：`Wmind mcp-stdio` 是给 MCP 客户端用的 stdio 传输入口，不启动窗口。
 	if len(os.Args) > 1 && os.Args[1] == "mcp-stdio" {
-		os.Exit(runMCPStdio())
+		// 兜底入口：真正的 stdio 客户端用同目录的 wmind_mcp（路径不带空格）。
+		os.Exit(mcpmode.Run(appVersion()))
 	}
 	// 第一件事就写一行日志：如果应用在 WebView 初始化阶段就退出（Windows 上缺
 	// WebView2 运行时的典型表现），这是唯一能留下的证据。

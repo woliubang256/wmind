@@ -71,7 +71,8 @@ export function McpPanel() {
     {
       mcpServers: {
         wmind: isStdio
-          ? { command: data.command, args: data.args }
+          // args 为空时省略：配置里只有一条不带空格的路径最不容易粘错。
+          ? { command: data.command, ...(data.args.length > 0 ? { args: data.args } : {}) }
           : { type: 'http', url: endpoint, headers: { Authorization: `Bearer ${data.token}` } },
       },
     },
@@ -135,9 +136,9 @@ export function McpPanel() {
               <p className="text-sm font-medium">{t('admin.mcp.endpoint')}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs">
-                  {data.command} {data.args.join(' ')}
+                  {[data.command, ...data.args].join(' ')}
                 </code>
-                <Button variant="outline" size="sm" onClick={() => void copy(`${data.command} ${data.args.join(' ')}`)}>
+                <Button variant="outline" size="sm" onClick={() => void copy([data.command, ...data.args].join(' '))}>
                   <Icon name="copy" className="size-4" />
                   {t('common.copy')}
                 </Button>

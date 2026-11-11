@@ -16,6 +16,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -590,17 +592,37 @@ func (a *api) mcp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// mcpHelperPath 返回 MCP stdio 助手的路径。
+//
+// macOS 在 `Wmind.app/Contents/Resources/wmind_mcp`，Windows / Linux 与主程序
+// 同目录的 `wmind_mcp(.exe)`。这条路径要能直接粘进客户端的 JSON 配置，所以
+// 文件名不带空格、也不需要任何参数。
+func mcpHelperPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Dir(exe)
+	name := "wmind_mcp"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(dir, "..", "Resources", name)
+	}
+	return filepath.Join(dir, name)
+}
+
 // mcpStatusOf 组装状态响应。
 func (a *api) mcpStatusOf(snapshot *settings.Snapshot) mcpStatus {
-	exe, _ := os.Executable()
 	return mcpStatus{
 		Enabled:   snapshot.Bool("mcp.enabled"),
 		Transport: snapshot.String("mcp.transport"),
 		Port:      snapshot.Int("mcp.port"),
 		Token:     snapshot.String("mcp.token"),
 		URL:       a.deps.MCP.URL(),
-		Command:   exe,
-		Args:      []string{"mcp-stdio"},
+		Command:   mcpHelperPath(),
+		Args:      []string{},
 	}
 }
 
