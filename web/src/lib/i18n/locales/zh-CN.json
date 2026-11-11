@@ -1250,7 +1250,14 @@
         "delete_topic": "删除主题及其子主题"
       },
       "remoteEnableHint": "开启后服务器提供 /mcp 端点，AI 客户端只能操作你（开启者）自己的导图。",
-      "remoteTokenHint": "密钥存在站点设置里，可随时轮换；轮换后旧密钥立即失效。"
+      "remoteTokenHint": "密钥存在站点设置里，可随时轮换；轮换后旧密钥立即失效。",
+      "transport": "传输方式",
+      "transportStdio": "stdio（推荐）",
+      "transportStdioHint": "客户端把 Wmind 当子进程启动，不占端口、不需要密钥。",
+      "transportHttp": "HTTP",
+      "transportHttpHint": "本机监听一个端口，适合需要常驻端点的客户端。",
+      "copyStdioConfig": "复制客户端配置",
+      "stdioNote": "复制后粘到 MCP 客户端配置里；Wmind 需要保持安装在同一路径。"
     }
   },
   "validate": {

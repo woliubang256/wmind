@@ -54,14 +54,19 @@ type Deps struct {
 
 // New 构造 MCP 的 HTTP 处理器（POST /mcp）。
 func New(deps Deps) http.Handler {
+	s := newServer(deps)
+	return http.HandlerFunc(s.handle)
+}
+
+// newServer 补齐默认值后构造服务器；HTTP 与 stdio 两种传输共用。
+func newServer(deps Deps) *server {
 	if deps.Name == "" {
 		deps.Name = "wmind"
 	}
 	if deps.Logger == nil {
 		deps.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	s := &server{deps: deps}
-	return http.HandlerFunc(s.handle)
+	return &server{deps: deps}
 }
 
 type server struct {
@@ -115,19 +120,31 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 		s.write(w, rpcResponse{JSONRPC: "2.0", Error: &rpcError{Code: codeInvalidRequest, Message: "invalid JSON-RPC request"}})
 		return
 	}
-	// 通知（没有 id）不需要响应：客户端发完 notifications/initialized 就走。
-	if len(req.ID) == 0 {
+	response, ok := s.serve(r.Context(), req)
+	if !ok {
+		// 通知（没有 id）不需要响应：客户端发完 notifications/initialized 就走。
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	result, rpcErr := s.dispatch(r, req)
+	s.write(w, response)
+}
+
+// serve 处理一条 JSON-RPC 消息，返回响应与「是否需要响应」。
+//
+// HTTP 与 stdio 两种传输共用这一处：协议逻辑只有一份，传输层各自负责读写。
+func (s *server) serve(ctx context.Context, req rpcRequest) (rpcResponse, bool) {
+	if len(req.ID) == 0 {
+		return rpcResponse{}, false
+	}
+	owner, ownerErr := s.deps.Owner(ctx)
+	result, rpcErr := s.dispatch(ctx, owner, ownerErr, req)
 	response := rpcResponse{JSONRPC: "2.0", ID: req.ID}
 	if rpcErr != nil {
 		response.Error = rpcErr
 	} else {
 		response.Result = result
 	}
-	s.write(w, response)
+	return response, true
 }
 
 // authorized 校验 Bearer 令牌。
@@ -150,7 +167,7 @@ func (s *server) write(w http.ResponseWriter, response rpcResponse) {
 }
 
 // dispatch 按方法分发。
-func (s *server) dispatch(r *http.Request, req rpcRequest) (any, *rpcError) {
+func (s *server) dispatch(ctx context.Context, owner int64, ownerErr error, req rpcRequest) (any, *rpcError) {
 	switch req.Method {
 	case "initialize":
 		return s.initialize(req.Params), nil
@@ -159,7 +176,10 @@ func (s *server) dispatch(r *http.Request, req rpcRequest) (any, *rpcError) {
 	case "tools/list":
 		return map[string]any{"tools": toolDefinitions()}, nil
 	case "tools/call":
-		return s.callTool(r, req.Params)
+		if ownerErr != nil {
+			return nil, &rpcError{Code: codeInternal, Message: "无法确定操作身份: " + ownerErr.Error()}
+		}
+		return s.callTool(ctx, owner, req.Params)
 	default:
 		return nil, &rpcError{Code: codeMethodNotFound, Message: "unknown method: " + req.Method}
 	}
@@ -182,7 +202,7 @@ func (s *server) initialize(params json.RawMessage) any {
 }
 
 // callTool 执行一个工具调用。
-func (s *server) callTool(r *http.Request, params json.RawMessage) (any, *rpcError) {
+func (s *server) callTool(ctx context.Context, owner int64, params json.RawMessage) (any, *rpcError) {
 	var call struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
@@ -190,11 +210,7 @@ func (s *server) callTool(r *http.Request, params json.RawMessage) (any, *rpcErr
 	if err := json.Unmarshal(params, &call); err != nil || call.Name == "" {
 		return nil, &rpcError{Code: codeInvalidParams, Message: "tools/call 需要 name 与 arguments"}
 	}
-	owner, err := s.deps.Owner(r.Context())
-	if err != nil {
-		return nil, &rpcError{Code: codeInternal, Message: "无法确定操作身份: " + err.Error()}
-	}
-	text, err := s.runTool(r.Context(), owner, call.Name, call.Arguments)
+	text, err := s.runTool(ctx, owner, call.Name, call.Arguments)
 	if err != nil {
 		// 工具级失败按 MCP 约定放在结果里（isError），客户端能看到原因而不是
 		// 把它当成协议错误。

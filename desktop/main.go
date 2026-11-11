@@ -45,6 +45,10 @@ import (
 var version = ""
 
 func main() {
+	// 子命令：`Wmind mcp-stdio` 是给 MCP 客户端用的 stdio 传输入口，不启动窗口。
+	if len(os.Args) > 1 && os.Args[1] == "mcp-stdio" {
+		os.Exit(runMCPStdio())
+	}
 	// 第一件事就写一行日志：如果应用在 WebView 初始化阶段就退出（Windows 上缺
 	// WebView2 运行时的典型表现），这是唯一能留下的证据。
 	earlyLog("process starting", map[string]string{

@@ -50,6 +50,11 @@ type Options struct {
 	// 迁移集（那会让 Web 侧多出无用的表，还要维护两套方言的 parity）。
 	// 只在 SQLite 方言下调用——桌面端只用 SQLite。
 	Prepare func(ctx context.Context, db *sql.DB) error
+	// SkipWorkers 不启动后台任务（备份调度、回收站清理、上传资源回收）。
+	//
+	// 桌面端的 MCP stdio 子进程用得上：它只需要读设置与导图，如果也起一套后台
+	// 任务，就会和正在运行的客户端抢同一份数据（备份会被调度两次）。
+	SkipWorkers bool
 	// Quiet 关掉 gin 的路由表打印。
 	//
 	// 桌面端把日志写进用户数据目录，启动时刷一屏路由表只会淹没真正有用的
@@ -88,9 +93,11 @@ type App struct {
 	stopSettings context.CancelFunc
 	settingsDone chan struct{}
 	stopBackups  context.CancelFunc
-	backupsDone  chan struct{}
-	trashDone    chan struct{}
-	uploadDone   chan struct{}
+	// skipWorkers 为真时不启动后台任务（见 Options.SkipWorkers）。
+	skipWorkers bool
+	backupsDone chan struct{}
+	trashDone   chan struct{}
+	uploadDone  chan struct{}
 }
 
 // New 装配全部依赖。
@@ -113,7 +120,7 @@ func New(ctx context.Context, cfg *config.Config, opts Options) (*App, error) {
 	if opts.Quiet {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	app := &App{Config: cfg, Logger: log, prepare: opts.Prepare}
+	app := &App{Config: cfg, Logger: log, prepare: opts.Prepare, skipWorkers: opts.SkipWorkers}
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, timeout)
 	defer startupCancel()
@@ -396,7 +403,12 @@ func (a *App) assemble(ctx context.Context) error {
 	a.stopBackups = stopBackups
 	backupsDone := make(chan struct{})
 	a.backupsDone = backupsDone
-	go func() { defer close(backupsDone); backups.Run(backupsCtx) }()
+	if a.skipWorkers {
+		// 通道必须立刻关闭：Close 会等它，不关就是死锁。
+		close(backupsDone)
+	} else {
+		go func() { defer close(backupsDone); backups.Run(backupsCtx) }()
+	}
 
 	trashCleaner, err := trash.New(trash.Config{
 		Repository: trashRepo, Policy: settingsSvc, Gate: backups.Gate(), Logger: log,
@@ -406,7 +418,11 @@ func (a *App) assemble(ctx context.Context) error {
 	}
 	trashDone := make(chan struct{})
 	a.trashDone = trashDone
-	go func() { defer close(trashDone); trashCleaner.Run(backupsCtx) }()
+	if a.skipWorkers {
+		close(trashDone)
+	} else {
+		go func() { defer close(trashDone); trashCleaner.Run(backupsCtx) }()
+	}
 
 	uploadCleaner, err := uploadgc.New(uploadgc.Config{
 		Root: cfg.Storage.Dir, References: uploadReferences, Gate: backups.Gate(), Logger: log,
@@ -416,7 +432,11 @@ func (a *App) assemble(ctx context.Context) error {
 	}
 	uploadDone := make(chan struct{})
 	a.uploadDone = uploadDone
-	go func() { defer close(uploadDone); uploadCleaner.Run(backupsCtx) }()
+	if a.skipWorkers {
+		close(uploadDone)
+	} else {
+		go func() { defer close(uploadDone); uploadCleaner.Run(backupsCtx) }()
+	}
 
 	cookie := handler.DefaultCookieConfig(cfg.IsProduction(), cfg.Auth.RefreshTTL)
 	loginEncryption, err := service.NewLoginEncryption(loginChallengeRepo, factorKey)

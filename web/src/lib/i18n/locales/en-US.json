@@ -1250,7 +1250,14 @@
         "delete_topic": "Delete a topic and its subtree"
       },
       "remoteEnableHint": "Serves /mcp on this server. AI clients can only reach the maps of the admin who enabled it.",
-      "remoteTokenHint": "The token lives in site settings and can be rotated any time; the old one stops working immediately."
+      "remoteTokenHint": "The token lives in site settings and can be rotated any time; the old one stops working immediately.",
+      "transport": "Transport",
+      "transportStdio": "stdio (recommended)",
+      "transportStdioHint": "The client launches Wmind as a child process: no port, no token.",
+      "transportHttp": "HTTP",
+      "transportHttpHint": "Listens on a local port for clients that need a persistent endpoint.",
+      "copyStdioConfig": "Copy client config",
+      "stdioNote": "Paste into your MCP client config; Wmind must stay installed at the same path."
     }
   },
   "validate": {

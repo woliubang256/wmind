@@ -154,9 +154,14 @@ async function desktopRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface McpStatus {
   enabled: boolean;
+  /** stdio（默认，客户端拉起子进程）或 http（常驻端口）。 */
+  transport: 'stdio' | 'http' | string;
   port: number;
   token: string;
   url?: string;
+  /** stdio 传输要填的启动命令与参数。 */
+  command: string;
+  args: string[];
 }
 
 /** 读取本地 MCP 服务状态（开关、端口、令牌、当前地址）。 */
@@ -165,7 +170,12 @@ export function fetchMcpStatus(): Promise<McpStatus> {
 }
 
 /** 保存本地 MCP 配置：开关、端口，或重新生成令牌。 */
-export function saveMcpSettings(input: { enabled?: boolean; port?: number; regenerate?: boolean }): Promise<McpStatus> {
+export function saveMcpSettings(input: {
+  enabled?: boolean;
+  transport?: 'stdio' | 'http';
+  port?: number;
+  regenerate?: boolean;
+}): Promise<McpStatus> {
   return desktopRequest('/desktop/mcp', { method: 'PUT', body: JSON.stringify(input) });
 }
 

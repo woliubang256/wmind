@@ -36,11 +36,39 @@ func TestMCPToggleStartsServer(t *testing.T) {
 	}
 }
 
+// 默认传输是 stdio：开启后不该占端口（由客户端按需拉起子进程）。
+func TestMCPStdioDoesNotListen(t *testing.T) {
+	f := newFixture(t)
+	status := dataOf(t, f.do(t, http.MethodGet, "/desktop/mcp", nil))
+	if status["transport"] != "stdio" {
+		t.Fatalf("默认传输应当是 stdio: %#v", status)
+	}
+	resp := f.do(t, http.MethodPut, "/desktop/mcp", map[string]any{"enabled": true, "port": 17803})
+	if resp.status != http.StatusOK {
+		t.Fatalf("开启失败 = %d %s", resp.status, string(resp.Data))
+	}
+	if f.mcp.running {
+		t.Fatal("stdio 传输不该启动本地监听")
+	}
+	if dataOf(t, resp)["enabled"] != true {
+		t.Fatalf("设置里应当是开启状态: %#v", dataOf(t, resp))
+	}
+
+	// 切到 http 才监听
+	resp = f.do(t, http.MethodPut, "/desktop/mcp", map[string]any{"enabled": true, "transport": "http", "port": 17804})
+	if resp.status != http.StatusOK {
+		t.Fatalf("切到 http 失败 = %d %s", resp.status, string(resp.Data))
+	}
+	if !f.mcp.running || f.mcp.port != 17804 {
+		t.Fatalf("http 传输应当监听端口: %+v", f.mcp)
+	}
+}
+
 // 重新生成密钥会换掉旧值。
 func TestMCPRegenerateToken(t *testing.T) {
 	f := newFixture(t)
 	port := 17802
-	first := dataOf(t, f.do(t, http.MethodPut, "/desktop/mcp", map[string]any{"enabled": true, "port": port}))
+	first := dataOf(t, f.do(t, http.MethodPut, "/desktop/mcp", map[string]any{"enabled": true, "transport": "http", "port": port}))
 	firstToken, _ := first["token"].(string)
 	second := dataOf(t, f.do(t, http.MethodPut, "/desktop/mcp", map[string]any{"regenerate": true}))
 	secondToken, _ := second["token"].(string)

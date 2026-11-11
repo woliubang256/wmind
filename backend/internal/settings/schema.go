@@ -74,7 +74,10 @@ var specs = []Spec{
 	{Key: "mcp.enabled", Kind: KindBool, Default: `false`},
 	{Key: "mcp.token", Kind: KindString, Default: `""`, MaxRunes: 128},
 	{Key: "mcp.owner_uid", Kind: KindString, Default: `""`, MaxRunes: 64},
-	// 仅桌面端使用：本地 MCP 服务监听的端口（服务端忽略，它用站点自己的端口）。
+	// 仅桌面端使用：传输方式。stdio 是默认——客户端把 Wmind 当子进程拉起，
+	// 不需要端口也不需要密钥；http 留给需要常驻端点的客户端。
+	{Key: "mcp.transport", Kind: KindString, Default: `"stdio"`, Enum: []string{"stdio", "http"}},
+	// 仅桌面端使用：http 传输时监听的端口（服务端忽略，它用站点自己的端口）。
 	{Key: "mcp.port", Kind: KindInt, Default: `7777`, Min: 1024, Max: 65535},
 
 	{Key: "share.public_link_enabled", Kind: KindBool, Default: `true`, Public: true},

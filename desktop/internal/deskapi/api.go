@@ -513,10 +513,14 @@ type MCPManager interface {
 
 // mcpStatus 是 GET /desktop/mcp 的返回。
 type mcpStatus struct {
-	Enabled bool   `json:"enabled"`
-	Port    int    `json:"port"`
-	Token   string `json:"token"`
-	URL     string `json:"url,omitempty"`
+	Enabled   bool   `json:"enabled"`
+	Transport string `json:"transport"`
+	Port      int    `json:"port"`
+	Token     string `json:"token"`
+	URL       string `json:"url,omitempty"`
+	// Command / Args 是 stdio 客户端要填的启动命令（当前可执行文件 + mcp-stdio）。
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
 }
 
 // mcp 处理 GET/PUT /desktop/mcp。
@@ -531,17 +535,13 @@ func (a *api) mcp(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		snapshot := a.deps.Settings.Snapshot()
-		writeJSON(w, http.StatusOK, envelope{Data: mcpStatus{
-			Enabled: snapshot.Bool("mcp.enabled"),
-			Port:    snapshot.Int("mcp.port"),
-			Token:   snapshot.String("mcp.token"),
-			URL:     a.deps.MCP.URL(),
-		}})
+		writeJSON(w, http.StatusOK, envelope{Data: a.mcpStatusOf(snapshot)})
 	case http.MethodPut:
 		var req struct {
-			Enabled    *bool `json:"enabled"`
-			Port       *int  `json:"port"`
-			Regenerate bool  `json:"regenerate"`
+			Enabled    *bool  `json:"enabled"`
+			Transport  string `json:"transport"`
+			Port       *int   `json:"port"`
+			Regenerate bool   `json:"regenerate"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 			fail(w, http.StatusBadRequest, "请求格式不正确")
@@ -551,6 +551,9 @@ func (a *api) mcp(w http.ResponseWriter, r *http.Request) {
 		patch := map[string]any{}
 		if req.Enabled != nil {
 			patch["mcp.enabled"] = *req.Enabled
+		}
+		if req.Transport != "" {
+			patch["mcp.transport"] = req.Transport
 		}
 		if req.Port != nil {
 			patch["mcp.port"] = *req.Port
@@ -572,18 +575,32 @@ func (a *api) mcp(w http.ResponseWriter, r *http.Request) {
 		}
 		enabled := updated.Bool("mcp.enabled")
 		port := updated.Int("mcp.port")
-		if err := a.deps.MCP.Apply(r.Context(), enabled, port, updated.String("mcp.token")); err != nil {
+		// 只有 http 传输才需要常驻监听；stdio 由客户端按需拉起子进程。
+		listen := enabled && updated.String("mcp.transport") == "http"
+		if err := a.deps.MCP.Apply(r.Context(), listen, port, updated.String("mcp.token")); err != nil {
 			// 端口被占用之类：把开关关回去，避免界面显示「已开启」但实际没起。
 			_, _ = a.deps.Settings.Update(r.Context(), map[string]any{"mcp.enabled": false}, nil)
 			fail(w, http.StatusConflict, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, envelope{Data: mcpStatus{
-			Enabled: enabled, Port: port, Token: updated.String("mcp.token"), URL: a.deps.MCP.URL(),
-		}})
+		writeJSON(w, http.StatusOK, envelope{Data: a.mcpStatusOf(updated)})
 	default:
 		w.Header().Set("Allow", "GET, PUT")
 		fail(w, http.StatusMethodNotAllowed, "不支持的方法")
+	}
+}
+
+// mcpStatusOf 组装状态响应。
+func (a *api) mcpStatusOf(snapshot *settings.Snapshot) mcpStatus {
+	exe, _ := os.Executable()
+	return mcpStatus{
+		Enabled:   snapshot.Bool("mcp.enabled"),
+		Transport: snapshot.String("mcp.transport"),
+		Port:      snapshot.Int("mcp.port"),
+		Token:     snapshot.String("mcp.token"),
+		URL:       a.deps.MCP.URL(),
+		Command:   exe,
+		Args:      []string{"mcp-stdio"},
 	}
 }
 

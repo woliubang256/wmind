@@ -32,7 +32,7 @@ export function McpPanel() {
     if (status.data) setPort(String(status.data.port));
   }, [status.data]);
 
-  const apply = async (input: { enabled?: boolean; port?: number; regenerate?: boolean }) => {
+  const apply = async (input: { enabled?: boolean; transport?: 'stdio' | 'http'; port?: number; regenerate?: boolean }) => {
     setSaving(true);
     try {
       const next = await saveMcpSettings(input);
@@ -53,6 +53,7 @@ export function McpPanel() {
   }
 
   const data: McpStatus = status.data;
+  const isStdio = data.transport !== 'http';
   const endpoint = data.url || `http://127.0.0.1:${data.port}/mcp`;
 
   const copy = async (text: string) => {
@@ -65,10 +66,13 @@ export function McpPanel() {
   };
 
   // MCP 客户端（Claude Desktop 等）要的是一段可粘贴的 JSON 配置。
+  // stdio：客户端按 command 拉起子进程；http：给地址与令牌。
   const connectionSnippet = JSON.stringify(
     {
       mcpServers: {
-        wmind: { type: 'http', url: endpoint, headers: { Authorization: `Bearer ${data.token}` } },
+        wmind: isStdio
+          ? { command: data.command, args: data.args }
+          : { type: 'http', url: endpoint, headers: { Authorization: `Bearer ${data.token}` } },
       },
     },
     null,
@@ -89,7 +93,26 @@ export function McpPanel() {
             onCheckedChange={(checked) => void apply({ enabled: checked, port: Number(port) || data.port })}
           />
 
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t('admin.mcp.transport')}</p>
+            <div className="flex gap-2">
+              {(['stdio', 'http'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  disabled={saving}
+                  aria-pressed={data.transport === option}
+                  onClick={() => void apply({ transport: option, enabled: data.enabled, port: Number(port) || data.port })}
+                  className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${data.transport === option ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-border text-muted-foreground hover:bg-accent'}`}
+                >
+                  {option === 'stdio' ? t('admin.mcp.transportStdio') : t('admin.mcp.transportHttp')}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">{isStdio ? t('admin.mcp.transportStdioHint') : t('admin.mcp.transportHttpHint')}</p>
+          </div>
+
+          {isStdio ? null : <div className="flex flex-wrap items-end gap-3">
             <TextField
               label={t('admin.mcp.port')}
               value={port}
@@ -105,8 +128,23 @@ export function McpPanel() {
               {t('common.save')}
             </Button>
             <span className="pb-2 text-xs text-muted-foreground">{t('admin.mcp.portHint')}</span>
-          </div>
+          </div>}
 
+          {isStdio ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{t('admin.mcp.endpoint')}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs">
+                  {data.command} {data.args.join(' ')}
+                </code>
+                <Button variant="outline" size="sm" onClick={() => void copy(`${data.command} ${data.args.join(' ')}`)}>
+                  <Icon name="copy" className="size-4" />
+                  {t('common.copy')}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">{t('admin.mcp.stdioNote')}</p>
+            </div>
+          ) : (
           <div className="space-y-2">
             <p className="text-sm font-medium">{t('admin.mcp.endpoint')}</p>
             <div className="flex flex-wrap items-center gap-2">
@@ -118,7 +156,9 @@ export function McpPanel() {
             </div>
           </div>
 
-          <div className="space-y-2">
+          )}
+
+          {isStdio ? null : <div className="space-y-2">
             <p className="text-sm font-medium">{t('admin.mcp.token')}</p>
             <div className="flex flex-wrap items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs">
@@ -133,10 +173,10 @@ export function McpPanel() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">{t('admin.mcp.tokenHint')}</p>
-          </div>
+          </div>}
 
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!data.enabled || !data.token} onClick={() => void copy(connectionSnippet)}>
+            <Button disabled={!data.enabled || (!isStdio && !data.token)} onClick={() => void copy(connectionSnippet)}>
               <Icon name="clipboard-list" className="size-4" />
               {t('admin.mcp.copyConfig')}
             </Button>
