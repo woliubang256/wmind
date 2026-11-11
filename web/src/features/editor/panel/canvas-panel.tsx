@@ -59,6 +59,8 @@ export function CanvasPanel({
       id="editor-canvas-panel"
       aria-label={label}
       className="flex w-72 shrink-0 flex-col border-l border-border/70 bg-card"
+      // 面板里的滚轮只滚面板：不让它冒泡出去被画布的缩放/平移逻辑接走。
+      onWheel={(event) => event.stopPropagation()}
     >
       <div className="flex items-center gap-1 border-b border-border/70 px-1.5 py-1">
         <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">

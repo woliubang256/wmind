@@ -68,6 +68,13 @@ export function PanZoomPlugin() {
     };
 
     const onWheel = (event: WheelEvent) => {
+      // 兜底：指针不在画布矩形内就不接管。正常情况事件只会落在 svg 上，但
+      // 浮层留缝、滚动条占位等情况下事件也可能冒到这里，那时缩放会显得很莫名。
+      const rect = svg.getBoundingClientRect();
+      const inside = event.clientX >= rect.left && event.clientX <= rect.right
+        && event.clientY >= rect.top && event.clientY <= rect.bottom;
+      if (!inside) return;
+
       // 画布吞掉所有滚轮事件：否则页面会在导图里滚动，用户以为画布卡住了。
       event.preventDefault();
 
