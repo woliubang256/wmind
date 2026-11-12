@@ -86,3 +86,12 @@ test('部署包保留与 Web 镜像相同的上传代理配置', t => {
   const dockerfile = readFileSync(join(root, 'deploy/Dockerfile.web'), 'utf8');
   assert.match(dockerfile, /COPY\s+deploy\/nginx\.conf\s+\/etc\/nginx\/conf\.d\/default\.conf/);
 });
+
+// MCP 的 POST /mcp 必须转发到 API：落进 SPA 的 location / 只会 405。
+test('nginx proxies /mcp to the API', () => {
+  const block = /location\s+=\s+\/mcp\s*\{([^}]+)\}/.exec(config)?.[1];
+  assert.ok(block, '缺少 location = /mcp');
+  assert.match(block, /proxy_pass\s+http:\/\/api:8080;/, '/mcp 必须转发到 api:8080');
+  assert.match(block, /Cache-Control\s+"no-store"/, '/mcp 不能被缓存');
+  assert.match(block, /X-Forwarded-Proto\s+\$scheme;/, '必须透传协议');
+});
