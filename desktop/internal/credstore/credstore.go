@@ -5,8 +5,8 @@
 // 甚至重新登录。凭据本来就是「本机这一份数据库」的一部分，跟着数据目录走更符合
 // 预期：重装应用只要不删数据目录就还在。
 //
-// 存储形态与原来的 cloud.json 一致：JSON 结构 + AES-GCM 加密的密码，主密钥来自
-// 本机 secrets.json（0600）。数据库被单独拷走也解不出密码。
+// 保存版本化 JSON 与 AES-GCM 加密的刷新令牌，主密钥来自本机 secrets.json
+// （0600）。不保存账号密码或访问令牌，数据库单独被拷走不能恢复登录凭据。
 package credstore
 
 import (
@@ -58,9 +58,9 @@ func (s *Store) Load() (*cloudcreds.Credentials, error) {
 	return cloudcreds.Decode(raw, s.secret)
 }
 
-// Save 写入凭据（密码加密后落库）。
-func (s *Store) Save(creds cloudcreds.Credentials, password string) error {
-	encoded, err := cloudcreds.Encode(creds, password, s.secret)
+// Save encrypts the refresh credential before writing it to the database.
+func (s *Store) Save(creds cloudcreds.Credentials) error {
+	encoded, err := cloudcreds.Encode(creds, s.secret)
 	if err != nil {
 		return err
 	}

@@ -1,10 +1,10 @@
 // Package remoteproxy 把**远端 API** 转发到本机路径 `/desktop/remote-api/`，
 // 供客户端里的「网站设置」页面直接调用（保存也走它）。
 //
-// 为什么不直接把远程地址给前端：远程用 cookie 会话，而桌面壳手里只有令牌
+// 为什么不直接把远程地址给前端：远程请求必须由本地 Go 客户端管理双令牌，而桌面壳手里只有令牌
 // （本地模式没有登录页，用户从未在远端浏览器登录过）。代理负责三件事：
 //
-//  1. 给请求注入 `Authorization: Bearer <令牌>`，401 时刷新令牌并重试一次；
+//  1. 给请求注入 `Authorization: Bearer <令牌>`，401 时刷新原生令牌并重试一次；
 //  2. 不转发本机壳自己的 cookie；
 //  3. 禁用缓存——设置页永远读最新值。
 //
@@ -13,6 +13,7 @@ package remoteproxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -63,12 +64,35 @@ func Handler(client *cloud.Client, serverURL, prefix, targetPrefix string, log *
 		req.URL.Path = targetPrefix + "/" + rest
 		req.URL.RawPath = ""
 		req.Header.Del("Cookie")
+		req.Header.Set("X-Wmind-Client", "desktop")
 		if token := client.Session().AccessToken; token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		resp.Header.Set("Cache-Control", "no-store")
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 &&
+			strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			raw, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+			if err != nil {
+				return err
+			}
+			_ = resp.Body.Close()
+			resp.Body = io.NopCloser(bytes.NewReader(raw))
+			resp.ContentLength = int64(len(raw))
+			if err := client.AdoptAuthResponse(raw); err != nil {
+				log.Warn("remote api: session replacement was not saved", "err", err)
+			}
+			if bytes.Contains(raw, []byte(`"refreshToken"`)) {
+				if sanitized, err := stripNativeSessionCredentials(raw); err == nil {
+					raw = sanitized
+				} else {
+					log.Warn("remote api: failed to strip session credentials", "err", err)
+				}
+				resp.Body = io.NopCloser(bytes.NewReader(raw))
+				resp.ContentLength = int64(len(raw))
+			}
+		}
 		// 上游报错时留一条日志：前端只会显示一句话，排查时得知道服务器到底回了什么。
 		if resp.StatusCode >= 400 {
 			log.Warn("remote api: upstream error", "path", resp.Request.URL.Path, "status", resp.StatusCode)
@@ -95,6 +119,30 @@ func Handler(client *cloud.Client, serverURL, prefix, targetPrefix string, log *
 		_, _ = w.Write([]byte(`{"error":{"code":"REMOTE_UNAVAILABLE","message":"服务器暂时不可用"}}`))
 	}
 	return proxy, nil
+}
+
+func stripNativeSessionCredentials(raw []byte) ([]byte, error) {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	var scrub func(any)
+	scrub = func(item any) {
+		switch current := item.(type) {
+		case map[string]any:
+			delete(current, "refreshToken")
+			delete(current, "refreshExpiresAt")
+			for _, child := range current {
+				scrub(child)
+			}
+		case []any:
+			for _, child := range current {
+				scrub(child)
+			}
+		}
+	}
+	scrub(value)
+	return json.Marshal(value)
 }
 
 // authTransport 在收到 401 时刷新一次令牌并重试。

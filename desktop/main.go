@@ -353,8 +353,8 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	// 凭据存本地数据库（不用系统钥匙串：见 internal/credstore 的说明）。
 	creds := &deskapi.CredentialStore{Repo: credstore.New(localDB, secrets.JWTSecret)}
 
-	// 上次连接过就试着接上：失败只记日志，不阻塞启动——离线优先。
-	restoreCloud(ctx, engine, creds, secrets.JWTSecret, logger)
+	// Restore a refresh-only session without requiring startup networking.
+	restoreCloud(engine, creds, logger)
 
 	// 更新检查走 mygo 的签名更新源（GitHub releases，标签前缀 desktop-v）。
 	// 开发构建里 Enabled() 为 false，接口会明确返回「不支持」，界面据此隐藏入口。
@@ -412,11 +412,9 @@ func debugEval(code string) (any, error) {
 	return evalWindow.Page().Eval(code)
 }
 
-// restoreCloud 用上次保存的凭据恢复云端连接。
-//
-// 密码用本地主密钥解开再登录：刷新令牌虽然也存了，但桌面端长期离线，令牌
-// 过期是常态，直接重登比处理「刷新失败再重登」简单且不会漏掉安全版本变化。
-func restoreCloud(ctx context.Context, engine *syncengine.Engine, creds *deskapi.CredentialStore, secret string, logger *slog.Logger) {
+// restoreCloud restores only the refresh credential. The first remote request
+// renews it, so offline startup preserves the account and does not block the UI.
+func restoreCloud(engine *syncengine.Engine, creds *deskapi.CredentialStore, logger *slog.Logger) {
 	stored, err := creds.Load()
 	if err != nil {
 		logger.Warn("cloud: read saved connection failed", "err", err)
@@ -425,28 +423,29 @@ func restoreCloud(ctx context.Context, engine *syncengine.Engine, creds *deskapi
 	if stored == nil {
 		return
 	}
-	password, err := stored.Decrypt(secret)
-	if err != nil {
-		// 主密钥变了（用户删过 secrets.json）：凭据作废，让用户重新连接。
-		logger.Warn("cloud: saved credentials cannot be decrypted", "err", err)
-		return
-	}
-	client, err := cloud.Login(ctx, stored.ServerURL, stored.Identifier, password)
-	if err != nil {
-		logger.Info("cloud: reconnect skipped", "server", stored.ServerURL, "err", err)
-		return
-	}
-	session := client.Session()
-	engine.Connect(session.ServerURL, client)
-	// 角色可能在服务器侧被改过（管理员降级）：重连时刷新，菜单里的
-	// 「网站设置」入口才不会被过期的角色骗到。
-	if session.Role != "" && session.Role != stored.Role {
-		stored.Role = session.Role
-		if err := creds.Save(*stored, password); err != nil {
-			logger.Warn("cloud: refresh stored role failed", "err", err)
+	if stored.RefreshToken == "" {
+		// Rewrite legacy records to discard the stored account password, while
+		// keeping address/identifier metadata for the next interactive login.
+		if err := creds.Save(*stored); err != nil {
+			logger.Warn("cloud: migrate saved connection failed", "err", err)
 		}
+		logger.Info("cloud: saved connection requires sign-in")
+		return
 	}
-	logger.Info("cloud: reconnected", "server", session.ServerURL)
+	client, err := cloud.New(stored.ServerURL, cloud.Session{
+		RefreshToken: stored.RefreshToken, RefreshExpiresAt: stored.RefreshExpiresAt,
+		UserUID: stored.UserUID, UserEmail: stored.Email, Role: stored.Role, Nickname: stored.Nickname,
+	})
+	if err != nil {
+		logger.Warn("cloud: saved server address is invalid", "err", err)
+		return
+	}
+	if err := creds.Attach(client, stored.Identifier); err != nil {
+		logger.Warn("cloud: restore saved session failed", "err", err)
+		return
+	}
+	engine.Connect(client.Session().ServerURL, client)
+	logger.Info("cloud: saved session restored", "server", client.Session().ServerURL)
 }
 
 // appVersion 返回注入的版本，未注入时退回 mygo 配置里的版本。

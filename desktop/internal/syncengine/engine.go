@@ -122,7 +122,7 @@ func (e *Engine) Client() *cloud.Client {
 func (e *Engine) Connected() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.remote != nil
+	return e.remote != nil && (e.client == nil || !e.client.Session().NeedsLogin)
 }
 
 // ServerURL 返回当前云端地址。

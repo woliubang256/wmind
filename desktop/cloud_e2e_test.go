@@ -9,10 +9,12 @@ import (
 
 	"github.com/pquerna/otp/totp"
 
+	"errors"
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/internal/auth"
 	"github.com/woliubang256/wmind/backend/internal/bootstrap"
+	"github.com/woliubang256/wmind/backend/internal/domain"
 )
 
 // 这组用例把云端客户端接到**真实的服务端路由**上（同一个 bootstrap 装配、
@@ -209,6 +211,20 @@ func TestCloudSessionRefreshAndRestartAgainstRealServer(t *testing.T) {
 	}
 	if restored.Session().RefreshToken == rotated.RefreshToken {
 		t.Fatal("restart did not rotate the persisted token")
+	}
+}
+
+func TestDisabledAccountInvalidatesDesktopSessionImmediately(t *testing.T) {
+	client, harness, cleanup := newCloudServer(t)
+	defer cleanup()
+	if _, err := harness.app.Users.UpdateStatus(t.Context(), client.Session().UserUID, domain.UserStatusDisabled, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Me(t.Context()); !errors.Is(err, cloud.ErrUnauthorized) {
+		t.Fatalf("disabled account: %v", err)
+	}
+	if !client.Session().NeedsLogin || client.Session().RefreshToken != "" {
+		t.Fatal("disabled account kept a usable local session")
 	}
 }
 

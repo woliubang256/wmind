@@ -70,6 +70,7 @@ type Session struct {
 	AccessToken      string
 	RefreshToken     string
 	RefreshExpiresAt time.Time
+	NeedsLogin       bool
 	UserUID          string
 	UserEmail        string
 	// Role 是云端账号的角色（admin/user）。桌面端菜单用「网站设置」入口的
@@ -131,6 +132,7 @@ func (c *Client) applySession(result loginResult) error {
 	c.session.RefreshToken = result.RefreshToken
 	c.session.RefreshExpiresAt = result.RefreshExpiresAt
 	c.session.TwoFactorChallenge = ""
+	c.session.NeedsLogin = false
 	if result.User.UID != "" {
 		c.session.UserUID = result.User.UID
 	}
@@ -410,12 +412,28 @@ func (c *Client) RefreshAfter(ctx context.Context, rejectedAccess string) error 
 	var result loginResult
 	status, _, err := c.send(ctx, http.MethodPost, "/api/v1/auth/refresh", map[string]string{"refreshToken": session.RefreshToken}, &result, "")
 	if err != nil {
+		if errors.Is(err, ErrUnauthorized) {
+			c.invalidateSession()
+		}
 		return err
 	}
 	if status != http.StatusOK {
 		return fmt.Errorf("%w: refresh failed with status %d", ErrUnavailable, status)
 	}
 	return c.applySession(result)
+}
+
+// invalidateSession is called with refreshMu held. Its saver cannot overwrite
+// another account, because persistence is bound to the connection generation.
+func (c *Client) invalidateSession() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.session.AccessToken = ""
+	c.session.RefreshToken = ""
+	c.session.NeedsLogin = true
+	if c.saveSession != nil {
+		c.pendingSave = c.saveSession(c.session) != nil
+	}
 }
 
 // Logout revokes this native refresh session; it never sends browser Cookies.
@@ -430,6 +448,34 @@ func (c *Client) Logout(ctx context.Context) error {
 		return fmt.Errorf("%w: logout failed with status %d", ErrUnavailable, status)
 	}
 	return nil
+}
+
+// AdoptAuthResponse consumes a native session replacement returned by a
+// password or two-factor mutation proxied through the desktop client.
+func (c *Client) AdoptAuthResponse(raw []byte) error {
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil || len(envelope.Data) == 0 {
+		return nil
+	}
+	var result loginResult
+	if err := json.Unmarshal(envelope.Data, &result); err != nil {
+		return err
+	}
+	if result.RefreshToken == "" {
+		var wrapped struct {
+			Session loginResult `json:"session"`
+		}
+		if err := json.Unmarshal(envelope.Data, &wrapped); err != nil {
+			return err
+		}
+		result = wrapped.Session
+	}
+	if result.RefreshToken == "" {
+		return nil
+	}
+	return c.applySession(result)
 }
 
 // ListChanged 拉取 since 之后有变化的导图（含云端回收站里的）。
@@ -562,6 +608,18 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, wit
 		access = c.Session().AccessToken
 	}
 	status, details, err := c.send(ctx, method, path, body, out, access)
+	if withAuth && status == http.StatusForbidden && details.Code == "AUTH_ACCOUNT_DISABLED" {
+		c.refreshMu.Lock()
+		c.invalidateSession()
+		c.refreshMu.Unlock()
+		return status, details, ErrUnauthorized
+	}
+	if withAuth && status == http.StatusForbidden && errors.Is(err, ErrUnauthorized) {
+		c.refreshMu.Lock()
+		c.invalidateSession()
+		c.refreshMu.Unlock()
+		return status, details, err
+	}
 	// send 把 401 表示成 ErrUnauthorized，所以这里不能只看 err != nil。
 	if status != http.StatusUnauthorized || !withAuth {
 		return status, details, err
@@ -628,6 +686,9 @@ func (c *Client) send(ctx context.Context, method, path string, body, out any, a
 		CurrentVersion:   env.Error.Details.CurrentVersion,
 		CurrentHash:      env.Error.Details.CurrentHash,
 		CurrentUpdatedAt: env.Error.Details.CurrentUpdatedAt,
+	}
+	if resp.StatusCode == http.StatusForbidden && env.Error.Code == "AUTH_ACCOUNT_DISABLED" {
+		return resp.StatusCode, details, ErrUnauthorized
 	}
 	if out != nil && len(env.Data) > 0 {
 		if err := json.Unmarshal(env.Data, out); err != nil {

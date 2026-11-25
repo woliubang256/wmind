@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
-	"github.com/woliubang256/wmind/backend/desktop/internal/cloudcreds"
 	"github.com/woliubang256/wmind/backend/desktop/internal/remoteproxy"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
@@ -73,34 +72,6 @@ const (
 	projectURL = "https://github.com/woliubang256/wmind"
 	docsURL    = "https://github.com/woliubang256/wmind/blob/main/docs/07-%E9%83%A8%E7%BD%B2%E4%B8%8E%E8%BF%90%E7%BB%B4.md"
 )
-
-// CredentialStore 读写云端连接凭据。
-//
-// 凭据存在**本地数据库**里（desktop_secrets 表，密码 AES-GCM 加密），不用系统
-// 钥匙串：自构建应用每次更新签名都会变，钥匙串会把它当成另一个应用，于是每次
-// 升级都要重新授权、甚至重新登录。凭据本就是「本机这份数据」的一部分，跟着数据
-// 目录走更符合预期。
-type CredentialStore struct {
-	Repo CredentialRepo
-}
-
-// CredentialRepo 是凭据存储的实现（见 internal/credstore）。
-type CredentialRepo interface {
-	Load() (*cloudcreds.Credentials, error)
-	Save(creds cloudcreds.Credentials, password string) error
-	Clear() error
-}
-
-// Load 读取凭据；没有连接时返回 nil。
-func (c *CredentialStore) Load() (*cloudcreds.Credentials, error) { return c.Repo.Load() }
-
-// Save 保存凭据。
-func (c *CredentialStore) Save(creds cloudcreds.Credentials, password string) error {
-	return c.Repo.Save(creds, password)
-}
-
-// Clear 删除凭据。
-func (c *CredentialStore) Clear() error { return c.Repo.Clear() }
 
 // UpdateInfo 是检查更新的结果。
 type UpdateInfo struct {
@@ -241,7 +212,8 @@ func (r *statusRecorder) Write(p []byte) (int, error) {
 }
 
 type api struct {
-	deps Deps
+	deps         Deps
+	connectionMu sync.Mutex
 	// pending 是等待两步验证码的登录（内存里，5 分钟后作废）。
 	mu      sync.Mutex
 	pending *pendingTwoFactor
@@ -249,7 +221,6 @@ type api struct {
 
 type pendingTwoFactor struct {
 	client     *cloud.Client
-	password   string
 	identifier string
 	expires    time.Time
 }
@@ -354,6 +325,11 @@ type connectRequest struct {
 }
 
 func (a *api) connect(w http.ResponseWriter, r *http.Request) {
+	a.connectionMu.Lock()
+	defer a.connectionMu.Unlock()
+	a.mu.Lock()
+	a.pending = nil
+	a.mu.Unlock()
 	var req connectRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		fail(w, http.StatusBadRequest, "请求格式不正确")
@@ -381,17 +357,16 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 拉一次远端资料：顶栏要显示登录后的昵称。失败不致命，退回邮箱。
-	a.logProfileError(client.Me(r.Context()))
-
 	session := client.Session()
 	// 账号开了两步验证：服务端只给了挑战令牌。把这次登录挂在内存里，
 	// 等前端提交动态码后再完成（密码不用再传一遍，也不会留在前端）。
 	if session.TwoFactorChallenge != "" {
+		a.mu.Lock()
 		a.pending = &pendingTwoFactor{
-			client: client, password: req.Password, identifier: req.Identifier,
+			client: client, identifier: req.Identifier,
 			expires: time.Now().Add(5 * time.Minute),
 		}
+		a.mu.Unlock()
 		writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
 			"twoFactorRequired": true,
 			"serverUrl":         session.ServerURL,
@@ -399,17 +374,15 @@ func (a *api) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.deps.Engine.Connect(session.ServerURL, client)
-	a.saveLastConnection(session.ServerURL, req.Identifier)
-	if err := a.deps.Creds.Save(cloudcreds.Credentials{
-		ServerURL: session.ServerURL, Identifier: req.Identifier,
-		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,
-		Nickname:     session.Nickname,
-		RefreshToken: session.RefreshToken,
-	}, req.Password); err != nil {
+	// Only query the profile after a full session, not during the 2FA challenge.
+	a.logProfileError(client.Me(r.Context()))
+	session = client.Session()
+	if err := a.deps.Creds.Attach(client, req.Identifier); err != nil {
 		fail(w, http.StatusInternalServerError, "保存连接信息失败")
 		return
 	}
+	a.deps.Engine.Connect(session.ServerURL, client)
+	a.saveLastConnection(session.ServerURL, req.Identifier)
 
 	a.log().Info("cloud: connected", "server", session.ServerURL, "email", session.UserEmail, "role", session.Role)
 
@@ -432,10 +405,23 @@ func (a *api) log() *slog.Logger {
 }
 
 func (a *api) disconnect(w http.ResponseWriter, r *http.Request) {
+	a.connectionMu.Lock()
+	defer a.connectionMu.Unlock()
+	a.mu.Lock()
+	a.pending = nil
+	a.mu.Unlock()
+	client := a.deps.Engine.Client()
 	a.deps.Engine.Disconnect()
 	if err := a.deps.Creds.Clear(); err != nil {
 		fail(w, http.StatusInternalServerError, "清除连接信息失败")
 		return
+	}
+	if client != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if err := client.Logout(ctx); err != nil {
+			a.log().Warn("cloud: remote logout unavailable", "err", err)
+		}
 	}
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{"connected": false}})
 }
@@ -627,6 +613,8 @@ func newMCPToken() (string, error) {
 
 // verifyTwoFactor 用动态码（或恢复码）完成登录。
 func (a *api) verifyTwoFactor(w http.ResponseWriter, r *http.Request) {
+	a.connectionMu.Lock()
+	defer a.connectionMu.Unlock()
 	var req struct {
 		Code string `json:"code"`
 	}
@@ -668,17 +656,12 @@ func (a *api) verifyTwoFactor(w http.ResponseWriter, r *http.Request) {
 	// 动态码通过后再拉一次资料（两步验证前拿不到会话）。
 	a.logProfileError(pending.client.Me(r.Context()))
 	session := pending.client.Session()
-	a.deps.Engine.Connect(session.ServerURL, pending.client)
-	a.saveLastConnection(session.ServerURL, pending.identifier)
-	if err := a.deps.Creds.Save(cloudcreds.Credentials{
-		ServerURL: session.ServerURL, Identifier: pending.identifier,
-		Email: session.UserEmail, UserUID: session.UserUID, Role: session.Role,
-		Nickname:     session.Nickname,
-		RefreshToken: session.RefreshToken,
-	}, pending.password); err != nil {
+	if err := a.deps.Creds.Attach(pending.client, pending.identifier); err != nil {
 		fail(w, http.StatusInternalServerError, "保存连接信息失败")
 		return
 	}
+	a.deps.Engine.Connect(session.ServerURL, pending.client)
+	a.saveLastConnection(session.ServerURL, pending.identifier)
 	// 同步交给前端异步触发，别让它拖慢验证响应。
 	writeJSON(w, http.StatusOK, envelope{Data: map[string]any{
 		"serverUrl": session.ServerURL, "email": session.UserEmail, "nickname": session.Nickname,

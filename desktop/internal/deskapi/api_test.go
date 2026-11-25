@@ -399,8 +399,8 @@ func TestConnectStoresCredentialsAndSyncs(t *testing.T) {
 	if stored.ServerURL != f.cloud.server.URL {
 		t.Fatalf("保存的地址不对: %+v", stored)
 	}
-	if _, err := stored.Decrypt(f.secret); err != nil {
-		t.Fatalf("保存的密码解不开: %v", err)
+	if stored.RefreshToken != "refresh-1" {
+		t.Fatal("refresh session was not saved")
 	}
 
 	// 连接不会把本机所有导图悄悄传上去：本地图仍是本地图，要用户显式上传。
@@ -700,7 +700,7 @@ func TestVerifyTwoFactorWithoutPending(t *testing.T) {
 
 // ── 凭据存储 ────────────────────────────────────────────────────────────────
 
-// 凭据存本地数据库：写入后能从库里读回，密码加密、能解密，清除后消失。
+// The local database stores only an encrypted refresh credential, never passwords.
 func TestCredentialsInDatabase(t *testing.T) {
 	dir := t.TempDir()
 	db, err := sql.Open("sqlite", filepath.Join(dir, "creds.db"))
@@ -718,8 +718,8 @@ func TestCredentialsInDatabase(t *testing.T) {
 		t.Fatalf("初始应为空: %+v %v", loaded, err)
 	}
 
-	creds := cloudcreds.Credentials{ServerURL: "https://cloud.example", Identifier: "a@example.test", Email: "a@example.test", Role: "admin"}
-	if err := store.Save(creds, "pw"); err != nil {
+	creds := cloudcreds.Credentials{ServerURL: "https://cloud.example", Identifier: "a@example.test", Email: "a@example.test", Role: "admin", RefreshToken: "sensitive-refresh"}
+	if err := store.Save(creds); err != nil {
 		t.Fatalf("保存失败: %v", err)
 	}
 
@@ -727,16 +727,16 @@ func TestCredentialsInDatabase(t *testing.T) {
 	if err := db.QueryRow(`SELECT value FROM desktop_secrets`).Scan(&raw); err != nil {
 		t.Fatalf("库里没有记录: %v", err)
 	}
-	if strings.Contains(raw, `"pw"`) {
-		t.Fatal("库里的密码必须是加密的")
+	if strings.Contains(raw, creds.RefreshToken) || strings.Contains(raw, `"password"`) {
+		t.Fatal("readable credential was stored in the database")
 	}
 
 	loaded, err := store.Load()
 	if err != nil || loaded == nil || loaded.ServerURL != creds.ServerURL || loaded.Role != "admin" {
 		t.Fatalf("读回内容不对: %+v %v", loaded, err)
 	}
-	if password, err := loaded.Decrypt(secret); err != nil || password != "pw" {
-		t.Fatalf("密码解不开: %q %v", password, err)
+	if loaded.RefreshToken != creds.RefreshToken {
+		t.Fatal("refresh credential was not restored")
 	}
 
 	if err := store.Clear(); err != nil {
