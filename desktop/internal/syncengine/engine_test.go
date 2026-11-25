@@ -234,7 +234,7 @@ func newEngine(t *testing.T) (*Engine, *fakeLocal, *fakeRemote, *syncstate.Store
 	store := syncstate.NewStore(db)
 	local := newFakeLocal()
 	remote := newFakeRemote()
-	engine := New(local, store, local.owner, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	engine := New(local, store, local.owner, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	engine.Connect("https://cloud.example", remote)
 	return engine, local, remote, store
 }

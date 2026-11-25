@@ -635,12 +635,19 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, wit
 
 func (c *Client) send(ctx context.Context, method, path string, body, out any, access string) (int, errorDetails, error) {
 	var reader io.Reader
-	if body != nil {
+	contentType := ""
+	switch data := body.(type) {
+	case imageUpload:
+		reader = bytes.NewReader(data.body)
+		contentType = data.contentType
+	case nil:
+	default:
 		raw, err := json.Marshal(body)
 		if err != nil {
 			return 0, errorDetails{}, err
 		}
 		reader = bytes.NewReader(raw)
+		contentType = "application/json"
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
 	if err != nil {
@@ -651,8 +658,8 @@ func (c *Client) send(ctx context.Context, method, path string, body, out any, a
 	req.Header.Set("User-Agent", "WmindDesktop")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Wmind-Client", "desktop")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	if access != "" {
 		req.Header.Set("Authorization", "Bearer "+access)
@@ -664,6 +671,17 @@ func (c *Client) send(ctx context.Context, method, path string, body, out any, a
 	}
 	defer resp.Body.Close()
 
+	if image, ok := out.(*imageDownload); ok && resp.StatusCode == http.StatusOK {
+		raw, err := io.ReadAll(io.LimitReader(resp.Body, image.maxBytes+1))
+		if err != nil {
+			return resp.StatusCode, errorDetails{}, fmt.Errorf("%w: read image: %v", ErrUnavailable, err)
+		}
+		if int64(len(raw)) > image.maxBytes || len(raw) == 0 {
+			return resp.StatusCode, errorDetails{}, errors.New("cloud: invalid image size")
+		}
+		image.data = raw
+		return resp.StatusCode, errorDetails{}, nil
+	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
 		return 0, errorDetails{}, fmt.Errorf("%w: read body: %v", ErrUnavailable, err)

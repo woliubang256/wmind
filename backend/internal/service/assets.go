@@ -41,13 +41,16 @@ func localAssetKey(src string) (string, bool) {
 	return key, ok
 }
 
-func transformDocumentImages(raw []byte, visit func(string) (string, error)) ([]byte, error) {
+// TransformDocumentImages visits only topic images, including floating topics
+// on every sheet. Keep the original document bytes when no URL changes.
+func TransformDocumentImages(raw []byte, visit func(string) (string, error)) ([]byte, error) {
 	var doc map[string]any
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	if err := dec.Decode(&doc); err != nil {
 		return nil, err
 	}
+	changed := false
 	var topic func(any) error
 	topic = func(value any) error {
 		obj, ok := value.(map[string]any)
@@ -60,7 +63,10 @@ func transformDocumentImages(raw []byte, visit func(string) (string, error)) ([]
 				if err != nil {
 					return err
 				}
-				img["src"] = next
+				if src != next {
+					img["src"] = next
+					changed = true
+				}
 			}
 		}
 		if children, ok := obj["children"].(map[string]any); ok {
@@ -88,12 +94,15 @@ func transformDocumentImages(raw []byte, visit func(string) (string, error)) ([]
 			}
 		}
 	}
+	if !changed {
+		return raw, nil
+	}
 	return json.Marshal(doc)
 }
 
 func DocumentHasAsset(raw []byte, key string) bool {
 	found := false
-	_, err := transformDocumentImages(raw, func(src string) (string, error) {
+	_, err := TransformDocumentImages(raw, func(src string) (string, error) {
 		if candidate, ok := localAssetKey(src); ok && candidate == key {
 			found = true
 		}
@@ -105,7 +114,7 @@ func DocumentHasAsset(raw []byte, key string) bool {
 // ShareDocumentAssets only rewrites actual topic images, not notes, links or
 // external URLs. The returned document is a response copy, never persisted.
 func ShareDocumentAssets(raw []byte, token, access string) ([]byte, error) {
-	return transformDocumentImages(raw, func(src string) (string, error) {
+	return TransformDocumentImages(raw, func(src string) (string, error) {
 		if _, ok := localAssetKey(src); !ok {
 			return src, nil
 		}
@@ -137,7 +146,7 @@ func (s *FileService) legacyReferences(ctx context.Context, ownerID int64) (map[
 		}
 	}
 	addDocument := func(raw []byte) {
-		_, _ = transformDocumentImages(raw, func(src string) (string, error) { add(src); return src, nil })
+		_, _ = TransformDocumentImages(raw, func(src string) (string, error) { add(src); return src, nil })
 	}
 	if s.maps != nil {
 		maps, err := s.maps.ListAllIncludingDeleted(ctx, ownerID)
@@ -209,7 +218,7 @@ func (s *FileService) validateExists(ctx context.Context, key string) error {
 func (s *FileService) ValidateDocument(ctx context.Context, ownerID int64, raw []byte) error {
 	var legacy map[string]bool
 	checked := make(map[string]bool)
-	_, err := transformDocumentImages(raw, func(src string) (string, error) {
+	_, err := TransformDocumentImages(raw, func(src string) (string, error) {
 		if checked[src] {
 			return src, nil
 		}

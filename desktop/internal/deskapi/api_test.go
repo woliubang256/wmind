@@ -103,7 +103,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("构建设置服务失败: %v", err)
 	}
 	mcp := &fakeMCP{}
-	engine := syncengine.New(mapRepo, store, owner.ID, logger)
+	engine := syncengine.New(mapRepo, store, owner.ID, logger, nil)
 	// 凭据存数据库（与生产一致）；主密钥用一个固定的测试串。
 	secret := strings.Repeat("ab", 32)
 	if err := credstore.Prepare(t.Context(), db); err != nil {

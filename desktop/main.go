@@ -342,7 +342,9 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		return nil, err
 	}
 
-	engine := syncengine.New(app.Maps, syncStore, user.ID, logger)
+	engine := syncengine.New(app.Maps, syncStore, user.ID, logger, &syncengine.LocalImages{
+		Files: app.Files, Dir: paths.Uploads, Gate: app.Backups.Gate(),
+	})
 	// 本地 MCP：与登录状态无关，数据在本机。启动时按设置决定是否监听。
 	mcpManager := mcpserver.New(app.MapService, user.ID, appVersion, logger)
 	if snapshot := app.Settings.Snapshot(); snapshot.Bool("mcp.enabled") {

@@ -18,6 +18,7 @@
 package syncengine
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -25,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -75,9 +77,11 @@ type Engine struct {
 	store   *syncstate.Store
 	ownerID int64
 	log     *slog.Logger
+	images  *LocalImages
 
-	mu     sync.Mutex
-	remote Remote
+	operations sync.Mutex
+	mu         sync.Mutex
+	remote     Remote
 	// client 是 remote 的具体类型（云端客户端），代理与资料拉取要用它的令牌。
 	client *cloud.Client
 	// serverURL 是当前连接的云端地址；换服务器等于换绑定。
@@ -85,12 +89,12 @@ type Engine struct {
 	now       func() time.Time
 }
 
-// New 构造引擎。remote 可以为空（尚未连接云端）。
-func New(local Local, store *syncstate.Store, ownerID int64, log *slog.Logger) *Engine {
+// New 构造引擎。images 为空时不传输附件。
+func New(local Local, store *syncstate.Store, ownerID int64, log *slog.Logger, images *LocalImages) *Engine {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Engine{local: local, store: store, ownerID: ownerID, log: log, now: func() time.Time { return time.Now().UTC() }}
+	return &Engine{local: local, store: store, ownerID: ownerID, log: log, images: images, now: func() time.Time { return time.Now().UTC() }}
 }
 
 // Connect 绑定一个云端连接。
@@ -134,13 +138,18 @@ func (e *Engine) ServerURL() string {
 
 // Sync 跑一次完整同步：先拉后推。
 func (e *Engine) Sync(ctx context.Context) (*Result, error) {
+	e.operations.Lock()
+	defer e.operations.Unlock()
 	e.mu.Lock()
 	remote, serverURL := e.remote, e.serverURL
 	e.mu.Unlock()
 	if remote == nil {
 		return nil, ErrNotConnected
 	}
+	return e.sync(ctx, remote, serverURL)
+}
 
+func (e *Engine) sync(ctx context.Context, remote Remote, serverURL string) (*Result, error) {
 	snapshot, err := e.snapshot(ctx)
 	if err != nil {
 		return nil, err
@@ -168,6 +177,8 @@ func (e *Engine) Sync(ctx context.Context) (*Result, error) {
 // 与 Sync 分开是因为「上传到云端」是用户显式动作：它必须立刻给出结果，也
 // 不需要先拉一遍全量变化。
 func (e *Engine) Upload(ctx context.Context, mapUID string) (*syncstate.Record, error) {
+	e.operations.Lock()
+	defer e.operations.Unlock()
 	e.mu.Lock()
 	remote, serverURL := e.remote, e.serverURL
 	e.mu.Unlock()
@@ -189,13 +200,17 @@ func (e *Engine) Upload(ctx context.Context, mapUID string) (*syncstate.Record, 
 	}
 	if record != nil && record.RemoteUID != "" && record.RemoteURL == serverURL {
 		// 已经绑定过：走一次普通同步更合适（可能本地还有改动要推）。
-		if _, err := e.Sync(ctx); err != nil {
+		result, err := e.sync(ctx, remote, serverURL)
+		if err != nil {
 			return nil, err
+		}
+		if slices.Contains(result.Failed, mapUID) {
+			return nil, errors.New("导图同步失败，请稍后重试")
 		}
 		return e.store.Get(ctx, mapUID)
 	}
 
-	uploaded, err := remote.Upload(ctx, local.UID, local.Title, json.RawMessage(local.Document))
+	uploaded, state, err := e.uploadMap(ctx, remote, local)
 	if err != nil {
 		return nil, err
 	}
@@ -203,14 +218,40 @@ func (e *Engine) Upload(ctx context.Context, mapUID string) (*syncstate.Record, 
 		MapUID: local.UID, RemoteUID: uploaded.UID, RemoteURL: serverURL,
 		BaseVersion: uploaded.Version, BaseHash: uploaded.DocumentHash,
 		BaseLocalHash: hashBytes(local.Document),
-		State:         syncstate.StateSynced, UpdatedAt: e.now(),
+		State:         state, UpdatedAt: e.now(),
 	}
-	synced := e.now()
-	record.LastSyncedAt = &synced
+	if state == syncstate.StateSynced {
+		synced := e.now()
+		record.LastSyncedAt = &synced
+	}
 	if err := e.store.Put(ctx, record); err != nil {
 		return nil, err
 	}
 	return record, nil
+}
+
+func (e *Engine) uploadMap(ctx context.Context, remote Remote, local *domain.Map) (*cloud.Map, syncstate.State, error) {
+	document, err := e.transferImages(ctx, remote, local.Document, true)
+	if err != nil {
+		return nil, "", err
+	}
+	uploaded, err := remote.Upload(ctx, local.UID, local.Title, document)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(uploaded.Document) > 0 {
+		// A previous create may have succeeded even though its reply was lost.
+		// The server returns the original map on retry. Preserve both versions
+		// if someone edited either copy before the retry.
+		sent, err := json.Marshal(json.RawMessage(document))
+		if err != nil {
+			return nil, "", err
+		}
+		if !bytes.Equal(sent, uploaded.Document) {
+			return uploaded, syncstate.StateConflict, nil
+		}
+	}
+	return uploaded, syncstate.StateSynced, nil
 }
 
 // snapshot 读一次本地全部导图（含回收站），供本轮同步使用。
@@ -322,12 +363,7 @@ func (e *Engine) applyRemoteChange(ctx context.Context, remote Remote, serverURL
 	if err != nil {
 		return err
 	}
-	updated, err := e.local.UpdateWithVersion(ctx, domain.UpdateMapInput{
-		UID: record.MapUID, OwnerID: e.ownerID,
-		Title: detail.Title, Document: detail.Document,
-		NodeCount: detail.NodeCount, SizeBytes: int64(len(detail.Document)),
-		ExpectedVersion: local.Version, Now: remoteTime(item.UpdatedAt, e.now()),
-	})
+	updated, err := e.savePulledMap(ctx, remote, detail, local, remoteTime(item.UpdatedAt, e.now()))
 	if err != nil {
 		if errors.Is(err, domain.ErrVersionConflict) {
 			// 本地在同步过程中又存了一次：这次先跳过，下一轮再来。
@@ -382,14 +418,7 @@ func (e *Engine) createLocalFromRemote(ctx context.Context, remote Remote, serve
 	//
 	// 时间也沿用云端的：列表里的「更新于」表示内容什么时候改的，同步动作
 	// 发生在什么时候与此无关——用本地 now 会让所有拉下来的图都变成「刚刚」。
-	created, err := e.local.Create(ctx, domain.CreateMapInput{
-		UID: detail.UID, OwnerID: e.ownerID, Title: detail.Title,
-		Document: detail.Document, NodeCount: detail.NodeCount,
-		SizeBytes: int64(len(detail.Document)), Now: remoteTime(item.UpdatedAt, e.now()),
-		// 连缩略图一起落本地：列表里直接就有图，不用先打开一次才生成。
-		// 云端的 `/uploads/x.png` 改写成走本机转发的同源地址，图片才加载得出来。
-		ThumbnailURL: remoteThumbnailURL(detail.ThumbnailURL),
-	})
+	created, err := e.savePulledMap(ctx, remote, detail, nil, remoteTime(item.UpdatedAt, e.now()))
 	if err != nil {
 		return err
 	}
@@ -404,6 +433,30 @@ func (e *Engine) createLocalFromRemote(ctx context.Context, remote Remote, serve
 	}
 	result.Pulled++
 	return e.store.Put(ctx, record)
+}
+
+func (e *Engine) savePulledMap(ctx context.Context, remote Remote, detail *cloud.Map, local *domain.Map, now time.Time) (*domain.Map, error) {
+	leave, err := e.enterLocalWrite()
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
+	document, err := e.transferImages(ctx, remote, detail.Document, false)
+	if err != nil {
+		return nil, err
+	}
+	if local == nil {
+		return e.local.Create(ctx, domain.CreateMapInput{
+			UID: detail.UID, OwnerID: e.ownerID, Title: detail.Title,
+			Document: document, NodeCount: detail.NodeCount, SizeBytes: int64(len(document)), Now: now,
+			ThumbnailURL: remoteThumbnailURL(detail.ThumbnailURL),
+		})
+	}
+	return e.local.UpdateWithVersion(ctx, domain.UpdateMapInput{
+		UID: local.UID, OwnerID: e.ownerID, Title: detail.Title,
+		Document: document, NodeCount: detail.NodeCount, SizeBytes: int64(len(document)),
+		ExpectedVersion: local.Version, Now: now,
+	})
 }
 
 // push 把本地变化推到云端。
@@ -461,7 +514,7 @@ func (e *Engine) pushOne(ctx context.Context, remote Remote, serverURL string, s
 	}
 
 	if record.RemoteUID == "" || record.RemoteURL != serverURL {
-		uploaded, err := remote.Upload(ctx, local.UID, local.Title, json.RawMessage(local.Document))
+		uploaded, state, err := e.uploadMap(ctx, remote, local)
 		if err != nil {
 			return err
 		}
@@ -471,16 +524,24 @@ func (e *Engine) pushOne(ctx context.Context, remote Remote, serverURL string, s
 		record.BaseVersion = uploaded.Version
 		record.BaseHash = uploaded.DocumentHash
 		record.BaseLocalHash = hashBytes(local.Document)
-		record.LastSyncedAt = &synced
-		record.State = syncstate.StateSynced
+		record.State = state
 		record.UpdatedAt = synced
-		result.Pushed++
+		if state == syncstate.StateSynced {
+			record.LastSyncedAt = &synced
+			result.Pushed++
+		} else {
+			result.Conflicts = append(result.Conflicts, record.MapUID)
+		}
 		return e.store.Put(ctx, record)
 	}
 
 	// 乐观锁推送；版本漂移（内容没变）就带新版本重试一次。
+	document, err := e.transferImages(ctx, remote, local.Document, true)
+	if err != nil {
+		return err
+	}
 	for attempt := 0; attempt < 2; attempt++ {
-		saved, err := remote.Save(ctx, record.RemoteUID, record.BaseVersion, local.Title, json.RawMessage(local.Document))
+		saved, err := remote.Save(ctx, record.RemoteUID, record.BaseVersion, local.Title, document)
 		if err == nil {
 			synced := e.now()
 			record.BaseVersion = saved.Version
@@ -514,6 +575,8 @@ func (e *Engine) pushOne(ctx context.Context, remote Remote, serverURL string, s
 // keepLocal 为 true 表示用本地内容覆盖云端，否则用云端内容覆盖本地。
 // 「另存为副本」不需要走这里：它是一次普通的本地新建 + 上传。
 func (e *Engine) ResolveConflict(ctx context.Context, mapUID string, keepLocal bool) error {
+	e.operations.Lock()
+	defer e.operations.Unlock()
 	e.mu.Lock()
 	remote := e.remote
 	e.mu.Unlock()
@@ -536,7 +599,11 @@ func (e *Engine) ResolveConflict(ctx context.Context, mapUID string, keepLocal b
 		if err != nil {
 			return err
 		}
-		saved, err := remote.Save(ctx, record.RemoteUID, remoteMap.Version, local.Title, json.RawMessage(local.Document))
+		document, err := e.transferImages(ctx, remote, local.Document, true)
+		if err != nil {
+			return err
+		}
+		saved, err := remote.Save(ctx, record.RemoteUID, remoteMap.Version, local.Title, document)
 		if err != nil {
 			return err
 		}
@@ -554,12 +621,7 @@ func (e *Engine) ResolveConflict(ctx context.Context, mapUID string, keepLocal b
 	if err != nil {
 		return err
 	}
-	updated, err := e.local.UpdateWithVersion(ctx, domain.UpdateMapInput{
-		UID: mapUID, OwnerID: e.ownerID,
-		Title: remoteMap.Title, Document: remoteMap.Document,
-		NodeCount: remoteMap.NodeCount, SizeBytes: int64(len(remoteMap.Document)),
-		ExpectedVersion: local.Version, Now: e.now(),
-	})
+	updated, err := e.savePulledMap(ctx, remote, remoteMap, local, e.now())
 	if err != nil {
 		return err
 	}
@@ -578,19 +640,7 @@ func (e *Engine) ResolveConflict(ctx context.Context, mapUID string, keepLocal b
 // 不在这里重算摘要：保存路径已经在写库，多一次读会引入竞态；状态只需要
 // 标记「待同步」，真正的判断在 Sync 里按摘要做。
 func (e *Engine) MarkLocalDirty(ctx context.Context, mapUID string) error {
-	record, err := e.store.Get(ctx, mapUID)
-	if errors.Is(err, syncstate.ErrNotFound) {
-		return nil // 还没上传过：本地模式下的普通保存，不需要记录
-	}
-	if err != nil {
-		return err
-	}
-	if record.State == syncstate.StateConflict {
-		return nil
-	}
-	record.State = syncstate.StateLocalDirty
-	record.UpdatedAt = e.now()
-	return e.store.Put(ctx, record)
+	return e.store.MarkLocalDirty(ctx, mapUID, e.now())
 }
 
 func (e *Engine) pullCursor(ctx context.Context) (time.Time, error) {

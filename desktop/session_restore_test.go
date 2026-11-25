@@ -46,7 +46,7 @@ func TestSavedNativeSessionRestoresFromDatabaseAfterTwoRestarts(t *testing.T) {
 			t.Fatal(err)
 		}
 		creds, db = openRestoreStore(t, path)
-		engine := syncengine.New(nil, nil, 1, testLogger())
+		engine := syncengine.New(nil, nil, 1, testLogger(), nil)
 		restoreCloud(engine, creds, testLogger())
 		if !engine.Connected() || engine.Client().Session().AccessToken != "" {
 			t.Fatal("startup must restore only the refresh credential")
@@ -78,7 +78,7 @@ func TestRestoreLegacyPasswordOnlyRecordRequiresInteractiveLogin(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO desktop_secrets(key,value,updated_at) VALUES('cloud-connection',?,datetime('now'))`, raw); err != nil {
 		t.Fatal(err)
 	}
-	engine := syncengine.New(nil, nil, 1, testLogger())
+	engine := syncengine.New(nil, nil, 1, testLogger(), nil)
 	restoreCloud(engine, creds, testLogger())
 	if engine.Connected() || requests.Load() != 0 {
 		t.Fatal("legacy password must not be used to log in automatically")
@@ -117,7 +117,7 @@ func TestRestoredNativeSessionSurvivesOfflineAndRejectsRevocation(t *testing.T) 
 	if err := creds.Save(cloudcreds.Credentials{ServerURL: server.URL, Identifier: "owner", RefreshToken: "keep"}); err != nil {
 		t.Fatal(err)
 	}
-	engine := syncengine.New(nil, nil, 1, testLogger())
+	engine := syncengine.New(nil, nil, 1, testLogger(), nil)
 	restoreCloud(engine, creds, testLogger())
 	if _, err := engine.Client().Me(t.Context()); !errors.Is(err, cloud.ErrUnavailable) {
 		t.Fatalf("offline error = %v", err)

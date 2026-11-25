@@ -219,6 +219,14 @@ func (s *Store) Delete(ctx context.Context, mapUID string) error {
 	return nil
 }
 
+// MarkLocalDirty updates the status without replacing a concurrent sync baseline.
+func (s *Store) MarkLocalDirty(ctx context.Context, mapUID string, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+UPDATE map_sync SET state = ?, updated_at = ? WHERE map_uid = ? AND state <> ?`,
+		string(StateLocalDirty), timeutil.Format(now.UTC()), mapUID, string(StateConflict))
+	return err
+}
+
 // scanner 让 QueryRow 与 Rows 共用一套扫描逻辑。
 type scanner interface {
 	Scan(dest ...any) error
@@ -279,4 +287,19 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 		return fmt.Errorf("upsert sync_meta: %w", err)
 	}
 	return nil
+}
+
+// PutImageMapping saves both directions together so either device can retry.
+func (s *Store) PutImageMapping(ctx context.Context, scope, local, remote string) error {
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO sync_meta (key, value) VALUES (?, ?), (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		ImageMappingKey(scope, "local", local), remote,
+		ImageMappingKey(scope, "remote", remote), local,
+	)
+	return err
+}
+
+func ImageMappingKey(scope, side, path string) string {
+	return "image:" + scope + ":" + side + ":" + path
 }

@@ -85,6 +85,8 @@ type App struct {
 	Maps domain.MapRepo
 	// MapService 是导图服务，桌面端的本地 MCP 服务器用它读写导图。
 	MapService *service.MapService
+	// Files lets desktop sync store images through the same validation as HTTP uploads.
+	Files *service.FileService
 
 	closeOnce     sync.Once
 	prepare       func(ctx context.Context, db *sql.DB) error
@@ -472,6 +474,7 @@ func (a *App) assemble(ctx context.Context) error {
 		Shares:           handler.NewShareHandler(shareSvc, settingsSvc, adminSvc),
 	})
 	a.MapService = mapSvc
+	a.Files = fileSvc
 	a.Ready = ready
 	return nil
 }
