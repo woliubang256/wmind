@@ -164,12 +164,32 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Check out release tooling
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+
       - name: Download packages
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
           pattern: wmind-*
+
+      - name: Keep deltas from the previous desktop release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')"; then
+            echo "::warning::Could not find the previous desktop release. Publishing full updates."
+            tags=""
+          fi
+          node scripts/desktop-update-deltas.mjs "${GITHUB_REF_NAME#desktop-v}" artifacts <<< "$tags"
 
       # --latest=false：桌面版发布不能抢 Web 版 v* 的「最新」位置。
       - name: Create release
@@ -205,7 +225,7 @@ jobs:
           done
 
           # 重跑同一个标签时先清掉旧发布，否则 gh 会报 422（同名资产已存在）。
-          # 这个作业不 checkout（只下产物），gh 无法推断仓库，必须显式给 --repo。
+          # 显式指定发布仓库，避免依赖 checkout 的远程配置。
           gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
           gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --title "Wmind 桌面版 $version" "${assets[@]}"
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false

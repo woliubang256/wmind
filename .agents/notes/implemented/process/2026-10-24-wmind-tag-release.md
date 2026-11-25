@@ -16,6 +16,8 @@ Go 和 Node 构建阶段固定为 BUILDPLATFORM，Go 通过 TARGETOS/TARGETARCH 
 
 桌面交付另由 `desktop-vX.Y.Z` 触发 `.github/workflows/desktop-release.yml`：Ubuntu 构建 Windows/Linux 双架构安装包，macOS 构建 Apple Silicon/Intel 应用与 DMG，全部成功后汇总到独立公开 Release。`v*` 中的 Desktop client 只构建验证，不发布桌面安装包或自动更新清单。包含桌面改动的版本须同步 VERSION、两个 package.json、`desktop/mygo.json` 与桌面更新日志，并发布指向同一版本代码提交的两种标签；两个工作流都成功，且六个平台签名更新清单与安装包公开可用，才算完整交付。漏发桌面标签时补发同版本，不移动已经发布的网站标签，也不重复升版。
 
+mygo 每个平台最多生成一个增量包。桌面发布汇总时取低于本次版本的最高正式 `desktop-v*` 版本，只保留来自该版本且附件齐全的增量项，防止 mygo 回退到较旧的平台清单。较旧客户端、上一版缺包及同版本重打包没有合适基线时继续下载签名全量归档。增量和全量的签名均针对各自文件，清单过滤保留各文件原签名。
+
 API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `/data` 属主。SQLite 挂载整个 `/data`，PostgreSQL 仅挂载 `/data/uploads`；两种全新命名卷均必须从镜像中的非 root 属主初始化，否则 PostgreSQL 的上传卷会被 Docker 以 root 目录创建，运行进程无法写入。
 
 固定镜像发布后、`latest` 晋升前有两道真实 Docker 冒烟：API 默认用户将全新命名卷挂到 PostgreSQL 使用的 `/data/uploads` 并写入/删除探针；API/Web 都完成后用临时 SQLite Compose 验证启动、Nginx API 代理、运行版本及上传文件的 200/缺失 404。命名卷和项目名包含 CI run ID/attempt，HTTP 端口随机分配，显式使用 `/dev/null` 环境文件和 CI 假密钥，EXIT trap 只清理本轮资源，不读取真实部署配置。
@@ -36,6 +38,8 @@ API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `
 - **仅发布 amd64 镜像**：最省构建时间，也不需要 QEMU；但 arm64 服务二进制已有交叉编译产物，镜像不支持会让常见 ARM 设备无法按同一 Compose 部署。构建阶段原生执行，仅模拟轻量运行时步骤，保留双架构。
 - **镜像发布前先建立正式 Release**：下载入口更早可见；镜像失败会留下缺少配套产物的正式版本，因此所有验证、压缩包与镜像成功后才发布。
 - **各镜像构建时同时推送固定标签和 `latest`**：一次配置即可完成全部标签，无需额外晋升步骤；但 Web 构建失败时 API 的 `latest` 已更新，部署者会拉到不配套的版本，因此两个固定镜像都完成后才开始晋升。
+- **桌面只设置 mygo 的增量数量为 1**：配置最少，正常发布时会从上一版生成补丁。特定平台缺少上一版清单或重打当前版本时，mygo 还可能使用更早的基线，因此汇总时以正式桌面版本复核补丁。
+- **桌面全部使用签名全量包**：省去 GitHub 基线查询和增量生成，所有升级都走同一文件。相邻版本仍有减少下载量的需求，保留符合条件的增量包。
 
 ## Verification
 
@@ -46,6 +50,7 @@ API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `
 - `scripts/release-workflow.test.mjs` 先复现构建阶段提前更新 `latest` 的缺陷，再验证两个固定镜像、统一晋升和正式 Release 的先后顺序；修复后通过。
 - 上传卷镜像契约先复现缺少 `/data/uploads` 挂载点的问题，再验证预建、递归属主和默认 UID/GID 的顺序；修复后通过。
 - 桌面发布核对独立工作流触发和 packages/dmg/publish 作业；公开 Release 必须包含 Windows/Linux/macOS 各双架构安装与更新资产，更新清单版本、归档文件名和签名须与本次版本及已安装客户端公钥一致。
+- `npm run test:release` 检查桌面增量数量、发布步骤顺序，以及上一正式版、跨版、同版本重打包和无可用补丁时的清单与附件。
 - Workflow 契约覆盖卷/整栈冒烟在固定镜像之后、晋升之前的顺序及隔离清理；本机只运行契约与 actionlint，真实挂卷权限、Nginx 代理和运行版本由发布 CI 的 Docker 冒烟验证。
 
 ## Consequences

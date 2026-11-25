@@ -29,6 +29,16 @@ test('桌面独立发布固定 Intel macOS 运行机并保留双架构 DMG', () 
   assert.match(jobSection(workflow, 'publish'), /needs: \[packages, dmg\]/);
 });
 
+test('桌面每个平台只构建一个增量包，发布前校验上一正式版本', () => {
+  const config = JSON.parse(readFileSync(new URL('../desktop/mygo.json', import.meta.url), 'utf8'));
+  assert.equal(config.updates.deltas, 1);
+  const workflow = readFileSync(new URL('../.github/workflows/desktop-release.yml', import.meta.url), 'utf8');
+  const publish = jobSection(workflow, 'publish');
+  const filter = publish.indexOf('node scripts/desktop-update-deltas.mjs');
+  assert.ok(filter > publish.indexOf('name: Download packages'));
+  assert.ok(filter < publish.indexOf('gh release create'));
+});
+
 test('构建前校验整理稿，发布页与附件和部署包共用同一日志输出', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const releaseJob = jobSection(workflow, 'verify');

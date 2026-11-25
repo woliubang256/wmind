@@ -28,7 +28,8 @@
     "publicKey": "P81ddrdkTBT4KgVbp0eqOwuld8ePe0zINhCgM+FQhm4=",
     "github": "woliubang256/wmind",
     "tagPrefix": "desktop-v",
-    "changelog": "CHANGELOG.md"
+    "changelog": "CHANGELOG.md",
+    "deltas": 1
   },
   "resourcesExclude": [
     "dmg-background.png",
