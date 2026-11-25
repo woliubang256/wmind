@@ -109,9 +109,9 @@ jobs:
 
   dmg:
     name: Build DMGs (macOS)
-    # 用 macos-latest 而不是 macos-14：实测本仓库上 macos-14 标签的任务会被
-    # 立刻取消（从未分配到 runner），macos-latest / macos-15 正常。
-    runs-on: macos-latest
+    # latest 已指向 ARM runner，容量不足会排队后取消且没有构建日志。
+    # 固定 Intel 池；Go/mygo 仍交叉生成 Apple Silicon 与 Intel 两种应用。
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - name: Check out repository

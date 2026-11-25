@@ -19,6 +19,16 @@ function jobSection(workflow, job) {
   return workflow.slice(start, end);
 }
 
+test('桌面独立发布固定 Intel macOS 运行机并保留双架构 DMG', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/desktop-release.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /- 'desktop-v\*'/);
+  const dmg = jobSection(workflow, 'dmg');
+  assert.match(dmg, /^\s+runs-on: macos-\d+-intel\s*$/m, '避免 latest 隐式迁移到容量不足的 ARM runner');
+  assert.match(dmg, /--package --platform darwin\/arm64,darwin\/amd64/);
+  assert.match(dmg, /MYGO_UPDATER_PRIVATE_KEY/);
+  assert.match(jobSection(workflow, 'publish'), /needs: \[packages, dmg\]/);
+});
+
 test('构建前校验整理稿，发布页与附件和部署包共用同一日志输出', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const releaseJob = jobSection(workflow, 'verify');
