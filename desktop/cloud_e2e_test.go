@@ -11,6 +11,7 @@ import (
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
+	"github.com/woliubang256/wmind/backend/internal/auth"
 	"github.com/woliubang256/wmind/backend/internal/bootstrap"
 )
 
@@ -175,6 +176,42 @@ func TestCloudClientAgainstRealServer(t *testing.T) {
 	}
 }
 
+func TestCloudSessionRefreshAndRestartAgainstRealServer(t *testing.T) {
+	client, harness, cleanup := newCloudServer(t)
+	defer cleanup()
+	session := client.Session()
+	if session.RefreshToken == "" || time.Until(session.RefreshExpiresAt) < 30*24*time.Hour-time.Minute {
+		t.Fatal("missing native thirty-day session")
+	}
+	issuer, err := auth.NewTokenIssuer(harness.app.Config.Auth.JWTSecret, 15*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer.SetClock(func() time.Time { return time.Now().Add(-16 * time.Minute) })
+	expired, _, err := issuer.Issue(session.UserUID, session.Role)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.SetTokens(expired, "")
+	if _, err := client.ListChanged(t.Context(), time.Now()); err != nil {
+		t.Fatalf("expired access token: %v", err)
+	}
+	rotated := client.Session()
+	if rotated.RefreshToken == session.RefreshToken {
+		t.Fatal("refresh did not rotate")
+	}
+	restored, err := cloud.New(harness.serverURL, cloud.Session{RefreshToken: rotated.RefreshToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restored.Me(t.Context()); err != nil {
+		t.Fatalf("refresh-only restart: %v", err)
+	}
+	if restored.Session().RefreshToken == rotated.RefreshToken {
+		t.Fatal("restart did not rotate the persisted token")
+	}
+}
+
 // 两步验证：真实服务端开启 2FA 后，桌面端登录必须先拿挑战令牌、再提交动态码。
 func TestCloudLoginWithTwoFactorAgainstRealServer(t *testing.T) {
 	_, harness, cleanup := newCloudServer(t)
@@ -213,7 +250,7 @@ func TestCloudLoginWithTwoFactorAgainstRealServer(t *testing.T) {
 		t.Fatalf("验证动态码失败: %v", err)
 	}
 	session = client.Session()
-	if session.AccessToken == "" || session.Role != "admin" {
+	if session.AccessToken == "" || session.RefreshToken == "" || session.Role != "admin" {
 		t.Fatalf("验证通过后应拿到令牌与管理员角色: %+v", session)
 	}
 	if session.TwoFactorChallenge != "" {
@@ -223,5 +260,9 @@ func TestCloudLoginWithTwoFactorAgainstRealServer(t *testing.T) {
 	// 令牌真的可用：拉一次增量。
 	if _, err := client.ListChanged(ctx, time.Now().Add(-time.Hour)); err != nil {
 		t.Fatalf("验证后调用接口失败: %v", err)
+	}
+	client.SetTokens("expired-2fa-access", "")
+	if _, err := client.ListChanged(ctx, time.Now()); err != nil {
+		t.Fatalf("2FA session refresh: %v", err)
 	}
 }

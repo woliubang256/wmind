@@ -5,7 +5,7 @@
 //
 //  1. **登录必须走应用层加密**：服务端拒绝明文密码（docs/04 §3.3）。这里用
 //     一次性挑战的 RSA-OAEP 公钥加密密码，和浏览器完全同一条路径。
-//  2. **令牌只放在内存里**：调用方负责持久化（本地 secrets 文件，0600）。
+//  2. **原生双令牌**：访问 JWT 只在内存里，刷新令牌由调用方加密持久化。
 //  3. **不静默降级**：401 抛 ErrUnauthorized 让上层决定刷新还是断开，网络
 //     错误抛 ErrUnavailable——两者语义不同，混在一起会让「断网」看起来像
 //     「账号被踢」。
@@ -66,11 +66,12 @@ type Map struct {
 
 // Session 是一次登录得到的凭据。
 type Session struct {
-	ServerURL    string
-	AccessToken  string
-	RefreshToken string
-	UserUID      string
-	UserEmail    string
+	ServerURL        string
+	AccessToken      string
+	RefreshToken     string
+	RefreshExpiresAt time.Time
+	UserUID          string
+	UserEmail        string
 	// Role 是云端账号的角色（admin/user）。桌面端菜单用「网站设置」入口的
 	// 显隐就靠它：只有远程管理员才看得到。
 	Role string
@@ -91,7 +92,11 @@ type Client struct {
 	mu      sync.RWMutex
 	session Session
 	// refreshMu 串行化令牌刷新：并发请求同时 401 时只刷新一次。
-	refreshMu sync.Mutex
+	refreshMu   sync.Mutex
+	saveSession func(Session) error
+	// A successful server rotation must never be retried with its old token,
+	// even if the local database write temporarily failed.
+	pendingSave bool
 }
 
 // New 构造客户端。serverURL 允许带尾部斜杠，也允许用户只填域名。
@@ -103,9 +108,49 @@ func New(serverURL string, session Session) (*Client, error) {
 	session.ServerURL = base
 	return &Client{
 		baseURL: base,
-		http:    &http.Client{Timeout: 30 * time.Second},
+		http:    &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		session: session,
 	}, nil
+}
+
+// SetSessionSaver installs synchronous, encrypted persistence before connecting.
+// The callback must not call back into this client.
+func (c *Client) SetSessionSaver(save func(Session) error) {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	c.saveSession = save
+}
+
+func (c *Client) applySession(result loginResult) error {
+	if result.AccessToken == "" || result.RefreshToken == "" {
+		return fmt.Errorf("%w: 服务器未返回客户端双令牌，请先更新服务器", ErrUnavailable)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.session.AccessToken = result.AccessToken
+	c.session.RefreshToken = result.RefreshToken
+	c.session.RefreshExpiresAt = result.RefreshExpiresAt
+	c.session.TwoFactorChallenge = ""
+	if result.User.UID != "" {
+		c.session.UserUID = result.User.UID
+	}
+	if result.User.Email != "" {
+		c.session.UserEmail = result.User.Email
+	}
+	if result.User.Role != "" {
+		c.session.Role = result.User.Role
+	}
+	if result.User.Nickname != "" {
+		c.session.Nickname = result.User.Nickname
+	}
+	if c.saveSession != nil {
+		if err := c.saveSession(c.session); err != nil {
+			c.pendingSave = true
+			return fmt.Errorf("%w: 保存云端会话失败: %v", ErrUnavailable, err)
+		}
+	}
+	c.pendingSave = false
+	return nil
 }
 
 // Session 返回当前凭据的快照。
@@ -195,13 +240,8 @@ func Login(ctx context.Context, serverURL, identifier, password string) (*Client
 		client.mu.Unlock()
 		return client, nil
 	}
-	client.SetTokens(result.AccessToken, result.RefreshToken)
-	if result.User.UID != "" {
-		client.mu.Lock()
-		client.session.UserUID = result.User.UID
-		client.session.UserEmail = result.User.Email
-		client.session.Role = result.User.Role
-		client.mu.Unlock()
+	if err := client.applySession(result); err != nil {
+		return nil, err
 	}
 	return client, nil
 }
@@ -213,16 +253,18 @@ type loginChallenge struct {
 }
 
 type loginResult struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
+	AccessToken      string    `json:"accessToken"`
+	RefreshToken     string    `json:"refreshToken"`
+	RefreshExpiresAt time.Time `json:"refreshExpiresAt"`
 	// 开了两步验证时服务端只给挑战令牌，不发会话。
 	TwoFactorRequired bool   `json:"twoFactorRequired"`
 	ChallengeToken    string `json:"challengeToken"`
 	ExpiresIn         int    `json:"expiresIn"`
 	User              struct {
-		UID   string `json:"uid"`
-		Email string `json:"email"`
-		Role  string `json:"role"`
+		UID      string `json:"uid"`
+		Email    string `json:"email"`
+		Role     string `json:"role"`
+		Nickname string `json:"nickname"`
 	} `json:"user"`
 }
 
@@ -303,15 +345,7 @@ func (c *Client) CompleteTwoFactor(ctx context.Context, code string) error {
 	default:
 		return fmt.Errorf("cloud: two-factor verification failed with status %d (%s)", status, details.Code)
 	}
-	c.mu.Lock()
-	c.session.TwoFactorChallenge = ""
-	c.session.AccessToken = result.AccessToken
-	c.session.RefreshToken = result.RefreshToken
-	c.session.UserUID = result.User.UID
-	c.session.UserEmail = result.User.Email
-	c.session.Role = result.User.Role
-	c.mu.Unlock()
-	return nil
+	return c.applySession(result)
 }
 
 // Profile 是远端账号的公开资料。
@@ -350,25 +384,51 @@ func (c *Client) Me(ctx context.Context) (*Profile, error) {
 	return &profile, nil
 }
 
-// Refresh 用 refresh cookie 换一个新的访问令牌。
+// Refresh renews an explicit native session using JSON credentials.
 func (c *Client) Refresh(ctx context.Context) error {
-	// 并发请求同时收到 401 时只刷新一次：用互斥锁串行化，后来者直接复用
-	// 已经换好的令牌（刷新令牌是一次性轮换的，重复刷新会互相作废）。
+	return c.RefreshAfter(ctx, c.Session().AccessToken)
+}
+
+// RefreshAfter reuses a newer token if another request already handled this 401.
+func (c *Client) RefreshAfter(ctx context.Context, rejectedAccess string) error {
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
+	if c.pendingSave && c.saveSession != nil {
+		if err := c.saveSession(c.Session()); err != nil {
+			return fmt.Errorf("%w: 保存云端会话失败: %v", ErrUnavailable, err)
+		}
+		c.pendingSave = false
+	}
+	session := c.Session()
+	if session.AccessToken != "" && session.AccessToken != rejectedAccess {
+		return nil
+	}
+	if session.RefreshToken == "" {
+		return ErrUnauthorized
+	}
 
 	var result loginResult
-	status, _, err := c.send(ctx, http.MethodPost, "/api/v1/auth/refresh", nil, &result, true)
+	status, _, err := c.send(ctx, http.MethodPost, "/api/v1/auth/refresh", map[string]string{"refreshToken": session.RefreshToken}, &result, "")
 	if err != nil {
 		return err
 	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		return ErrUnauthorized
-	}
 	if status != http.StatusOK {
-		return fmt.Errorf("cloud: refresh failed with status %d", status)
+		return fmt.Errorf("%w: refresh failed with status %d", ErrUnavailable, status)
 	}
-	c.SetTokens(result.AccessToken, result.RefreshToken)
+	return c.applySession(result)
+}
+
+// Logout revokes this native refresh session; it never sends browser Cookies.
+func (c *Client) Logout(ctx context.Context) error {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	status, _, err := c.send(ctx, http.MethodPost, "/api/v1/auth/logout", map[string]string{"refreshToken": c.Session().RefreshToken}, nil, "")
+	if err != nil {
+		return err
+	}
+	if status != http.StatusNoContent {
+		return fmt.Errorf("%w: logout failed with status %d", ErrUnavailable, status)
+	}
 	return nil
 }
 
@@ -488,16 +548,20 @@ type errorDetails struct {
 	CurrentUpdatedAt string
 }
 
-// do 发一次请求。withAuth 为 true 时带上 Bearer 令牌与 refresh cookie。
-//
-// 不自动重试：调用方（同步引擎）比这里更清楚「值不值得再试一次」。
 // do 发一次请求；带鉴权且收到 401 时刷新令牌并重试一次。
 //
 // 桌面端是长期运行的：访问令牌十几分钟就过期，服务端换 JWT 密钥也会让旧令牌
 // 立刻失效。没有这层重试，用户会在「用着用着同步失败」和「重启才好」之间反复，
 // 而实际上刷新令牌一直有效、续期是无感的。
 func (c *Client) do(ctx context.Context, method, path string, body, out any, withAuth bool) (int, errorDetails, error) {
-	status, details, err := c.send(ctx, method, path, body, out, withAuth)
+	access := ""
+	if withAuth {
+		if err := c.RefreshAfter(ctx, ""); err != nil {
+			return 0, errorDetails{}, err
+		}
+		access = c.Session().AccessToken
+	}
+	status, details, err := c.send(ctx, method, path, body, out, access)
 	// send 把 401 表示成 ErrUnauthorized，所以这里不能只看 err != nil。
 	if status != http.StatusUnauthorized || !withAuth {
 		return status, details, err
@@ -505,15 +569,13 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, wit
 	if err != nil && !errors.Is(err, ErrUnauthorized) {
 		return status, details, err
 	}
-	if refreshErr := c.Refresh(ctx); refreshErr != nil {
-		// 刷新也失败（刷新令牌过期/被撤销）：把原来的 401 交给上层，
-		// 由它提示用户重新登录。
-		return status, details, err
+	if refreshErr := c.RefreshAfter(ctx, access); refreshErr != nil {
+		return 0, errorDetails{}, refreshErr
 	}
-	return c.send(ctx, method, path, body, out, withAuth)
+	return c.send(ctx, method, path, body, out, c.Session().AccessToken)
 }
 
-func (c *Client) send(ctx context.Context, method, path string, body, out any, withAuth bool) (int, errorDetails, error) {
+func (c *Client) send(ctx context.Context, method, path string, body, out any, access string) (int, errorDetails, error) {
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -530,17 +592,12 @@ func (c *Client) send(ctx context.Context, method, path string, body, out any, w
 	// 客户端打不开就是这类原因）。
 	req.Header.Set("User-Agent", "WmindDesktop")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Wmind-Client", "desktop")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if withAuth {
-		session := c.Session()
-		if session.AccessToken != "" {
-			req.Header.Set("Authorization", "Bearer "+session.AccessToken)
-		}
-		if session.RefreshToken != "" {
-			req.AddCookie(&http.Cookie{Name: "wmind_refresh", Value: session.RefreshToken, Path: "/api/v1/auth"})
-		}
+	if access != "" {
+		req.Header.Set("Authorization", "Bearer "+access)
 	}
 
 	resp, err := c.http.Do(req)
@@ -555,6 +612,9 @@ func (c *Client) send(ctx context.Context, method, path string, body, out any, w
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return resp.StatusCode, errorDetails{}, ErrUnauthorized
+	}
+	if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
+		return resp.StatusCode, errorDetails{}, fmt.Errorf("%w: server returned HTTP %d", ErrUnavailable, resp.StatusCode)
 	}
 	if len(raw) == 0 {
 		return resp.StatusCode, errorDetails{}, nil
