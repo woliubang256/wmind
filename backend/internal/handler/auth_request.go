@@ -5,6 +5,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/woliubang256/wmind/backend/internal/httpapi/middleware"
@@ -14,13 +15,35 @@ import (
 
 const maxAuthJSONBytes = 4096
 
+// NativeClientHeader explicitly selects JSON credentials, never browser Cookies.
+const NativeClientHeader = "X-Wmind-Client"
+
+func nativeSession(c *gin.Context) bool {
+	return c.GetHeader(NativeClientHeader) == "desktop"
+}
+
 func allowSessionRequest(c *gin.Context, secure bool, allowEmpty bool) bool {
 	c.Header("Cache-Control", "no-store")
+	if client := c.GetHeader(NativeClientHeader); client != "" {
+		if client != "desktop" {
+			response.Fail(c, apperr.New(apperr.CodeBadRequest, ""))
+			return false
+		}
+		// A browser cannot opt into readable refresh credentials. Reject even
+		// trusted origins and empty browser metadata before any session mutation.
+		for name := range c.Request.Header {
+			name = strings.ToLower(name)
+			if name == "origin" || name == "cookie" || strings.HasPrefix(name, "sec-fetch-") {
+				response.Fail(c, apperr.New(apperr.CodeAuthForbidden, ""))
+				return false
+			}
+		}
+	}
 	if !middleware.BrowserSessionAllowed(c, secure) {
 		response.Fail(c, apperr.New(apperr.CodeAuthForbidden, ""))
 		return false
 	}
-	if allowEmpty && c.Request.ContentLength == 0 {
+	if allowEmpty && !nativeSession(c) && c.Request.ContentLength == 0 {
 		return true
 	}
 	mediaType, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))

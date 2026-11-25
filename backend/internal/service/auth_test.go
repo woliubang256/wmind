@@ -107,6 +107,42 @@ func TestRegisterCreatesActiveUserAndSession(t *testing.T) {
 	}
 }
 
+func TestDesktopSessionSurvivesDaysOfflineAndRotatesForThirtyDays(t *testing.T) {
+	f := newAuthFixture(t, nil)
+	registerAlice(t, f)
+	ctx := context.Background()
+	session, err := f.svc.Login(ctx, LoginInput{Identifier: "alice", Password: "correct-horse", Meta: SessionMeta{Platform: "desktop"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.ExpiresIn != 900 || session.RefreshExpiresAt.Sub(*f.now) != 30*24*time.Hour {
+		t.Fatalf("desktop TTL: access=%d refresh=%s", session.ExpiresIn, session.RefreshExpiresAt.Sub(*f.now))
+	}
+	*f.now = f.now.Add(10 * 24 * time.Hour)
+	renewed, err := f.svc.Refresh(ctx, session.RefreshToken, SessionMeta{Platform: "web"})
+	if err != nil {
+		t.Fatalf("ten days offline: %v", err)
+	}
+	if renewed.RefreshToken == session.RefreshToken || renewed.RefreshExpiresAt.Sub(*f.now) != 30*24*time.Hour {
+		t.Fatal("desktop refresh must rotate and keep its original platform policy")
+	}
+	*f.now = renewed.RefreshExpiresAt
+	_, err = f.svc.Refresh(ctx, renewed.RefreshToken, SessionMeta{Platform: "desktop"})
+	requireCode(t, err, apperr.CodeAuthRefreshInvalid)
+}
+
+func TestNativeTransportCannotExtendBrowserSessionPolicy(t *testing.T) {
+	f := newAuthFixture(t, nil)
+	session := registerAlice(t, f)
+	renewed, err := f.svc.Refresh(context.Background(), session.RefreshToken, SessionMeta{Platform: "desktop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renewed.RefreshExpiresAt.Sub(*f.now) != 7*24*time.Hour {
+		t.Fatal("refresh transport changed the original browser session policy")
+	}
+}
+
 func TestRegisterRejectsClosedSite(t *testing.T) {
 	f := newAuthFixture(t, StaticSiteConfig{RegistrationOn: false})
 	_, err := f.svc.Register(context.Background(), RegisterInput{

@@ -28,6 +28,9 @@ type SessionMeta struct {
 	Device   string
 }
 
+// DesktopRefreshTTL permits restoring a native session after days offline.
+const DesktopRefreshTTL = 30 * 24 * time.Hour
+
 // AuthResult 是注册 / 登录 / 刷新的统一产物。
 //
 // RefreshToken 是明文，只在签发这一刻存在；调用方必须立刻写进 Cookie
@@ -334,6 +337,8 @@ func (s *AuthService) Refresh(ctx context.Context, plainToken string, meta Sessi
 			// 刷新合并成一次（docs/08 验收标准 5）。
 			return apperr.New(apperr.CodeAuthRefreshInvalid, "")
 		}
+		// Transport selection cannot promote a browser session into a longer one.
+		meta.Platform = current.Platform
 		issued, issueErr := s.issueSession(ctx, user, meta)
 		if issueErr != nil {
 			return issueErr
@@ -528,11 +533,15 @@ func (s *AuthService) issueSession(ctx context.Context, user *domain.User, meta 
 	}
 
 	now := s.now()
-	expiresAt := now.Add(s.refreshTTL)
 	platform := strings.TrimSpace(meta.Platform)
 	if platform == "" {
 		platform = "web"
 	}
+	ttl := s.refreshTTL
+	if platform == "desktop" {
+		ttl = DesktopRefreshTTL
+	}
+	expiresAt := now.Add(ttl)
 	if _, err := s.tokens.Create(ctx, domain.CreateRefreshTokenInput{
 		UserID: user.ID, TokenHash: hash, Platform: platform,
 		Device:    truncateRunes(strings.TrimSpace(meta.Device), 200),

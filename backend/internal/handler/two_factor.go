@@ -37,7 +37,7 @@ func (h *AuthHandler) VerifyTwoFactor(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, toAuthResponse(result))
+	response.OK(c, toAuthResponse(c, result))
 }
 func (h *AuthHandler) TwoFactorStatus(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
@@ -80,7 +80,7 @@ func (h *AuthHandler) EnableTwoFactor(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, gin.H{"session": toAuthResponse(result.Session), "recoveryCodes": result.RecoveryCodes})
+	response.OK(c, gin.H{"session": toAuthResponse(c, result.Session), "recoveryCodes": result.RecoveryCodes})
 }
 func (h *AuthHandler) DisableTwoFactor(c *gin.Context)        { h.changeTwoFactor(c, true) }
 func (h *AuthHandler) RegenerateRecoveryCodes(c *gin.Context) { h.changeTwoFactor(c, false) }
@@ -102,7 +102,7 @@ func (h *AuthHandler) changeTwoFactor(c *gin.Context, disable bool) {
 			response.Fail(c, err)
 			return
 		}
-		response.OK(c, gin.H{"session": toAuthResponse(result.Session)})
+		response.OK(c, gin.H{"session": toAuthResponse(c, result.Session)})
 		return
 	}
 	response.OK(c, gin.H{"recoveryCodes": result.RecoveryCodes})

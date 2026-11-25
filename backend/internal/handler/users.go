@@ -82,18 +82,19 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 	if !bindAuthJSON(c, &req) {
 		return
 	}
+	authHandler := &AuthHandler{svc: h.auth, cookie: h.cookie}
 	result, err := h.auth.ChangePassword(c.Request.Context(), middleware.UserID(c), req.OldPassword, req.NewPassword,
-		service.SessionMeta{Platform: "web", Device: c.Request.UserAgent()})
+		authHandler.sessionMeta(c))
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	if err := (&AuthHandler{svc: h.auth, cookie: h.cookie}).setRefreshCookie(c, result); err != nil {
+	if err := authHandler.setRefreshCookie(c, result); err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, toAuthResponse(result))
+	response.OK(c, toAuthResponse(c, result))
 }
 
 // UploadAvatar 处理 POST /api/v1/users/me/avatar。

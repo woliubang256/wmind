@@ -38,6 +38,13 @@ info:
     - **Refresh Token**：`wmind_refresh` Cookie，7 天，`Path=/api/v1/auth`、
       `HttpOnly`、`SameSite=Lax`。只有 `/auth/refresh`、`/auth/logout` 用得到。
 
+    桌面原生请求使用 `X-Wmind-Client: desktop`，不得携带 Cookie、Origin 或
+    `Sec-Fetch-*` 头。登录、2FA 验证及刷新成功后在 JSON 中返回 `accessToken`、
+    `expiresIn`、`refreshToken`、`refreshExpiresAt`，不设置 Cookie；访问 JWT 默认
+    15 分钟，桌面刷新令牌 30 天，成功轮换后重新计时。刷新与退出以 JSON 请求体
+    `{"refreshToken":"..."}` 提交，普通业务请求仅提交 Bearer。刷新保留原会话的
+    平台期限，改请求头不会延长原有 Web 会话。浏览器响应不包含可读刷新令牌。
+
     401 分两种：`AUTH_TOKEN_EXPIRED` 应当静默刷新后重试；`AUTH_TOKEN_INVALID`
     应当直接跳登录页。并发请求同时 401 时，客户端必须把刷新合并成一次。
 

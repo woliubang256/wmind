@@ -94,7 +94,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.Created(c, toAuthResponse(result))
+	response.Created(c, toAuthResponse(c, result))
 }
 
 type loginRequest struct {
@@ -162,7 +162,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, toAuthResponse(result))
+	response.OK(c, toAuthResponse(c, result))
 }
 
 // allowLoginAttempt 按「IP + 账号」限流。超限时已写好响应，返回 false。
@@ -211,7 +211,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, toAuthResponse(result))
+	response.OK(c, toAuthResponse(c, result))
 }
 
 // Logout 处理 POST /api/v1/auth/logout。幂等，始终 204。
@@ -242,6 +242,9 @@ func (h *AuthHandler) Me(c *gin.Context) {
 }
 
 func (h *AuthHandler) sessionMeta(c *gin.Context) service.SessionMeta {
+	if nativeSession(c) {
+		return service.SessionMeta{Platform: "desktop", Device: c.Request.UserAgent()}
+	}
 	return service.SessionMeta{Platform: "web", Device: c.Request.UserAgent()}
 }
 
@@ -259,6 +262,9 @@ func (h *AuthHandler) refreshToken(c *gin.Context) (string, bool) {
 }
 
 func (h *AuthHandler) setRefreshCookie(c *gin.Context, result *service.AuthResult) error {
+	if nativeSession(c) {
+		return nil
+	}
 	media, err := h.svc.MediaToken(result)
 	if err != nil {
 		return apperr.Wrap(apperr.CodeInternalError, err)
@@ -277,6 +283,9 @@ func (h *AuthHandler) setRefreshCookie(c *gin.Context, result *service.AuthResul
 }
 
 func (h *AuthHandler) clearRefreshCookie(c *gin.Context) {
+	if nativeSession(c) {
+		return
+	}
 	c.SetSameSite(h.cookie.SameSite)
 	c.SetCookie(h.cookie.Name, "", -1, h.cookie.Path, h.cookie.Domain, h.cookie.Secure, true)
 	c.SetCookie(MediaCookieName, "", -1, "/uploads", h.cookie.Domain, h.cookie.Secure, true)
@@ -301,17 +310,24 @@ type userDTO struct {
 }
 
 type authResponse struct {
-	AccessToken string  `json:"accessToken"`
-	ExpiresIn   int     `json:"expiresIn"`
-	User        userDTO `json:"user"`
+	AccessToken      string  `json:"accessToken"`
+	ExpiresIn        int     `json:"expiresIn"`
+	User             userDTO `json:"user"`
+	RefreshToken     string  `json:"refreshToken,omitempty"`
+	RefreshExpiresAt string  `json:"refreshExpiresAt,omitempty"`
 }
 
-func toAuthResponse(result *service.AuthResult) authResponse {
-	return authResponse{
+func toAuthResponse(c *gin.Context, result *service.AuthResult) authResponse {
+	resp := authResponse{
 		AccessToken: result.AccessToken,
 		ExpiresIn:   result.ExpiresIn,
 		User:        toUserDTO(result.User),
 	}
+	if nativeSession(c) {
+		resp.RefreshToken = result.RefreshToken
+		resp.RefreshExpiresAt = formatTime(result.RefreshExpiresAt)
+	}
+	return resp
 }
 
 func toUserDTO(user *domain.User) userDTO {
