@@ -10,9 +10,11 @@ Status: implemented
 
 正文中 Conventional Commit 更新日志的内容来源由[按版本整理的用户说明](2026-10-25-wmind-curated-release-notes.md)取代，并在依赖安装前校验稿件；以下保留原编排决定，tag 触发、完整检查、镜像晋升和最后创建 Release 的约束不变。
 
-发布流水线仅由 `v*` 标签触发，保留原有数据库、前端、字体、配色和笔记检查。根 `VERSION` 是版本来源，两个 package 版本与其同步；`scripts/release.mjs check` 先验证标签一致性并运行发布工具测试，再经 `changelog` 和 `package` 生成更新日志、交叉编译 Linux amd64/arm64 服务并打包前端和部署文件。API/Web 构建仅推送 GHCR 的固定版本标签；两镜像均成功后再用 `buildx imagetools create` 将同标签镜像晋升为各自 `latest`，最后才创建或更新正式 Release，附上 Conventional Commit 更新日志、双架构部署包和 SHA256SUMS。
+网站与服务端发布流水线仅由 `v*` 标签触发，保留原有数据库、前端、字体、配色和笔记检查。根 `VERSION` 是版本来源，两个 package 版本与其同步；`scripts/release.mjs check` 先验证标签一致性并运行发布工具测试，再经 `changelog` 和 `package` 生成更新日志、交叉编译 Linux amd64/arm64 服务并打包前端和部署文件。API/Web 构建仅推送 GHCR 的固定版本标签；两镜像均成功后再用 `buildx imagetools create` 将同标签镜像晋升为各自 `latest`，最后才创建或更新正式 Release，附上 Conventional Commit 更新日志、双架构部署包和 SHA256SUMS。
 
 Go 和 Node 构建阶段固定为 BUILDPLATFORM，Go 通过 TARGETOS/TARGETARCH 交叉编译；仅 API 最终 Alpine 初始化需要目标平台模拟，避免在 QEMU 中编译 Go 或前端。Docker 构建参数 VERSION 写入后端 config.Version。Compose 默认使用 GHCR 镜像并保留本地 build 配置。
+
+桌面交付另由 `desktop-vX.Y.Z` 触发 `.github/workflows/desktop-release.yml`：Ubuntu 构建 Windows/Linux 双架构安装包，macOS 构建 Apple Silicon/Intel 应用与 DMG，全部成功后汇总到独立公开 Release。`v*` 中的 Desktop client 只构建验证，不发布桌面安装包或自动更新清单。包含桌面改动的版本须同步 VERSION、两个 package.json、`desktop/mygo.json` 与桌面更新日志，并发布指向同一版本代码提交的两种标签；两个工作流都成功，且六个平台签名更新清单与安装包公开可用，才算完整交付。漏发桌面标签时补发同版本，不移动已经发布的网站标签，也不重复升版。
 
 API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `/data` 属主。SQLite 挂载整个 `/data`，PostgreSQL 仅挂载 `/data/uploads`；两种全新命名卷均必须从镜像中的非 root 属主初始化，否则 PostgreSQL 的上传卷会被 Docker 以 root 目录创建，运行进程无法写入。
 
@@ -43,6 +45,7 @@ API 镜像在切换到 UID/GID 10001 前创建 `/data/uploads` 并递归设置 `
 - 本机 `actionlint` 通过；Ruby YAML 静态解析确认 tag 触发、完整历史、发布顺序及两套 Compose 镜像/版本参数。Docker 构建、Compose 运行语义和 registry 发布由 CI 验证。
 - `scripts/release-workflow.test.mjs` 先复现构建阶段提前更新 `latest` 的缺陷，再验证两个固定镜像、统一晋升和正式 Release 的先后顺序；修复后通过。
 - 上传卷镜像契约先复现缺少 `/data/uploads` 挂载点的问题，再验证预建、递归属主和默认 UID/GID 的顺序；修复后通过。
+- 桌面发布核对独立工作流触发和 packages/dmg/publish 作业；公开 Release 必须包含 Windows/Linux/macOS 各双架构安装与更新资产，更新清单版本、归档文件名和签名须与本次版本及已安装客户端公钥一致。
 - Workflow 契约覆盖卷/整栈冒烟在固定镜像之后、晋升之前的顺序及隔离清理；本机只运行契约与 actionlint，真实挂卷权限、Nginx 代理和运行版本由发布 CI 的 Docker 冒烟验证。
 
 ## Consequences

@@ -6,7 +6,9 @@
 
 正式版本以根目录 [VERSION](../VERSION) 为准，个人设置入口右侧显示正在运行的后端版本；直接 `go run` 的开发服务显示 `dev`。部署时在 `deploy/.env` 设置 `WMIND_VERSION=v1.0.0` 可固定版本；留为 `latest` 则拉取最新正式镜像。源码本地构建使用 `docker compose up -d --build`。
 
-普通提交和 PR 不触发 CI，推送 `v*` 标签才执行完整校验、构建并发布 GitHub Release。发布页包含按版本整理的更新日志、Linux amd64/arm64 部署压缩包、SHA256SUMS，以及对应的 GHCR API/Web 多架构镜像。压缩包只包含二进制、静态前端、示例配置与部署脚本，使用方式见包内 RELEASE.md；解压前可执行 `sha256sum -c SHA256SUMS` 校验。
+普通提交和 PR 不触发 CI。网站与服务端由 `vX.Y.Z` 标签执行完整校验，发布页包含按版本整理的更新日志、Linux amd64/arm64 部署压缩包、SHA256SUMS，以及对应的 GHCR API/Web 多架构镜像。压缩包只包含二进制、静态前端、示例配置与部署脚本，使用方式见包内 RELEASE.md；解压前可执行 `sha256sum -c SHA256SUMS` 校验。
+
+桌面端由独立的 `desktop-vX.Y.Z` 标签触发 Desktop release，生成三端安装包、更新归档与六个平台的签名更新清单。`v*` 工作流中的 Desktop client 作业只构建验证，上传到 Actions 的 artifact 不会更新桌面下载页或应用内更新。涉及桌面功能的发布需要两条工作流都成功；先同步 `desktop/mygo.json` 的版本和 `desktop/CHANGELOG.md`，再将两个标签指向同一版本代码提交。补发漏掉的桌面版时沿用已发布版本与代码提交，不重复升版。
 
 ```bash
 npm run version:next          # 同步 VERSION 和两个 package.json，不自动提交或打标签
@@ -17,6 +19,9 @@ npm run test:release
 # 提交本次版本变更并通过相关本地检查后：
 git tag -a v1.0.1 -m "wmind v1.0.1"
 git push origin main v1.0.1
+# 同次发布包含桌面改动时，还需推送独立桌面标签：
+git tag -a desktop-v1.0.1 v1.0.1^{} -m "Wmind 桌面版 1.0.1"
+git push origin desktop-v1.0.1
 ```
 
 版本按十进制进位：`1.0.8 → 1.0.9 → 1.1.0`，`1.9.9 → 2.0.0`。只有所有校验、压缩包和镜像都成功后才创建正式 Release；失败时修复问题并跟进流水线，不把仅创建标签当成已发布。
