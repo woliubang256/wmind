@@ -11,6 +11,7 @@ import { parseDocument } from '@/editor/model/validate';
 import { importRegistry } from '@/editor/import/builtins';
 import { finalizeImport } from '@/editor/import/finalize';
 import type { ImportResult } from '@/editor/import/types';
+import type { Topic, WmindDocument } from '@/editor/model/types';
 import {
   completeOpenFile,
   fetchMapBySource,
@@ -24,6 +25,36 @@ import { XmindReadonlyDialog } from './xmind-readonly-dialog';
 interface XmindPending {
   item: DesktopOpenFile;
   result: ImportResult;
+  previewDocument: WmindDocument;
+  previewUrls: string[];
+}
+
+function eachPreviewTopic(document: WmindDocument, visit: (topic: Topic) => void): void {
+  const stack: Topic[] = [];
+  for (const sheet of document.sheets) {
+    stack.push(sheet.rootTopic, ...sheet.floatingTopics);
+  }
+  while (stack.length > 0) {
+    const topic = stack.pop();
+    if (!topic) continue;
+    visit(topic);
+    stack.push(...topic.children.attached, ...topic.children.detached);
+  }
+}
+
+function buildXmindPreview(result: ImportResult): { document: WmindDocument; urls: string[] } {
+  const document = structuredClone(result.document);
+  const byRef = new Map(result.assets.map((asset) => [asset.ref, asset]));
+  const urls: string[] = [];
+  eachPreviewTopic(document, (topic) => {
+    if (!topic.image) return;
+    const asset = byRef.get(topic.image.src);
+    if (!asset) return;
+    const url = URL.createObjectURL(new Blob([asset.bytes], { type: asset.mime }));
+    urls.push(url);
+    topic.image.src = url;
+  });
+  return { document, urls };
 }
 
 /**
@@ -138,8 +169,8 @@ export function OpenFileHost() {
         }
 
         const parsed = importRegistry.run({ fileName: item.name, bytes });
-        const finalized = await finalizeImport(parsed, { upload: fileApi.upload });
-        setXmind({ item, result: finalized.result });
+        const preview = buildXmindPreview(parsed);
+        setXmind({ item, result: parsed, previewDocument: preview.document, previewUrls: preview.urls });
       } catch (cause) {
         await fail(item, cause instanceof Error ? cause.message : t('desktop.openFile.failed'));
       } finally {
@@ -154,16 +185,20 @@ export function OpenFileHost() {
     if (!xmind) return;
     const current = xmind;
     setXmind(null);
+    for (const url of current.previewUrls) URL.revokeObjectURL(url);
     void finish(current.item);
   };
   const convertXmind = () => {
     if (!xmind) return;
     const current = xmind;
     setXmind(null);
-    void createFromDocument(current.item, current.result.document).catch((cause) => {
-      processing.current = false;
-      setError({ item: current.item, message: cause instanceof Error ? cause.message : t('desktop.openFile.failed') });
-    });
+    for (const url of current.previewUrls) URL.revokeObjectURL(url);
+    void finalizeImport(current.result, { upload: fileApi.upload })
+      .then((finalized) => createFromDocument(current.item, finalized.result.document))
+      .catch((cause) => {
+        processing.current = false;
+        setError({ item: current.item, message: cause instanceof Error ? cause.message : t('desktop.openFile.failed') });
+      });
   };
 
   return (
@@ -172,7 +207,7 @@ export function OpenFileHost() {
         <XmindReadonlyDialog
           open
           title={xmind.item.name}
-          document={xmind.result.document}
+          document={xmind.previewDocument}
           onClose={closeXmind}
           onConvert={convertXmind}
         />
