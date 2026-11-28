@@ -235,9 +235,70 @@ export function touchMapSyncState(mapUid: string): Promise<unknown> {
   return desktopRequest(`/desktop/maps/${encodeURIComponent(mapUid)}/touch`, { method: 'POST' });
 }
 
-export async function fetchMapSources(): Promise<Map<string, MapSource>> {
-  const items = await desktopRequest<MapSource[]>('/desktop/maps/sources');
-  const map = new Map<string, MapSource>();
+export interface DesktopOpenFile {
+  id: string;
+  path: string;
+  name: string;
+  ext: 'wmind' | 'xmind' | string;
+  size: number;
+  modTime?: string;
+  missing: boolean;
+}
+
+export interface DesktopMapSource extends MapSource {
+  sourcePath?: string;
+  sourceName?: string;
+  sourceExists?: boolean;
+}
+
+export function fetchOpenFiles(): Promise<DesktopOpenFile[]> {
+  return desktopRequest<DesktopOpenFile[]>('/desktop/open-files');
+}
+
+export function readOpenFileBytes(id: string): Promise<ArrayBuffer> {
+  return fetch(`/desktop/open-files/${encodeURIComponent(id)}/bytes`, { credentials: 'include' }).then(async (response) => {
+    if (!response.ok) {
+      let message = `打开文件失败（${response.status}）`;
+      try {
+        const body = (await response.json()) as { error?: string };
+        if (body.error) message = body.error;
+      } catch { /* keep status fallback */ }
+      throw new Error(message);
+    }
+    return response.arrayBuffer();
+  });
+}
+
+export function completeOpenFile(id: string, mapUid?: string): Promise<{ done: boolean }> {
+  return desktopRequest(`/desktop/open-files/${encodeURIComponent(id)}/done`, {
+    method: 'POST',
+    body: JSON.stringify(mapUid ? { mapUid } : {}),
+  });
+}
+
+export function revealOpenFile(id: string): Promise<{ revealed: boolean }> {
+  return desktopRequest(`/desktop/open-files/${encodeURIComponent(id)}/reveal`, { method: 'POST' });
+}
+
+export function fetchMapBySource(path: string): Promise<{ mapUid: string; path: string; name: string; size: number; exists: boolean }> {
+  return desktopRequest(`/desktop/maps/by-source?path=${encodeURIComponent(path)}`);
+}
+
+export function revealMapSource(mapUid: string): Promise<{ revealed: boolean }> {
+  return desktopRequest(`/desktop/maps/${encodeURIComponent(mapUid)}/reveal-source`, { method: 'POST' });
+}
+
+export function deleteMapSource(mapUid: string): Promise<{ deleted: boolean }> {
+  return desktopRequest(`/desktop/maps/${encodeURIComponent(mapUid)}/source`, { method: 'DELETE' });
+}
+
+export function deleteAllMapSources(): Promise<{ deleted: boolean }> {
+  return desktopRequest('/desktop/maps/sources', { method: 'DELETE' });
+}
+
+export async function fetchMapSources(): Promise<Map<string, DesktopMapSource>> {
+  const items = await desktopRequest<DesktopMapSource[]>('/desktop/maps/sources');
+  const map = new Map<string, DesktopMapSource>();
   for (const item of items ?? []) map.set(item.mapUid, item);
   return map;
 }

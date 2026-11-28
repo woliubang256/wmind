@@ -1513,7 +1513,8 @@
     },
     "actions": {
       "upload": "上传到云端",
-      "resolve": "处理冲突"
+      "resolve": "处理冲突",
+      "revealSource": "在文件夹中显示"
     },
     "upload": {
       "success": "已上传到云端",
@@ -1644,6 +1645,16 @@
     "siteSettings.title": "网站设置",
     "siteSettings.hint": "这里加载的是服务器的配置，与 Web 端后台一致。",
     "siteSettings.unavailable": "未连接云端，或服务器版本不支持内嵌。",
-    "siteSettings.openExternal": "在浏览器打开"
+    "siteSettings.openExternal": "在浏览器打开",
+    "openFile": {
+      "missing": "文件已不在原位置。",
+      "invalidWmind": "Wmind 文件无效或使用了不受支持的格式。",
+      "failed": "无法打开这个文件。",
+      "failedTitle": "无法打开文件",
+      "xmindViewDescription": "仅查看这个 XMind 文件，不会导入到导图库；也可以转换成可编辑的 Wmind 导图。",
+      "convert": "转换成 Wmind 导图",
+      "sourceRevealFailed": "无法在文件夹中显示来源文件",
+      "completeFailed": "导图已创建，但文件打开确认未能保存；稍后重新打开文件可重试。"
+    }
   }
 }

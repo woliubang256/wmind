@@ -1513,7 +1513,8 @@
     },
     "actions": {
       "upload": "Upload to cloud",
-      "resolve": "Resolve conflict"
+      "resolve": "Resolve conflict",
+      "revealSource": "Show in Folder"
     },
     "upload": {
       "success": "Uploaded to cloud",
@@ -1644,6 +1645,16 @@
     "siteSettings.title": "Site settings",
     "siteSettings.hint": "These are the server's settings, the same as the web admin.",
     "siteSettings.unavailable": "Not connected, or the server cannot be embedded.",
-    "siteSettings.openExternal": "Open in browser"
+    "siteSettings.openExternal": "Open in browser",
+    "openFile": {
+      "missing": "The file is no longer at its original location.",
+      "invalidWmind": "This Wmind file is invalid or uses an unsupported format.",
+      "failed": "The file could not be opened.",
+      "failedTitle": "Could not open file",
+      "xmindViewDescription": "View this XMind file without importing it. You can convert it into an editable Wmind map.",
+      "convert": "Convert to Wmind",
+      "sourceRevealFailed": "Could not show the source file in its folder",
+      "completeFailed": "The map was created, but the file-open confirmation could not be saved. Reopen the file later to retry."
+    }
   }
 }

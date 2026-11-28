@@ -15,7 +15,7 @@
  * 撒谎。
  */
 
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -63,6 +63,8 @@ function CardAction({ label, icon, onClick, tone = 'default', disabled }: CardAc
 export interface MapCardProps {
   map: MapSummary;
   actions: MapCardAction[];
+  /** Optional desktop context-menu hook for local-file operations. */
+  onContextMenu?: (event: MouseEvent<HTMLElement>) => void;
   /** 任一操作进行中时禁用全部操作，避免并发点两下建出两张副本。 */
   busy?: boolean;
   /** 覆盖默认的「更新于 …」，回收站用剩余删除期限。 */
@@ -83,7 +85,7 @@ export interface MapCardProps {
   badge?: ReactNode;
 }
 
-export function MapCard({ map, actions, busy = false, meta, href, badge }: MapCardProps) {
+export function MapCard({ map, actions, busy = false, meta, href, badge, onContextMenu }: MapCardProps) {
   const { t } = useTranslation();
   const target = href === undefined ? `/maps/${map.uid}` : href;
 
@@ -129,7 +131,7 @@ export function MapCard({ map, actions, busy = false, meta, href, badge }: MapCa
   );
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card transition hover:border-border hover:shadow-sm focus-within:border-ring">
+    <article onContextMenu={onContextMenu} className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card transition hover:border-border hover:shadow-sm focus-within:border-ring">
       {target === null ? (
         <div>{body}</div>
       ) : (

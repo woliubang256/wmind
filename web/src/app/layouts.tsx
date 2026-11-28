@@ -20,6 +20,7 @@ import { AccountDialog } from '@/features/account/account-dialog';
 import { AboutDialog } from '@/features/about/about-dialog';
 import type { AvatarUser } from '@/lib/avatar';
 import { ShortcutsDialog } from '@/features/shortcuts/shortcuts-dialog';
+import { OpenFileHost } from '@/features/open-file/open-file-host';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { disconnectCloud, fetchDesktopStatus, openDeployGuide } from '@/lib/desktop';
 import { useQuery } from '@tanstack/react-query';
@@ -404,6 +405,7 @@ export function AppLayout() {
       <AccountDialog open={accountOpen} onClose={() => setAccountOpen(false)} />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <OpenFileHost />
       <ConfirmDialog
         open={signOutOpen}
         title={t('desktop.account.signOutConfirm.title')}

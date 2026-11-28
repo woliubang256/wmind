@@ -34,9 +34,10 @@ import { useSharesEnabled } from '@/features/site/use-remote-base';
 import {
   fetchMapSources,
   isDesktop,
+  revealMapSource,
   sourceLabelKey,
   uploadMapToCloud,
-  type MapSource,
+  type DesktopMapSource,
 } from '@/lib/desktop';
 import { mapKeys } from './queries';
 import { MapCard } from './map-card';
@@ -117,7 +118,7 @@ export function RecentPage() {
    * 服务端不知道「本地/云端」——那是客户端自己的同步状态。数据量是「当前
    * 已加载的一页列表」，在这里过滤既不会漏也不会多请求。
    */
-  const sourceOf = useCallback((uid: string): MapSource | undefined => sources.data?.get(uid), [sources.data]);
+  const sourceOf = useCallback((uid: string): DesktopMapSource | undefined => sources.data?.get(uid), [sources.data]);
   const visibleItems = useMemo(() => {
     if (!desktop || sourceFilter === 'all') return items;
     return items.filter((map) => {
@@ -357,6 +358,10 @@ export function RecentPage() {
                 map={map}
                 busy={busy}
                 badge={labelKey ? <SourceBadge kind={labelKey} /> : undefined}
+                onContextMenu={desktop && source?.sourceExists ? (event) => {
+                  event.preventDefault();
+                  void revealMapSource(map.uid).catch(() => toast.error(t('desktop.openFile.sourceRevealFailed')));
+                } : undefined}
                 actions={[
                   {
                     label: t('maps.actions.rename'),
@@ -383,6 +388,13 @@ export function RecentPage() {
                         label: t('desktop.actions.upload'),
                         icon: 'globe' as const,
                         onClick: () => upload.mutate(map.uid),
+                      }]
+                    : []),
+                  ...(desktop && source?.sourceExists
+                    ? [{
+                        label: t('desktop.actions.revealSource'),
+                        icon: 'folder' as const,
+                        onClick: () => revealMapSource(map.uid).catch(() => toast.error(t('desktop.openFile.sourceRevealFailed'))),
                       }]
                     : []),
                   {

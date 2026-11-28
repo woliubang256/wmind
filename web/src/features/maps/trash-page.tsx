@@ -22,6 +22,7 @@ import { MapCard } from './map-card';
 import { LoadingState } from '@/components/ui/loading-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { trashDaysRemaining } from './trash-retention';
+import { deleteAllMapSources, deleteMapSource, isDesktop } from '@/lib/desktop';
 
 const PAGE_SIZE = 24;
 
@@ -67,7 +68,8 @@ export function TrashPage() {
 
   const purge = useMutation({
     mutationFn: (uid: string) => mapApi.purge(uid),
-    onSuccess: () => {
+    onSuccess: (_result, uid) => {
+      if (isDesktop()) void deleteMapSource(uid).catch(() => undefined);
       toast.success(t('trash.purged'));
       setPurging(null);
       refresh();
@@ -78,6 +80,7 @@ export function TrashPage() {
   const emptyTrash = useMutation({
     mutationFn: () => mapApi.emptyTrash(),
     onSuccess: () => {
+      if (isDesktop()) void deleteAllMapSources().catch(() => undefined);
       toast.success(t('trash.emptied'));
       setEmptying(false);
       refresh();
