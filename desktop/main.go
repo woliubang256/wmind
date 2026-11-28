@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -33,8 +34,10 @@ import (
 	"github.com/woliubang256/wmind/backend/desktop/internal/localmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/localserver"
 	"github.com/woliubang256/wmind/backend/desktop/internal/logging"
+	"github.com/woliubang256/wmind/backend/desktop/internal/mapsource"
 	"github.com/woliubang256/wmind/backend/desktop/internal/mcpmode"
 	"github.com/woliubang256/wmind/backend/desktop/internal/mcpserver"
+	"github.com/woliubang256/wmind/backend/desktop/internal/openfiles"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
 	"github.com/woliubang256/wmind/backend/internal/bootstrap"
@@ -139,6 +142,20 @@ func run() error {
 	if version != "" {
 		mygo.App.SetVersion(version)
 	}
+
+	// 文件关联必须在单实例锁之前注册。mygo 会把第二个实例的参数转给第一个
+	// 实例，然后在同一个 OnOpenFile 回调里派发；冷启动参数也走同一条路径。
+	mygo.App.OnOpenFile(func(path string) {
+		items := desktopOpenFiles.Add([]string{path})
+		if len(items) == 0 {
+			return
+		}
+		mygo.App.Focus()
+		for _, item := range items {
+			notifyOpenFile(item)
+		}
+	})
+	mygo.App.OnSecondInstance(func(_ []string, _ string) { mygo.App.Focus() })
 
 	// 单实例：第二次启动不再开窗口，由第一个实例处理（后续接入深链接与
 	// 文件关联时，这里也是接收参数的地方）。
@@ -295,6 +312,7 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 	// 桌面端自己的表（map_sync / sync_meta）在迁移之后建：它们不属于服务端
 	// schema，走 bootstrap 的 Prepare 钩子而不是迁移集。
 	var syncStore *syncstate.Store
+	var sourceStore *mapsource.Store
 	var localDB *sql.DB
 	app, err := bootstrap.New(ctx, localmode.Config(paths, secrets), bootstrap.Options{
 		Logger: logger, Quiet: true,
@@ -302,10 +320,14 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 			if err := syncstate.Prepare(ctx, db); err != nil {
 				return err
 			}
+			if err := mapsource.Prepare(ctx, db); err != nil {
+				return err
+			}
 			if err := credstore.Prepare(ctx, db); err != nil {
 				return err
 			}
 			syncStore = syncstate.NewStore(db)
+			sourceStore = mapsource.NewStore(db)
 			localDB = db
 			return nil
 		},
@@ -374,7 +396,9 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 		PreferredLanguages: locale.Preferred,
 		Desktop: deskapi.New(deskapi.Deps{
 			Engine: engine, Store: syncStore, Creds: creds, Version: appVersion, Updater: updates,
+			OpenFiles: desktopOpenFiles, Sources: sourceStore,
 			OpenExternal:       mygo.Shell.OpenExternal,
+			RevealInFolder:     func(path string) error { mygo.Shell.ShowItemInFolder(path); return nil },
 			Logger:             logger,
 			Settings:           app.Settings,
 			MCP:                mcpManager,
@@ -399,6 +423,30 @@ func assembleLocal(ctx context.Context, paths localmode.Paths, logger *slog.Logg
 
 // evalWindow 是主窗口，调试构建里用来在页面中执行 JS 量性能。
 var evalWindow *mygo.Window
+
+// desktopOpenFiles 在整个进程生命周期内保存系统交给应用的文件。
+//
+// 它必须在 RequestSingleInstanceLock 之前就存在并注册监听器：第一次启动的
+// argv、第二个实例转发的 argv、Dock/资源管理器打开与拖放，mygo 最终都统一
+// 通过 App.OnOpenFile 派发。
+var desktopOpenFiles = openfiles.New()
+
+// notifyOpenFile 敲一下当前页面；可靠性由 GET /desktop/open-files 兜底，因而
+// 页面尚未创建、正在导航或已经关闭时，事件失败也不会丢文件。
+func notifyOpenFile(file openfiles.File) {
+	window := evalWindow
+	if window == nil {
+		return
+	}
+	payload, err := json.Marshal(file)
+	if err != nil {
+		return
+	}
+	go func() {
+		code := fmt.Sprintf(`window.dispatchEvent(new CustomEvent("wmind:open-file", {detail:%s}));`, payload)
+		_, _ = window.Page().Eval(code)
+	}()
+}
 
 // debugEval 在页面里执行 JS，仅当 WMIND_DEBUG_EVAL=1 时可用。
 //

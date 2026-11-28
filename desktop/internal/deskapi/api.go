@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/woliubang256/wmind/backend/desktop/internal/cloud"
+	"github.com/woliubang256/wmind/backend/desktop/internal/mapsource"
+	"github.com/woliubang256/wmind/backend/desktop/internal/openfiles"
 	"github.com/woliubang256/wmind/backend/desktop/internal/remoteproxy"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncengine"
 	"github.com/woliubang256/wmind/backend/desktop/internal/syncstate"
@@ -123,6 +125,14 @@ type Deps struct {
 	Settings SettingsStore
 	// MCP 管理本地 MCP 服务的启停。
 	MCP MCPManager
+	// OpenFiles 是「用户让应用打开的文件」队列，由桌面入口在 Run 之前注册
+	// mygo.App.OnOpenFile 填充。
+	OpenFiles *openfiles.Queue
+	// Sources 记录「导图来自哪个本地文件」，用于去重与「打开所在目录」。
+	Sources *mapsource.Store
+	// RevealInFolder 在系统文件管理器中显示文件；为空时相关接口返回「不支持」
+	// （测试替换）。
+	RevealInFolder func(path string) error
 }
 
 // New 构造 /desktop/ 的 Handler。
@@ -145,6 +155,16 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("POST /desktop/about/open-docs", a.openDocs)
 	mux.HandleFunc("POST /desktop/cloud/verify-2fa", a.verifyTwoFactor)
 	mux.HandleFunc("POST /desktop/sync", a.sync)
+	if deps.OpenFiles != nil {
+		mux.HandleFunc("GET /desktop/open-files", a.openFiles)
+		mux.HandleFunc("GET /desktop/open-files/{id}/bytes", a.openFileBytes)
+		mux.HandleFunc("POST /desktop/open-files/{id}/done", a.doneOpenFile)
+		mux.HandleFunc("POST /desktop/open-files/{id}/reveal", a.revealOpenFile)
+	}
+	mux.HandleFunc("GET /desktop/maps/by-source", a.mapBySource)
+	mux.HandleFunc("POST /desktop/maps/{uid}/reveal-source", a.revealMapSource)
+	mux.HandleFunc("DELETE /desktop/maps/{uid}/source", a.deleteMapSource)
+	mux.HandleFunc("DELETE /desktop/maps/sources", a.deleteAllMapSources)
 	mux.HandleFunc("GET /desktop/maps/sources", a.sources)
 	mux.HandleFunc("POST /desktop/maps/{uid}/upload", a.upload)
 	mux.HandleFunc("POST /desktop/maps/{uid}/resolve", a.resolve)
@@ -692,6 +712,9 @@ type sourceItem struct {
 	State        string `json:"state"`
 	LastSyncedAt string `json:"lastSyncedAt,omitempty"`
 	Deleted      bool   `json:"deleted"`
+	SourcePath   string `json:"sourcePath,omitempty"`
+	SourceName   string `json:"sourceName,omitempty"`
+	SourceExists bool   `json:"sourceExists,omitempty"`
 }
 
 func (a *api) sources(w http.ResponseWriter, r *http.Request) {
@@ -705,6 +728,13 @@ func (a *api) sources(w http.ResponseWriter, r *http.Request) {
 		item := sourceItem{
 			MapUID: rec.MapUID, RemoteUID: rec.RemoteUID, ServerURL: rec.RemoteURL,
 			State: string(rec.State), Deleted: rec.Deleted,
+		}
+		if a.deps.Sources != nil {
+			if source, sourceErr := a.deps.Sources.Get(r.Context(), rec.MapUID); sourceErr == nil {
+				item.SourcePath = source.Path
+				item.SourceName = source.Name
+				item.SourceExists = mapsource.Exists(source)
+			}
 		}
 		if rec.LastSyncedAt != nil {
 			item.LastSyncedAt = rec.LastSyncedAt.UTC().Format(time.RFC3339)

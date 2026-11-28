@@ -38,6 +38,48 @@
     "icon.icns"
   ],
   "macos": {
-    "icon": "resources/icon.icns"
+    "icon": "resources/icon.icns",
+    "infoPlist": {
+      "UTExportedTypeDeclarations": [
+        {
+          "UTTypeIdentifier": "app.wmind.document",
+          "UTTypeDescription": "Wmind 思维导图",
+          "UTTypeConformsTo": ["public.data", "public.content"],
+          "UTTypeTagSpecification": {
+            "public.filename-extension": ["wmind"],
+            "public.mime-type": "application/x-wmind-map"
+          }
+        }
+      ],
+      "UTImportedTypeDeclarations": [
+        {
+          "UTTypeIdentifier": "org.xmind.openformat.xmind",
+          "UTTypeDescription": "XMind 思维导图",
+          "UTTypeConformsTo": ["public.data", "public.content"],
+          "UTTypeTagSpecification": {
+            "public.filename-extension": ["xmind"],
+            "public.mime-type": "application/vnd.xmind.workbook"
+          }
+        }
+      ],
+      "CFBundleDocumentTypes": [
+        {
+          "CFBundleTypeName": "Wmind 思维导图",
+          "CFBundleTypeRole": "Editor",
+          "LSHandlerRank": "Default",
+          "LSItemContentTypes": ["app.wmind.document"],
+          "CFBundleTypeExtensions": ["wmind"],
+          "CFBundleTypeMIMETypes": ["application/x-wmind-map"]
+        },
+        {
+          "CFBundleTypeName": "XMind 思维导图",
+          "CFBundleTypeRole": "Editor",
+          "LSHandlerRank": "Default",
+          "LSItemContentTypes": ["org.xmind.openformat.xmind"],
+          "CFBundleTypeExtensions": ["xmind"],
+          "CFBundleTypeMIMETypes": ["application/vnd.xmind.workbook", "application/x-xmind"]
+        }
+      ]
+    }
   }
 }
